@@ -12,12 +12,37 @@
 #include<assert.h>
 #include<commons/config.h>
 
-extern t_log* logger;
-extern t_config* config;
-extern char* puerto_escucha;
 
-int iniciar_servidor(char* puerto);
-int esperar_cliente(int socket_servidor);
-void iniciar_config_memory_stick();
+typedef enum
+{
+	MENSAJE,
+	PAQUETE
+}op_code;
+
+typedef struct
+{
+	int size;
+	void* stream;
+} t_buffer;
+
+typedef struct
+{
+	op_code codigo_operacion;
+	t_buffer* buffer;
+} t_paquete;
+
+
+int iniciar_servidor(char* puerto,t_log* logger);
+int esperar_cliente(int socket_servidor,t_log* logger);
+//void iniciar_config_memory_stick(t_config* config,char* puerto_escucha,char* ip_kernel_memory,char* puerto_kernel_memory);
+int crear_conexion(char* ip, char* puerto,t_log* logger);
+int recibir_operacion(int socket_cliente);
+void* recibir_buffer(int* size, int socket_cliente);
+void recibir_mensaje(int socket_cliente, t_log*logger);
+void* serializar_paquete(t_paquete* paquete, int bytes);
+
+
+
+
 
 #endif
