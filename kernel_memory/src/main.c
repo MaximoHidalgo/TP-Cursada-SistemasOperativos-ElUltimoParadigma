@@ -1,5 +1,5 @@
-#include <utils/conexiones.h>
 #include <utils/utils_server.h>
+#include <utils/utils_client.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<commons/log.h>
@@ -20,27 +20,9 @@ int main(int argc, char* argv[]) {
     while(1){
         int cliente = esperar_cliente(server_fd);
 
-        char* mensaje = guardar_mensaje(cliente);
-        printf("Kernel dice: %s\n", mensaje);
+        recibir_mensaje(cliente);
 
         enviar_mensaje("OK KERNEL", cliente);
     }
     return 0;
 }
-
-/*
-void* conexion_memory(void* arg) {
-    sleep(1);
-
-    int conexion = crear_conexion("127.0.0.1", "6000");
-    printf("Conectado a Memory!\n");
-
-    enviar_mensaje("HOLA MEMORY", conexion);
-
-    char* respuesta = recibir_mensaje(conexion);
-    printf("Respuesta de Memory: %s\n", respuesta);
-
-    free(respuesta);
-}
-*/
-

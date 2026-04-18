@@ -7,12 +7,6 @@
 #include "conexiones.h"
 #include <sys/socket.h>
 
-void enviar_mensaje(char* mensaje, int socket){
-    int tamanio = strlen(mensaje) + 1;
-    send(socket, &tamanio, sizeof(int), 0);
-    send(socket, mensaje, tamanio, 0);
-}
-
 char* guardar_mensaje(int socket){
     int tamanio;
     recv(socket, &tamanio, sizeof(int), MSG_WAITALL);

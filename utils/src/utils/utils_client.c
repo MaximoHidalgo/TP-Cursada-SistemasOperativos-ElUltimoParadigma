@@ -33,7 +33,7 @@ int crear_conexion(char *ip, char* puerto)
 								server_info->ai_protocol);
 
 	// Ahora que tenemos el socket, vamos a conectarlo
-	int err = connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen);
+	connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen);
 	
 	freeaddrinfo(server_info);
 
@@ -85,4 +85,24 @@ void eliminar_paquete(t_paquete* paquete)
 void liberar_conexion(int socket_cliente)
 {
 	close(socket_cliente);
+}
+
+void enviar_mensaje(char* mensaje, int socket_cliente)
+{
+	t_paquete* paquete = malloc(sizeof(t_paquete));
+
+	paquete->codigo_operacion = MENSAJE;
+	paquete->buffer = malloc(sizeof(t_buffer));
+	paquete->buffer->size = strlen(mensaje) + 1;
+	paquete->buffer->stream = malloc(paquete->buffer->size);
+	memcpy(paquete->buffer->stream, mensaje, paquete->buffer->size);
+
+	int bytes = paquete->buffer->size + 2*sizeof(int);
+
+	void* a_enviar = serializar_paquete(paquete, bytes);
+
+	send(socket_cliente, a_enviar, bytes, 0);
+
+	free(a_enviar);
+	eliminar_paquete(paquete);
 }

@@ -2,88 +2,54 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <utils/conexiones.h>
 #include <utils/utils_server.h>
-#include <utils/scheduler.h>
-char* PUERTO_SCHEDULER = "8000";
-char* IP_MEMORY = "127.0.0.1";
-char* PUERTO_MEMORY ="8001";
-
+#include <utils/utils_client.h>
 
 int main(int argc, char* argv[]) {
+    // 1. Iniciar Logger
+    logger = log_create("Scheduler.log", "Scheduler", true, LOG_LEVEL_DEBUG);
 
-    int cliente;
-
-    printf("Iniciando Kernel Scheduler...\n");
-
-    int server_fd = iniciar_servidor(PUERTO_SCHEDULER);
-
-    while (1) {
-        cliente = esperar_cliente(server_fd);
-        printf("CPU conectada!\n");
-
-        // TODO: manejar CPU
+    // 2. Levantar Configuración
+    t_config* config = config_create("scheduler.config");
+    if (config == NULL) {
+        log_error(logger, "No se pudo leer la configuración del scheduler");
+        return EXIT_FAILURE;
     }
 
-    int conexion = crear_conexion(IP_MEMORY, PUERTO_MEMORY);
-    printf("Conectado a Kernel Memory!\n");
-    
+    char* ip_memory = config_get_string_value(config, "IP_MEMORY");
+    char* puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
+    char* puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
+
+    // 3. Conectarse a Memoria (El Kernel actúa como cliente primero)
+
+    int socket_memoria = crear_conexion(ip_memory, puerto_memory);
+    if(socket_memoria != -1) {
+        log_info(logger, "Conectado a Kernel Memory!");
+    } else {
+        log_error(logger, "Fallo conexion a memoria");
+    }
+
+    // 4. Iniciar el Servidor del Kernel
+    int server_fd = iniciar_servidor(puerto_escucha);
+    log_info(logger, "Kernel Scheduler listo para recibir clientes en el puerto %s", puerto_escucha);
+
+    // 5. Bucle principal para atender clientes
     while (1) {
-		int cod_op = recibir_operacion(cliente);
-		switch (cod_op) {
-		case MENSAJE:
-			recibir_mensaje(cliente);
-			break;
-		}
-	}
-    
-    /*
-    // Inicializar estructuras
-    iniciar_colas();
+        int cliente_fd = esperar_cliente(server_fd);
+        
+        int mensaje_cliente = recibir_operacion(cliente_fd);
+        
+        if (mensaje_cliente == MENSAJE) {
+            recibir_mensaje(cliente_fd);
+        } 
+        else if (mensaje_cliente == -1) {
+            log_warning(logger, "El cliente se desconectó.");
+        }
+        else {
+            log_warning(logger, "No entiendo el mensaje %d", mensaje_cliente);
+        }
+    }
 
-    // Crear hilos
-    pthread_t hilo_cpu;
-    pthread_t hilo_memory;
-
-    pthread_create(&hilo_cpu, NULL, servidor_cpu, NULL);
-    pthread_create(&hilo_memory, NULL, conexion_memory, NULL);
-
-    // Crear procesos de prueba
-    proceso_t* p1 = malloc(sizeof(proceso_t));
-    p1->pid = 1;
-    p1->prioridad = 0;
-    pasar_a_ready(p1);
-    
-// Iniciar planificación
-    planificar();
-    */    
-
+    config_destroy(config);
     return 0;
 }
-
-/*
-// =======================
-// THREAD SERVIDOR CPU
-// =======================
-void* servidor_cpu(void* arg) {
-    int server_fd = iniciar_servidor("5000");
-
-    while (1) {
-        int cliente = esperar_cliente(server_fd);
-        printf("CPU conectada!\n");
-
-        // TODO: manejar CPU
-    }
-}
-
-// =======================
-// CONEXIÓN A MEMORY
-// =======================
-void* conexion_memory(void* arg) {
-    sleep(1); // esperar que memory esté levantado
-
-    int conexion = crear_conexion("127.0.0.1", "6000");
-    printf("Conectado a Kernel Memory!\n");
-
-    // TODO: comunicación con memory
-}*/

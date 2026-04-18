@@ -31,7 +31,7 @@ typedef struct
 } t_paquete;
 
 
-
+void enviar_mensaje(char* mensaje, int socket_cliente);
 int crear_conexion(char* ip, char* puerto);
 t_paquete* crear_paquete(void);
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
