@@ -7,13 +7,13 @@
 #include "conexiones.h"
 #include <sys/socket.h>
 
-void enviar_mensaje(char* mensaje, int socket) {
+void enviar_mensaje(char* mensaje, int socket){
     int tamanio = strlen(mensaje) + 1;
     send(socket, &tamanio, sizeof(int), 0);
     send(socket, mensaje, tamanio, 0);
 }
 
-char* recibir_mensaje(int socket) {
+char* guardar_mensaje(int socket){
     int tamanio;
     recv(socket, &tamanio, sizeof(int), MSG_WAITALL);
 
@@ -22,6 +22,9 @@ char* recibir_mensaje(int socket) {
 
     return buffer;
 }
+
+
+/*
 int iniciar_servidor(char* puerto) {
     int socket_servidor;
     struct addrinfo hints, *servinfo;
@@ -45,10 +48,14 @@ int iniciar_servidor(char* puerto) {
     return socket_servidor;
 }
 
+
 int esperar_cliente(int server_fd) {
     return accept(server_fd, NULL, NULL);
 }
+*/
 
+
+/*
 int crear_conexion(char* ip, char* puerto) {
     struct addrinfo hints, *servinfo;
     int socket_cliente;
@@ -68,4 +75,4 @@ int crear_conexion(char* ip, char* puerto) {
     freeaddrinfo(servinfo);
 
     return socket_cliente;
-}
+}*/

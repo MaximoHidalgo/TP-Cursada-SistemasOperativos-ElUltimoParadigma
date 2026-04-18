@@ -1,7 +1,7 @@
 #ifndef PROCESO_H
 #define PROCESO_H
 
-typedef enum {
+/*typedef enum {
     NEW,
     READY,
     EXEC,
@@ -16,5 +16,6 @@ typedef struct {
     int prioridad;
     estado_t estado;
 } proceso_t;
+*/
 
 #endif

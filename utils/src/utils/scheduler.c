@@ -15,7 +15,7 @@ void iniciar_colas() {
     cola_exec = list_create();
     cola_block = list_create();
 }
-
+/*
 void pasar_a_ready(proceso_t* p) {
     p->estado = READY;
     list_add(cola_ready, p);
@@ -50,4 +50,4 @@ void planificar() {
             sleep(1);
         }
     }
-}
+}*/
