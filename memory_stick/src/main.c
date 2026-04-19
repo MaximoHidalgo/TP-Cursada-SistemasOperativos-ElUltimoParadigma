@@ -43,10 +43,13 @@ log_info(logger, "Mensaje enviado a kernel Memory correctamente");
 
 //RECIBO CONEXION DE CPU
 socket_escucha= iniciar_servidor(puerto_escucha, logger);
+
+//El servidor se queda abierto a que entre una conexion
+while(1){
 log_info(logger, "Esperando conexiones...");
 socket_cpu = esperar_cliente(socket_escucha, logger);
 
- int cod_op = recibir_operacion(socket_cpu);
+ int cod_op = recibir_operacion(socket_cpu, logger);
 
     switch (cod_op) {
 
@@ -63,6 +66,7 @@ socket_cpu = esperar_cliente(socket_escucha, logger);
             log_info(logger, "Operacion desconocida");
             break;
     }
+}
 
     // LIMPIEZA 
     close(socket_cpu);

@@ -77,7 +77,7 @@ int crear_conexion(char* ip, char* puerto,t_log* logger) {
     return socket_cliente;
 }
 
-int recibir_operacion(int socket_cliente)
+int recibir_operacion(int socket_cliente, t_log* logger)
 {
 	int cod_op;
 	if(recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
@@ -85,6 +85,7 @@ int recibir_operacion(int socket_cliente)
 	else
 	{
 		close(socket_cliente);
+        log_warning(logger, "Se cayo el cliente");
 		return -1;
 	}
 }

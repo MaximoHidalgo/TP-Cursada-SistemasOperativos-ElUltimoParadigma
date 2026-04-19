@@ -36,7 +36,7 @@ int iniciar_servidor(char* puerto,t_log* logger);
 int esperar_cliente(int socket_servidor,t_log* logger);
 //void iniciar_config_memory_stick(t_config* config,char* puerto_escucha,char* ip_kernel_memory,char* puerto_kernel_memory);
 int crear_conexion(char* ip, char* puerto,t_log* logger);
-int recibir_operacion(int socket_cliente);
+int recibir_operacion(int socket_cliente, t_log* logger);
 void* recibir_buffer(int* size, int socket_cliente);
 void recibir_mensaje(int socket_cliente, t_log*logger);
 void* serializar_paquete(t_paquete* paquete, int bytes);
