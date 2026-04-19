@@ -39,6 +39,7 @@ if (socket_kernel_memory == -1) {
         return EXIT_FAILURE;
     }
 enviar_mensaje("Soy Memory Stick",socket_kernel_memory);
+log_info(logger, "Mensaje enviado a kernel Memory correctamente");
 
 //RECIBO CONEXION DE CPU
 socket_escucha= iniciar_servidor(puerto_escucha, logger);

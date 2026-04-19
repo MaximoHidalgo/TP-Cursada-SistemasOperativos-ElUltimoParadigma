@@ -1,4 +1,4 @@
-#include <utils_swap.h>
+/*#include <utils_swap.h>
 
 
 int crear_conexion(char* ip, char* puerto,t_log* logger) {
@@ -20,6 +20,8 @@ int crear_conexion(char* ip, char* puerto,t_log* logger) {
     connect(socket_cliente, servinfo->ai_addr, servinfo->ai_addrlen);
 
     freeaddrinfo(servinfo);
+
+	
 
     log_info(logger, "Conectado a Kernel Memory");
 
@@ -110,4 +112,4 @@ void eliminar_paquete(t_paquete* paquete)
 void liberar_conexion(int socket_cliente)
 {
 	close(socket_cliente);
-}
+}*/

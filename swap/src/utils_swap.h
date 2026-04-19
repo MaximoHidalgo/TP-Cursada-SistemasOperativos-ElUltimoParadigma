@@ -1,4 +1,4 @@
-#ifndef SRC_SWAP_H_
+/*#ifndef SRC_SWAP_H_
 #define SRC_SWAP_H_
 
 #include<stdio.h>
@@ -43,3 +43,4 @@ void enviar_mensaje(char* mensaje, int socket_cliente);
 
 #endif
 
+*/

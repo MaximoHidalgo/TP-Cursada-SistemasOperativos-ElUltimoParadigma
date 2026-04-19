@@ -43,9 +43,14 @@ int main(int argc, char* argv[]) {
     //Si se conecto, lo avisamos
     log_info(logger, "Conectado al kernel scheduler");
 
+
+
+
+    
     //Hacemos handshake
     enviar_mensaje(IoName, socketKernel);
     log_info(logger, "Interfaz %s lista. Presione ENTER para cerrar la conexión", IoName);
+    getchar(); // Esperamos a que el usuario presione ENTER 
 
     //Limpiamos recursos
     liberar_conexion(socketKernel);

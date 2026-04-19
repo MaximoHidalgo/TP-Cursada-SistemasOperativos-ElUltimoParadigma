@@ -29,6 +29,10 @@ int main(int argc, char* argv[]) {
         log_error(logger, "Fallo conexion a memoria");
     }
 
+    // Enviar un mensaje de handshake a memoria
+    enviar_mensaje("HOLA SOY EL KERNEL SCHEDULER", socket_memoria);
+    log_info(logger, "Mensaje enviado a kernel Memory correctamente");
+
     // 4. Iniciar el Servidor del Kernel
     int server_fd = iniciar_servidor(puerto_escucha);
     log_info(logger, "Kernel Scheduler listo para recibir clientes en el puerto %s", puerto_escucha);
