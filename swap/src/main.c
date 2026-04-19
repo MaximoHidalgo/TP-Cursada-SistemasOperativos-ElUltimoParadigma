@@ -24,7 +24,7 @@ int main(void){
         return EXIT_FAILURE;
     }
 
-    log_info(logger, "Conectado a Kernel Memory");
+    log_info(logger, "## Conectado a Kernel Memory");
     enviar_mensaje("HOLA SOY SWAP", socket_kernel_memory);
     log_info(logger, "Mensaje enviado a kernel Memory correctamente");
 

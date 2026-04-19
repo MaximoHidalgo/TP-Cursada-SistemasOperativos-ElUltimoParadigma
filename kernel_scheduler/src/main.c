@@ -24,13 +24,13 @@ int main(int argc, char* argv[]) {
 
     int socket_memoria = crear_conexion(ip_memory, puerto_memory);
     if(socket_memoria != -1) {
-        log_info(logger, "Conectado a Kernel Memory!");
+        log_info(logger, "## Conectado a Kernel Memory");
     } else {
         log_error(logger, "Fallo conexion a memoria");
     }
 
     // Enviar un mensaje de handshake a memoria
-    enviar_mensaje("HOLA SOY EL KERNEL SCHEDULER", socket_memoria);
+    enviar_mensaje("SCHEDULER", socket_memoria);
     log_info(logger, "Mensaje enviado a kernel Memory correctamente");
 
     // 4. Iniciar el Servidor del Kernel
@@ -44,8 +44,16 @@ int main(int argc, char* argv[]) {
         int mensaje_cliente = recibir_operacion(cliente_fd);
         
         if (mensaje_cliente == MENSAJE) {
-            recibir_mensaje(cliente_fd);
-        } 
+        char* mensaje = recibir_handshake(cliente_fd);
+
+        if (string_starts_with(mensaje, "CPU")) {
+            log_info(logger, "## CPU %s Conectada", mensaje);
+        } else {
+            // Probablemente sea un IO
+            log_info(logger, "Se conectó módulo: %s", mensaje);
+        }
+        free(mensaje);
+        }
         else if (mensaje_cliente == -1) {
             log_warning(logger, "El cliente se desconectó.");
         }

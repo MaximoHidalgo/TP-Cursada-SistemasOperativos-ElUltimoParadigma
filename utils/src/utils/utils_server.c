@@ -99,6 +99,18 @@ void recibir_mensaje(int socket_cliente)
 	free(buffer);
 }
 
+char* recibir_handshake(int socket_cliente) {
+    int size;
+    // Recibimos primero el tamaño del string (que el cliente envió)
+    recv(socket_cliente, &size, sizeof(int), MSG_WAITALL);
+    
+    // Alocamos memoria y recibimos el string
+    char* buffer = malloc(size);
+    recv(socket_cliente, buffer, size, MSG_WAITALL);
+    
+    return buffer;
+}
+
 t_list* recibir_paquete(int socket_cliente)
 {
 	int size;

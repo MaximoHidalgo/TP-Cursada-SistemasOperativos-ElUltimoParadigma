@@ -21,6 +21,7 @@ int iniciar_servidor(char* puerto);
 int esperar_cliente(int);
 t_list* recibir_paquete(int);
 void recibir_mensaje(int);
+char* recibir_handshake(int socket_cliente);
 int recibir_operacion(int);
 
 

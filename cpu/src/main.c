@@ -28,20 +28,20 @@ int main(int argc, char* argv[]) {
     char* ip_sticks= config_get_string_value(config, "IP_MEMORY_STICK");
 	char* puerto_sticks = config_get_string_value(config,"PUERTO_MEMORY_STICK");
 
-
-    log_info(logger, "IP del kernel SCHEDULER: %s", ip_scheduler);
+    /*log_info(logger, "IP del kernel SCHEDULER: %s", ip_scheduler);
     log_info(logger, "PUERTO del kernel SCHEDULER: %s", puerto_scheduler);
 	log_info(logger, "IP del kernel MEMORY: %s", ip_memory);
     log_info(logger, "PUERTO del kernel MEMORY: %s", puerto_memory);
     log_info(logger, "IP de los Memory sticks: %s", ip_sticks);
 	log_info(logger, "PUERTO de los Memory sticks: %s", puerto_sticks);
-
+    */
+    
 
 	// Creamos una conexión hacia el servidor de kernel Memory
 	log_info(logger, "Intentando conectar kernel Memory...");
 	int conexion_memory = crear_conexion(ip_memory, puerto_memory);
     if (conexion_memory != -1) {
-        log_info(logger, "Conectado a Kernel Memory");
+        log_info(logger, "## Conectado a Kernel Memory");
         // Enviamos la ID del CPU al servidor de kernel Memory
         enviar_mensaje(id_cpu, conexion_memory);
     }
@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     log_info(logger, "Intentando conectar kernel Scheduler...");
 	int conexion_scheduler = crear_conexion(ip_scheduler, puerto_scheduler);
 	if (conexion_scheduler != -1) {
-        log_info(logger, "Conectado a Kernel Scheduler");
+        log_info(logger, "## Conectado a Kernel Scheduler");
         // Enviamos la ID del CPU al servidor de kernel Scheduler
         enviar_mensaje(id_cpu, conexion_scheduler);
     }
@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
     log_info(logger, "Intentando conectar con los Memory sticks...");
 	int conexion_sticks = crear_conexion(ip_sticks, puerto_sticks);
 	if (conexion_sticks != -1) {
-        log_info(logger, "Conectado a los Memory sticks");
+        log_info(logger, "## Conectado a Memory Stick");
         // Enviamos la ID del CPU al servidor de los Memory sticks
         enviar_mensaje(id_cpu, conexion_sticks);
     }

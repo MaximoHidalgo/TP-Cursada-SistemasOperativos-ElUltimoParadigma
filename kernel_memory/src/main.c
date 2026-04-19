@@ -26,7 +26,25 @@ int main(int argc, char* argv[]) {
         int mensaje_cliente = recibir_operacion(cliente_fd);
         
         if (mensaje_cliente == MENSAJE) {
-            recibir_mensaje(cliente_fd);
+            char* mensaje = recibir_handshake(cliente_fd);
+            
+            // Verificamos quién se conectó analizando el mensaje
+            if (string_starts_with(mensaje, "STICK|")) {
+                // Separamos el string "STICK|1024" usando el pipe
+                char** partes = string_split(mensaje, "|");
+                log_info(logger, "## Memory Stick de %s bytes Conectada", partes[1]);
+                string_array_destroy(partes);
+            } 
+            else if (string_equals_ignore_case(mensaje, "SCHEDULER")) {
+                log_info(logger, "## Kernel Scheduler Conectado %d", cliente_fd);
+            } 
+            else if (string_starts_with(mensaje, "CPU")) {
+                log_info(logger, "## CPU %s Conectada", mensaje);
+            } 
+            else {
+                log_info(logger, "Se conectó el módulo: %s", mensaje);
+            }
+            free(mensaje); // Muy importante liberar la memoria
         } 
         else if (mensaje_cliente == -1) {
             log_warning(logger, "El cliente se desconectó.");
