@@ -12,10 +12,10 @@ int main(void){
         return EXIT_FAILURE;
     }
 
-    char* ip_kernel_memory = config_get_string_value(config, "IP_KERNEL_MEMORY");
-    char* puerto_kernel_memory = config_get_string_value(config, "PUERTO_KERNEL_MEMORY");
+    char* IP_MEMORY = config_get_string_value(config, "IP_MEMORY");
+    char* PUERTO_MEMORY = config_get_string_value(config, "PUERTO_MEMORY");
 
-    int socket_kernel_memory = crear_conexion(ip_kernel_memory,puerto_kernel_memory);
+    int socket_kernel_memory = crear_conexion(IP_MEMORY,PUERTO_MEMORY);
 
     if (socket_kernel_memory == -1) {
         log_error(logger, "No se pudo conectar a Kernel Memory");

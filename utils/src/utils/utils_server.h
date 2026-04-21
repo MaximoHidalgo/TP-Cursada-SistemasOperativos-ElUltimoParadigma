@@ -24,6 +24,4 @@ void recibir_mensaje(int);
 char* recibir_handshake(int socket_cliente);
 int recibir_operacion(int);
 
-
-
 #endif //UTILS_SERVER_H_
