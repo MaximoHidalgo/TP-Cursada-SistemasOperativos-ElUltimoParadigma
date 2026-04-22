@@ -25,7 +25,7 @@ int main(void){
     }
 
     log_info(logger, "## Conectado a Kernel Memory");
-    enviar_mensaje("HOLA SOY SWAP", socket_kernel_memory);
+    enviar_mensaje("mensaje de SWAP", socket_kernel_memory);
     log_info(logger, "Mensaje enviado a kernel Memory correctamente");
 
     //LIMPIEZA

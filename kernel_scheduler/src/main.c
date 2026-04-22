@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
 
     char* ip_memory = config_get_string_value(config, "IP_MEMORY");
     char* puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
-    char* puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
+    char* puerto_escucha = config_get_string_value(config, "PUERTO_SCHEDULER");
 
     // 3. Conectarse a Memoria (El Kernel actúa como cliente primero)
 

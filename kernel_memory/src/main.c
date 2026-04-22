@@ -12,7 +12,6 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    char* ip_memory = config_get_string_value(config, "IP_MEMORY");
     char* puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
 
     // 4Iniciar el Servidor del Kernel Memory
@@ -42,7 +41,7 @@ int main(int argc, char* argv[]) {
                 log_info(logger, "## CPU %s Conectada", mensaje);
             } 
             else {
-                log_info(logger, "Se conectó el módulo: %s", mensaje);
+                log_info(logger, "## Swap Conectado y %s recibido", mensaje);
             }
             free(mensaje); // Muy importante liberar la memoria
         } 

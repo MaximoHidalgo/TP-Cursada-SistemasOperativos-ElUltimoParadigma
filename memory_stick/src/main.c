@@ -21,7 +21,7 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
 
-    char *puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
+    char *puerto_escucha = config_get_string_value(config, "PUERTO_STICK");
     char *IP_MEMORY = config_get_string_value(config, "IP_MEMORY");
     char *PUERTO_MEMORY = config_get_string_value(config, "PUERTO_MEMORY");
 
