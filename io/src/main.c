@@ -16,8 +16,8 @@ int main(int argc, char* argv[]) {
     }
 
     //Si existe el archivo config y lo pudimos leer, guardamos la ip y puerto del kernel
-    char* ipKernel = config_get_string_value(config, "IP_KERNEL");
-    char* puertoKernel = config_get_string_value(config, "PUERTO_KERNEL");
+    char* ipKernel = config_get_string_value(config, "IP_SCHEDULER");
+    char* puertoKernel = config_get_string_value(config, "PUERTO_SCHEDULER");
     char* log_level_str = config_get_string_value(config, "LOG_LEVEL");
     
     //Inicializamos el log

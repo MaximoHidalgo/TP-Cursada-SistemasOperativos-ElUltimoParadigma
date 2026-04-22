@@ -2,8 +2,7 @@
 
 t_log* logger;
 
-int iniciar_servidor(char* puerto)
-{
+int iniciar_servidor(char* puerto){
 	int socket_servidor;
 
 	struct addrinfo hints, *servinfo;
@@ -53,8 +52,7 @@ int iniciar_servidor(char* puerto)
 	return socket_servidor;
 }
 
-int esperar_cliente(int socket_servidor)
-{
+int esperar_cliente(int socket_servidor){
 	// Aceptamos un nuevo cliente
 	int socket_cliente = accept(socket_servidor, NULL, NULL);
 	if (socket_cliente == -1){
@@ -68,8 +66,7 @@ int esperar_cliente(int socket_servidor)
 	return socket_cliente;
 }
 
-int recibir_operacion(int socket_cliente)
-{
+int recibir_operacion(int socket_cliente){
 	int cod_op;
 	if(recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
 		return cod_op;
@@ -80,8 +77,7 @@ int recibir_operacion(int socket_cliente)
 	}
 }
 
-void* recibir_buffer(int* size, int socket_cliente)
-{
+void* recibir_buffer(int* size, int socket_cliente){
 	void * buffer;
 
 	recv(socket_cliente, size, sizeof(int), MSG_WAITALL);
@@ -91,15 +87,14 @@ void* recibir_buffer(int* size, int socket_cliente)
 	return buffer;
 }
 
-void recibir_mensaje(int socket_cliente)
-{
+void recibir_mensaje(int socket_cliente){
 	int size;
 	char* buffer = recibir_buffer(&size, socket_cliente);
 	log_info(logger, "Me llego el mensaje %s", buffer);
 	free(buffer);
 }
 
-char* recibir_handshake(int socket_cliente) {
+char* recibir_handshake(int socket_cliente){
     int size;
     // Recibimos primero el tamaño del string (que el cliente envió)
     recv(socket_cliente, &size, sizeof(int), MSG_WAITALL);
@@ -111,8 +106,7 @@ char* recibir_handshake(int socket_cliente) {
     return buffer;
 }
 
-t_list* recibir_paquete(int socket_cliente)
-{
+t_list* recibir_paquete(int socket_cliente){
 	int size;
 	int desplazamiento = 0;
 	void * buffer;
