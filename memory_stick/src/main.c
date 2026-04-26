@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[]){
 
-    logger = log_create("main.log", "MEMORY_STICK", true, LOG_LEVEL_INFO);
+    logger = log_create("memory_stick.log", "MEMORY_STICK", true, LOG_LEVEL_INFO);
     int socket_cpu;
 
     if (argc != 3){
@@ -27,7 +27,6 @@ int main(int argc, char *argv[]){
 
     // CONECTO CON EL KERNEL MEMORY
     int socket_kernel_memory = crear_conexion(IP_MEMORY, PUERTO_MEMORY);
-    log_info(logger, "## Conectado a Kernel Memory");
 
     if (socket_kernel_memory == -1){
         log_info(logger, "No se pudo conectar a Kernel Memory");
@@ -35,6 +34,7 @@ int main(int argc, char *argv[]){
         log_destroy(logger);
         return EXIT_FAILURE;
     }
+    log_info(logger, "## Conectado a Kernel Memory");
 
     char *msj_handshake = string_from_format("STICK|%s", tamanio);
     enviar_mensaje(msj_handshake, socket_kernel_memory);
@@ -43,14 +43,11 @@ int main(int argc, char *argv[]){
 
     // RECIBO CONEXION DE CPU
     int socket_escucha = iniciar_servidor(puerto_escucha);
-    log_info(logger, "Servidor levantado");
+    log_info(logger, "Memory Stick listo para recibir conexiones en el puerto %s", puerto_escucha);
 
     // El servidor se queda abierto a que entre una conexion
     while (1){
-        log_info(logger, "Esperando conexiones...");
         socket_cpu = esperar_cliente(socket_escucha);
-        log_info(logger, "cliente conectado");
-
         int cod_op = recibir_operacion(socket_cpu);
 
         switch (cod_op)
