@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
     printf("Se arranco el CPU correctamente con el id: %s y el path del config: %s\n", id_cpu, path_config);
 
     //Creo el logger
-    char* nombre_log = string_from_format("cpuNumero_%s.log", id_cpu);
+    char* nombre_log = string_from_format("%s.log", id_cpu);
     t_log* logger = log_create(nombre_log, "CPU", true, LOG_LEVEL_INFO);
     free(nombre_log);
 

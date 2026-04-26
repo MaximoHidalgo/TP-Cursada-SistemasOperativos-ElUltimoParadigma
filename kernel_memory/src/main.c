@@ -2,7 +2,7 @@
 #include <utils/utils_client.h>
 
 int main(int argc, char* argv[]) {
-    // Iniciar Logger
+    //Iniciar Logger
     logger = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_DEBUG);
 
     //Levantar Configuración
@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
 
     char* puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
 
-    // 4Iniciar el Servidor del Kernel Memory
+    //Iniciar el Servidor del Kernel Memory
     int server_fd = iniciar_servidor(puerto_memory);
     log_info(logger, "Kernel Memory listo para recibir clientes en el puerto %s", puerto_memory);
 
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
                 log_info(logger, "## CPU %s Conectada", mensaje);
             } 
             else {
-                log_info(logger, "## Swap Conectado y %s recibido", mensaje);
+                log_info(logger, "## Swap Conectado, %s ", mensaje);
             }
             free(mensaje); // Muy importante liberar la memoria
         } 

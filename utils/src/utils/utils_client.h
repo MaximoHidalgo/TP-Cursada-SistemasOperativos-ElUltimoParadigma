@@ -15,7 +15,9 @@
 
 typedef enum{
 	MENSAJE,
-	PAQUETE
+	PAQUETE,
+	LECTURA,
+	ESCRITURA
 }op_code;
 
 typedef struct{
