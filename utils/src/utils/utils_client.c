@@ -102,3 +102,15 @@ void enviar_mensaje(char* mensaje, int socket_cliente){
 	free(a_enviar);
 	eliminar_paquete(paquete);
 }
+
+void enviar_int(int socket, int numero) {
+    send(socket, &numero, sizeof(int), 0);
+}
+
+void enviar_string(int socket, char* texto) {
+
+    int size = strlen(texto) + 1;
+
+    send(socket, &size, sizeof(int), 0);
+    send(socket, texto, size, 0);
+}
