@@ -48,6 +48,18 @@ int main(int argc, char* argv[]) {
 
         if (string_starts_with(mensaje, "CPU")) {
             log_info(logger, "## CPU %s Conectada", mensaje);
+
+            //Crea contexto
+            t_contexto_ejecucion contexto;
+
+            contexto.pid = 1;
+
+            contexto.registros.PC = 10;
+            contexto.registros.AX = 5;
+
+            printf("Enviando contexto...\n");
+
+            enviar_contexto(&contexto, cliente_fd);
         } else {
             // Probablemente sea un IO
             log_info(logger, "Se conectó módulo: %s", mensaje);
@@ -60,7 +72,10 @@ int main(int argc, char* argv[]) {
         else {
             log_warning(logger, "No entiendo el mensaje %d", mensaje_cliente);
         }
+
+        
     }
+    
 
     config_destroy(config);
     return 0;

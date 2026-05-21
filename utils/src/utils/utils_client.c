@@ -102,3 +102,42 @@ void enviar_mensaje(char* mensaje, int socket_cliente){
 	free(a_enviar);
 	eliminar_paquete(paquete);
 }
+
+void serializar_contexto(t_paquete* paquete, t_contexto_ejecucion* contexto)
+{
+    paquete->buffer->size = sizeof(uint32_t) + sizeof(t_registros);
+
+    paquete->buffer->stream = malloc(paquete->buffer->size);
+
+    int offset = 0;
+
+    memcpy(paquete->buffer->stream + offset, &(contexto->pid), sizeof(uint32_t));
+
+    offset += sizeof(uint32_t);
+
+    memcpy(paquete->buffer->stream + offset, &(contexto->registros), sizeof(t_registros));
+}
+
+void deserializar_contexto(void* stream, t_contexto_ejecucion* contexto)
+{
+    int offset = 0;
+
+    memcpy(&(contexto->pid), stream + offset, sizeof(uint32_t));
+
+    offset += sizeof(uint32_t);
+
+    memcpy(&(contexto->registros), stream + offset, sizeof(t_registros));
+}
+
+void enviar_contexto(t_contexto_ejecucion* contexto, int socket_cliente)
+{
+    t_paquete* paquete = crear_paquete();
+
+    paquete->codigo_operacion = CONTEXTO;
+
+    serializar_contexto(paquete, contexto);
+    
+	enviar_paquete(paquete, socket_cliente);
+    
+	eliminar_paquete(paquete);
+}

@@ -1,4 +1,5 @@
 #include <utils/utils_client.h>
+#include <utils/utils_server.h>
 
 int main(int argc, char* argv[]) {
 
@@ -45,6 +46,35 @@ int main(int argc, char* argv[]) {
         log_info(logger, "## Conectado a Kernel Scheduler");
         // Enviamos la ID del CPU al servidor de kernel Scheduler
         enviar_mensaje(id_cpu, conexion_scheduler);
+
+        // Recibe operacion
+        op_code cod_op = recibir_operacion(conexion_scheduler);
+
+        // Valida contexto  
+        if(cod_op == CONTEXTO) { 
+            int size;
+
+        void* buffer =
+            //Recibe buffer
+            recibir_buffer(&size, conexion_scheduler);
+
+            t_contexto_ejecucion contexto;
+
+            //Deserializa contexto
+            deserializar_contexto(buffer, &contexto);
+
+            //Libera buffer
+            free(buffer);
+
+            // Muestra los datos
+            printf("\n");
+            printf("CONTEXTO RECIBIDO\n");
+
+            printf("PID: %d\n", contexto.pid);
+            printf("PC: %d\n", contexto.registros.PC);
+            printf("AX: %d\n", contexto.registros.AX);
+        }
+
     }
 
     // Creamos una conexión hacia el servidor de los Memory sticks
@@ -55,6 +85,8 @@ int main(int argc, char* argv[]) {
         // Enviamos la ID del CPU al servidor de los Memory sticks
         enviar_mensaje(id_cpu, conexion_sticks);
     }
+
+    
 
     // Limpiar recursos antes de cerrar el programa
     limpieza_programa(conexion_scheduler, conexion_memory, conexion_sticks, logger, config);
