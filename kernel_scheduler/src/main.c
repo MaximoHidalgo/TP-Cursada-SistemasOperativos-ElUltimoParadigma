@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <utils/utils_server.h>
 #include <utils/utils_client.h>
+#include "planificador.h"
 
 int main(int argc, char* argv[]) {
     // 1. Iniciar Logger
@@ -19,19 +20,24 @@ int main(int argc, char* argv[]) {
     char* ip_memory = config_get_string_value(config, "IP_MEMORY");
     char* puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
     char* puerto_escucha = config_get_string_value(config, "PUERTO_SCHEDULER");
+    t_estratega_planificacion* estratega = crear_estratega_planificacion(config, logger);
+
+    if (estratega == NULL) {
+        config_destroy(config);
+        return EXIT_FAILURE;
+    }
 
     // 3. Conectarse a Memoria (El Kernel actúa como cliente primero)
 
     int socket_memoria = crear_conexion(ip_memory, puerto_memory);
     if(socket_memoria != -1) {
         log_info(logger, "## Conectado a Kernel Memory");
+        // Enviar un mensaje de handshake a memoria
+        enviar_mensaje("SCHEDULER", socket_memoria);
+        log_info(logger, "Mensaje enviado a kernel Memory correctamente");
     } else {
         log_error(logger, "Fallo conexion a memoria");
     }
-
-    // Enviar un mensaje de handshake a memoria
-    enviar_mensaje("SCHEDULER", socket_memoria);
-    log_info(logger, "Mensaje enviado a kernel Memory correctamente");
 
     // 4. Iniciar el Servidor del Kernel
     int server_fd = iniciar_servidor(puerto_escucha);
@@ -63,5 +69,6 @@ int main(int argc, char* argv[]) {
     }
 
     config_destroy(config);
+    destruir_estratega_planificacion(estratega);
     return 0;
 }
