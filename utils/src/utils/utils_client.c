@@ -121,3 +121,15 @@ void limpieza_programa(int conexion1, int conexion2, int conexion3, t_log* logge
     liberar_conexion(conexion2);
     liberar_conexion(conexion3);
 }
+
+void enviar_int(int socket, int numero) {
+    send(socket, &numero, sizeof(int), 0);
+}
+
+void enviar_string(int socket, char* texto) {
+
+    int size = strlen(texto) + 1;
+
+    send(socket, &size, sizeof(int), 0);
+    send(socket, texto, size, 0);
+}

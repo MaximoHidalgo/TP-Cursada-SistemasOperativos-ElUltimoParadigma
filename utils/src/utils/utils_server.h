@@ -23,7 +23,7 @@ void* recibir_buffer(int*, int);
 void recibir_mensaje(int);
 char* recibir_handshake(int socket_cliente);
 t_list* recibir_paquete(int);
-
-
+int recibir_int(int socket); //Con kernel memory, Ver si queda en utils
+char* recibir_string(int socket); //Con kernel memory, Ver si queda en utils
 
 #endif //UTILS_SERVER_H_
