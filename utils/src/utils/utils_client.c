@@ -102,3 +102,22 @@ void enviar_mensaje(char* mensaje, int socket_cliente){
 	free(a_enviar);
 	eliminar_paquete(paquete);
 }
+
+void validar_argumentos(int argc){
+    if(argc != 3){
+        printf("Cantidad de argumentos incorrecta. Uso correcto: ./bin/cpu [Archivo Config] [Id]\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void limpieza_programa(int conexion1, int conexion2, int conexion3, t_log* logger, t_config* config){
+	if (logger != NULL){
+		log_destroy(logger);}
+
+	if (config != NULL){
+		config_destroy(config);}
+
+	liberar_conexion(conexion1);
+    liberar_conexion(conexion2);
+    liberar_conexion(conexion3);
+}
