@@ -14,6 +14,14 @@ static t_algoritmo_planificacion algoritmo_planificacion_desde_string(char* algo
         return ALGORITMO_PLANIFICACION_CMN;
     }
 
+    if (string_equals_ignore_case(algoritmo, "FIFO")) {
+        return ALGORITMO_PLANIFICACION_FIFO;
+    }
+
+    if (string_equals_ignore_case(algoritmo, "RR")) {
+        return ALGORITMO_PLANIFICACION_RR;
+    }
+
     return ALGORITMO_PLANIFICACION_INVALIDO;
 }
 
@@ -27,6 +35,8 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
 
     estratega->algoritmo = algoritmo_planificacion_desde_string(config_get_string_value(config, "PLANIFICATION_ALGORITHM"));
     estratega->cola_new = queue_create();
+    estratega->colas_io = dictionary_create();
+    estratega->mutex_creados = dictionary_create();
     estratega->quantum_rr = config_get_int_value(config, "RR_QUANTUM");
     estratega->colas = crear_colas_ready_desde_config(config, estratega->quantum_rr, logger);
     estratega->proceso_exec = NULL;
@@ -56,14 +66,20 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
 }
 
 void destruir_estratega_planificacion(t_estratega_planificacion* estratega) {
-    if (estratega == NULL) {
-        return;
-    }
+    if (estratega == NULL) return;
 
     queue_destroy(estratega->cola_new);
+
     if (estratega->colas != NULL) {
         list_destroy_and_destroy_elements(estratega->colas, destruir_cola_planificacion);
     }
+    if (estratega->colas_io != NULL) {
+        dictionary_destroy_and_destroy_elements(estratega->colas_io, (void*)queue_destroy);
+    }
+    if (estratega->mutex_creados != NULL) {
+        dictionary_destroy_and_destroy_elements(estratega->mutex_creados, (void*)queue_destroy); 
+    }
+
     pthread_mutex_destroy(&estratega->mutex_colas);
     free(estratega);
 }
@@ -75,6 +91,9 @@ bool planificador_encolar_new(t_estratega_planificacion* estratega, t_proceso_pl
 
     pthread_mutex_lock(&estratega->mutex_colas);
     proceso->estado = ESTADO_PROCESO_NEW;
+    
+    log_info(estratega->logger, "## (%d) Se crea el proceso - Estado: NEW", proceso->pid);
+
     queue_push(estratega->cola_new, proceso);
     pthread_mutex_unlock(&estratega->mutex_colas);
     return true;
@@ -98,7 +117,14 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
         proceso->cola_prioridad = 0;
     }
 
+    t_estado_proceso estado_anterior = proceso->estado;
     proceso->estado = ESTADO_PROCESO_READY;
+
+    log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
+             proceso->pid, 
+             planificador_nombre_estado(estado_anterior), 
+             planificador_nombre_estado(proceso->estado));
+
     encolar_en_cola_ready(estratega->colas, proceso);
 
     pthread_mutex_unlock(&estratega->mutex_colas);
@@ -142,8 +168,15 @@ t_proceso_planificable* planificador_despachar_siguiente(t_estratega_planificaci
     }
 
     pthread_mutex_lock(&estratega->mutex_colas);
+    t_estado_proceso estado_anterior = proceso->estado;
     proceso->estado = ESTADO_PROCESO_EXEC;
     estratega->proceso_exec = proceso;
+    
+    log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
+             proceso->pid, 
+             planificador_nombre_estado(estado_anterior), 
+             planificador_nombre_estado(proceso->estado));
+
     pthread_mutex_unlock(&estratega->mutex_colas);
 
     return proceso;
@@ -195,22 +228,34 @@ bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estr
 
 const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo) {
     switch (algoritmo) {
-    case ALGORITMO_PLANIFICACION_CMN:
-        return "CMN";
-    default:
-        return "INVALIDO";
+        case ALGORITMO_PLANIFICACION_CMN:
+            return "CMN";
+        case ALGORITMO_PLANIFICACION_FIFO:
+            return "FIFO";
+        case ALGORITMO_PLANIFICACION_RR:
+            return "RR";
+        default:
+            return "INVALIDO";
     }
 }
 
 const char* planificador_nombre_estado(t_estado_proceso estado) {
     switch (estado) {
-    case ESTADO_PROCESO_NEW:
-        return "NEW";
-    case ESTADO_PROCESO_READY:
-        return "READY";
-    case ESTADO_PROCESO_EXEC:
-        return "EXEC";
-    default:
-        return "DESCONOCIDO";
+        case ESTADO_PROCESO_NEW:
+            return "NEW";
+        case ESTADO_PROCESO_READY:
+            return "READY";
+        case ESTADO_PROCESO_EXEC:
+            return "EXEC";
+        case ESTADO_PROCESO_BLOCK:
+            return "BLOCK";
+        case ESTADO_PROCESO_EXIT:
+            return "EXIT";
+        case ESTADO_PROCESO_SUSP_READY:
+            return "SUSP_READY";
+        case ESTADO_PROCESO_SUSP_BLOCK:
+            return "SUSP_BLOCK";
+        default:
+            return "DESCONOCIDO";
     }
 }

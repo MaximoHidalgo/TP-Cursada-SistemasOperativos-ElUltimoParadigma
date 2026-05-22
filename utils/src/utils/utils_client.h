@@ -33,8 +33,8 @@ typedef enum{
 	SYSCALL_EXIT,
 	SYSCALL_SLEEP,
 	ERROR_SEG_FAULT,
+	CONSULTAR_ESPACIO_LIBRE
 }op_code;
-
 
 typedef struct{
 	int size;

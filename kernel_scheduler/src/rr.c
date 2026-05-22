@@ -29,10 +29,15 @@ static void* controlar_quantum(void* args_void) {
     pthread_mutex_unlock(&args->estratega->mutex_colas);
 
     if (sigue_en_exec) {
-        enviar_mensaje("DESALOJO", args->socket_cpu);
-        log_info(args->estratega->logger, "## Quantum vencido - PID: %d - Se envia desalojo a CPU", args->pid);
-    }
+        t_paquete* paquete = crear_paquete();
+        paquete->codigo_operacion = INTERRUPCION_QUANTUM;
 
+        enviar_paquete(paquete, args->socket_cpu);
+
+        eliminar_paquete(paquete);
+
+        log_info(args->estratega->logger, "## (%d) - Desalojado por fin de quantum", args->pid);
+    }
     free(args);
     return NULL;
 }

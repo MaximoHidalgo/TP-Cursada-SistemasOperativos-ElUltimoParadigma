@@ -1,5 +1,6 @@
 #include <utils/utils_server.h>
 #include <utils/utils_client.h>
+#include <pthread.h>
 
 typedef struct {
     int pid;
@@ -10,6 +11,7 @@ typedef struct {
 
 t_list* programas;
 int instruction_delay;
+char* base_path;
 
 //FUNCIONES AUX, VER SI SIRVEN EN EL UTILS
 
@@ -81,65 +83,51 @@ char* obtener_instruccion(int pid, int pc) {
     return instruccion;
 }
 
-//MAIN
+// Función que va a ejecutar el hilo por cada cliente conectado
+void atender_cliente(void *arg)
+{
+    int cliente_fd = *(int *)arg;
+    free(arg);
 
-int main(int argc, char* argv[]) {
-    //Iniciar Logger
-    logger = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_DEBUG);
-
-    //Levantar Configuración
-    t_config* config = config_create("kernelMemory.config");
-    if (config == NULL) {
-        log_error(logger, "No se pudo leer la configuración del scheduler");
-        return EXIT_FAILURE;
-    }
-
-    char* puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
-    char* base_path = config_get_string_value(config, "SCRIPTS_BASEPATH");
-    instruction_delay = config_get_int_value(config, "INSTRUCTION_DELAY");
-
-    programas = list_create();
-
-
-    //Iniciar el Servidor del Kernel Memory
-    int server_fd = iniciar_servidor(puerto_memory);
-    log_info(logger, "Kernel Memory listo para recibir clientes en el puerto %s", puerto_memory);
-
-    //Bucle principal para atender clientes
-    while (1) {
-
-        int cliente_fd = esperar_cliente(server_fd);
+    while (1)
+    {
         int cod_op = recibir_operacion(cliente_fd);
 
-        if (cod_op == MENSAJE) {
+        if (cod_op == MENSAJE)
+        {
 
-            char* mensaje = recibir_handshake(cliente_fd);
+            char *mensaje = recibir_handshake(cliente_fd);
 
-            if (string_starts_with(mensaje, "STICK|")) {
-                char** partes = string_split(mensaje, "|");
+            if (string_starts_with(mensaje, "STICK|"))
+            {
+                char **partes = string_split(mensaje, "|");
                 log_info(logger, "## Memory Stick de %s bytes Conectada", partes[1]);
                 string_array_destroy(partes);
             }
-            else if (string_equals_ignore_case(mensaje, "SCHEDULER")) {
+            else if (string_equals_ignore_case(mensaje, "SCHEDULER"))
+            {
                 log_info(logger, "## Kernel Scheduler Conectado - FD: %d", cliente_fd);
             }
-            else if (string_starts_with(mensaje, "CPU")) {
+            else if (string_starts_with(mensaje, "CPU"))
+            {
                 log_info(logger, "## CPU %s Conectada", mensaje);
             }
-            else {
+            else
+            {
                 log_info(logger, "## Swap Conectado, %s", mensaje);
             }
 
             free(mensaje);
         }
 
-        else if (cod_op == CREAR_PROCESO) {
+        else if (cod_op == CREAR_PROCESO)
+        {
 
             int pid = recibir_int(cliente_fd);
-            char* path_relativo = recibir_string(cliente_fd);
+            char *path_relativo = recibir_string(cliente_fd);
 
             // concatenar base path + archivo
-            char* path_completo = string_new();
+            char *path_completo = string_new();
             string_append(&path_completo, base_path);
             string_append(&path_completo, "/");
             string_append(&path_completo, path_relativo);
@@ -152,39 +140,82 @@ int main(int argc, char* argv[]) {
             free(path_completo);
         }
 
-        else if (cod_op == OBTENER_INSTRUCCION) {
+        else if (cod_op == OBTENER_INSTRUCCION)
+        {
 
             int pid = recibir_int(cliente_fd);
             int pc = recibir_int(cliente_fd);
 
-            char* instr = obtener_instruccion(pid, pc);
+            char *instr = obtener_instruccion(pid, pc);
 
             enviar_mensaje(instr, cliente_fd);
 
             free(instr);
         }
 
-        else if (cod_op == LEER_MEMORIA) {
-
+        else if (cod_op == LEER_MEMORIA)
+        {
             enviar_mensaje("OK", cliente_fd);
         }
 
-        else if (cod_op == ESCRIBIR_MEMORIA) {
-
+        else if (cod_op == ESCRIBIR_MEMORIA)
+        {
             enviar_mensaje("OK", cliente_fd);
         }
 
-        else if (cod_op == -1) {
+        else if (cod_op == CONSULTAR_ESPACIO_LIBRE) {
+            // Requisito Mock Checkpoint 2: Devolver valor fijo y enviarlo de vuelta al Kernel Scheduler que lo preguntó
+            int espacio_fijo_mock = 999999; 
+            send(cliente_fd, &espacio_fijo_mock, sizeof(int), 0); 
+        }
+
+        else if (cod_op == -1)
+        {
             log_warning(logger, "Cliente desconectado");
+            break;
         }
 
-        else {
+        else
+        {
             log_warning(logger, "Operación desconocida: %d", cod_op);
+            break;
         }
 
         close(cliente_fd);
     }
+}
 
+int main(int argc, char *argv[]){
+    // Iniciar Logger
+    logger = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_DEBUG);
+
+    // Levantar Configuración
+    t_config *config = config_create("kernelMemory.config");
+    if (config == NULL)
+    {
+        log_error(logger, "No se pudo leer la configuración del scheduler");
+        return EXIT_FAILURE;
+    }
+
+    char *puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
+    base_path = config_get_string_value(config, "SCRIPTS_BASEPATH");
+    instruction_delay = config_get_int_value(config, "INSTRUCTION_DELAY");
+
+    programas = list_create();
+
+    // Iniciar el Servidor del Kernel Memory
+    int server_fd = iniciar_servidor(puerto_memory);
+    log_info(logger, "Kernel Memory listo para recibir clientes en el puerto %s", puerto_memory);
+
+    // Bucle principal para atender clientes
+    while (1) {
+        int* cliente_fd = malloc(sizeof(int));
+        *cliente_fd = esperar_cliente(server_fd);
+
+        pthread_t hilo_cliente;
+        pthread_create(&hilo_cliente, NULL, (void*)atender_cliente, cliente_fd);
+        pthread_detach(hilo_cliente); 
+    }
     config_destroy(config);
     return 0;
 }

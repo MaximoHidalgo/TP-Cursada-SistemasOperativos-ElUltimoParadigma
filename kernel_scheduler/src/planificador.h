@@ -1,15 +1,18 @@
 #ifndef PLANIFICADOR_H_
 #define PLANIFICADOR_H_
 
-#include <stdbool.h>
-#include <pthread.h>
+#include <commons/collections/dictionary.h>
 #include <commons/collections/queue.h>
 #include <commons/config.h>
 #include <commons/log.h>
+#include <stdbool.h>
+#include <pthread.h>
 #include "colas.h"
 
 typedef enum {
-    ALGORITMO_PLANIFICACION_CMN,
+    ALGORITMO_PLANIFICACION_CMN, //El de colas multinivel
+    ALGORITMO_PLANIFICACION_FIFO, //El de first in first out
+    ALGORITMO_PLANIFICACION_RR, //El de Round Robin
     ALGORITMO_PLANIFICACION_INVALIDO
 } t_algoritmo_planificacion;
 
@@ -20,6 +23,8 @@ typedef struct {
     t_proceso_planificable* proceso_exec;
     bool desalojo_entre_colas;
     int quantum_rr;
+    t_dictionary* colas_io;      
+    t_dictionary* mutex_creados; 
     pthread_mutex_t mutex_colas;
     t_log* logger;
 } t_estratega_planificacion;
