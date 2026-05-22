@@ -1,5 +1,45 @@
 #include <utils/utils_client.h>
+#include <utils/utils_server.h>
 
+void ejecutar_stdin(int pid, int socket_scheduler, t_log* logger) {
+    int cantidad_a_leer = recibir_int(socket_scheduler);
+    
+    log_info(logger, "## PID: %d - Ingrese %d caracteres:", pid, cantidad_a_leer);
+    
+    char* leido = readline("> ");
+    char* texto_final = malloc(cantidad_a_leer + 1);
+
+    int len_leido = strlen(leido);
+    for (int i = 0; i < cantidad_a_leer; i++) {
+        if (i < len_leido) {
+            texto_final[i] = leido[i];
+        } else {
+            texto_final[i] = '\0';
+        }
+    }
+    texto_final[cantidad_a_leer] = '\0';
+
+    enviar_mensaje(texto_final, socket_scheduler);
+
+    free(leido);
+    free(texto_final);
+}
+
+void ejecutar_stdout(int pid, int socket_scheduler, t_log* logger) {
+    char* texto = recibir_string(socket_scheduler);
+    
+    log_info(logger, "## PID: %d - %s", pid, texto);
+    
+    free(texto);
+}
+
+void ejecutar_sleep(int pid, int socket_scheduler, t_log* logger) {
+    int milisegundos = recibir_int(socket_scheduler); 
+
+    log_info(logger, "## PID: %d - Haciendo sleep por %d milisegundos.", pid, milisegundos);
+    
+    usleep(milisegundos * 1000);
+}
 
 int main(int argc, char* argv[]) {
     if (argc != 3){
@@ -31,9 +71,9 @@ int main(int argc, char* argv[]) {
     }
 
     //Ahora si todo salio bien, nos conectamos al kernel
-    int socketKernel = crear_conexion(ipKernel, puertoKernel);
+    int socket_scheduler = crear_conexion(ipKernel, puertoKernel);
 
-    if(socketKernel == -1){
+    if(socket_scheduler == -1){
         log_error(logger, "No se pudo establecer conexion con el Kernel Scheduler\n");
         log_destroy(logger);
         config_destroy(config);
@@ -42,14 +82,39 @@ int main(int argc, char* argv[]) {
 
     //Si se conecto, lo avisamos
     log_info(logger, "## Conectado a Kernel Scheduler");
-
-    //Hacemos handshake
-    enviar_mensaje(IoName, socketKernel);
+    enviar_mensaje(IoName, socket_scheduler);
     log_info(logger, "Interfaz %s lista. Presione ENTER para cerrar la conexión", IoName);
-    getchar(); // Esperamos a que el usuario presione ENTER 
+
+    while (1) {
+        int cod_op = recibir_operacion(socket_scheduler);
+        
+        if (cod_op == PETICION_IO) { 
+            int pid = recibir_int(socket_scheduler); 
+            
+            log_info(logger, "## PID: %d - Inicio de IO", pid);
+
+            if (string_equals_ignore_case(IoName, "SLEEP")) {
+                ejecutar_sleep(pid, socket_scheduler, logger);
+            } 
+            else if (string_equals_ignore_case(IoName, "STDOUT")) {
+                ejecutar_stdout(pid, socket_scheduler, logger);
+            } 
+            else if (string_equals_ignore_case(IoName, "STDIN")) {
+                ejecutar_stdin(pid, socket_scheduler, logger);
+            }
+
+            log_info(logger, "## PID: %d - Fin de IO", pid);
+            
+            enviar_mensaje("OK", socket_scheduler);
+        }
+        else if (cod_op == -1) {
+            log_error(logger, "Se desconectó el Kernel Scheduler.");
+            break;
+        }
+    }
 
     //Limpiamos recursos
-    liberar_conexion(socketKernel);
+    liberar_conexion(socket_scheduler);
     log_destroy(logger);
     config_destroy(config);
 
