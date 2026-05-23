@@ -5,46 +5,41 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, int socket_me
 
     while (!desalojar) {
 
-        /*1. FETCH
-        la etapa de Fetch consiste en buscar la próxima instrucción a ejecutar pidiéndosela 
-        al módulo Kernel Memory utilizando el Program Counter (PC) relativo al proceso.
-        Una vez que el Fetch termina y la CPU ya tiene el texto de la instrucción guardado 
-        en una variable, el ciclo debe avanzar naturalmente a la segunda etapa: el Decode*/ 
+        /* 1. FETCH */ 
         char* instruccion_texto = fetch(contexto, socket_memoria, logger);
 
-        /*2. DECODE
-        Interpretamos qué instrucción es y si requiere traducir direcciones.
-        Por ejemplo, separar "SET AX 6" en un array de strings ["SET", "AX", "6"]*/
+        /* 2. DECODE */
         t_instruccion* instruccion_decodificada = decode(instruccion_texto);
         
-        /*3. EXECUTE
-        Ejecutamos la instrucción (ej: SUMAR, ASIGNAR) [4, 5].
-        IMPORTANTE: Al finalizar el ciclo de instrucción, el Program Counter (PC) 
-        deberá ser actualizado sumándole 1, siempre y cuando este no haya sido 
-        modificado por la instrucción ejecutada anteriormente (ej: JNZ) [6].*/
-        int desalojar = execute(instruccion_decodificada, contexto, socket_scheduler, socket_memoria, logger);
+        /* 3. EXECUTE */
+        // ERROR ARREGLADO: Ya no creamos una variable nueva, reasignamos la global del while
+        desalojar = execute(instruccion_decodificada, contexto, socket_scheduler, socket_memoria, logger);
         
-
-        //Incrementamos el PC solo si no hubo desalojo y la instrucción NO fue un JNZ
-        if (!desalojar && !string_equals_ignore_case(instruccion_decodificada->identificador, "JNZ"))
-        {
+        // Incrementamos el PC solo si no hubo desalojo y la instrucción NO fue un JNZ
+        if (!desalojar && !string_equals_ignore_case(instruccion_decodificada->identificador, "JNZ")) {
             contexto->registros.PC++;
         }
 
-        /* 4. CHECK INTERRUPT
-        Chequeamos de forma no bloqueante si el Scheduler nos envió una interrupción al PID actual.
-        Si hay interrupción, se actualiza el contexto de ejecución en el Kernel Memory 
-        y se le devuelve el PID al Kernel Scheduler con el motivo de la interrupción*/
-        desalojar = chequear_interrupciones(socket_scheduler, logger);
-        if (desalojar) {
-            log_info(logger, "## Interrupción recibida");
-            enviar_contexto_a_memoria(contexto, socket_memoria);
-            notificar_desalojo_a_scheduler(contexto->pid, INTERRUPCION_QUANTUM, socket_scheduler, logger);
+        /* 4. CHECK INTERRUPT */
+        // Solo chequeamos interrupciones si la instrucción anterior NO nos obligó ya a desalojar 
+        // (por ejemplo, si acabamos de hacer un EXIT, ya no importa si justo llegó el fin de quantum)
+        if (!desalojar) {
+            int hubo_interrupcion = chequear_interrupciones(socket_scheduler, logger);
+            if (hubo_interrupcion) {
+                log_info(logger, "## Interrupción por Fin de Quantum recibida para PID %d", contexto->pid);
+                desalojar = 1; // Obligamos a romper el ciclo de instrucción
+                
+                // Actualizamos el contexto en memoria antes de avisarle al scheduler
+                enviar_contexto_a_memoria(contexto, socket_memoria);
+                
+                // Le avisamos al Scheduler que lo desalojamos por Fin de Quantum
+                notificar_desalojo_a_scheduler(contexto->pid, FIN_DE_QUANTUM, socket_scheduler, logger);
+            }
         }
 
         // Limpiamos memoria (y también liberar la instrucción y sus parámetros)
         free(instruccion_texto);
-        free(instruccion_decodificada->identificador);
+        if (instruccion_decodificada->identificador) free(instruccion_decodificada->identificador);
         if (instruccion_decodificada->parametro1) free(instruccion_decodificada->parametro1);
         if (instruccion_decodificada->parametro2) free(instruccion_decodificada->parametro2);
         if (instruccion_decodificada->parametro3) free(instruccion_decodificada->parametro3);

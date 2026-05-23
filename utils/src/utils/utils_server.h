@@ -13,6 +13,7 @@
 #include<netdb.h>
 #include<commons/collections/list.h>
 #include<assert.h>
+#include <pthread.h>
 
 extern t_log* logger;
 
