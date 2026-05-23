@@ -126,3 +126,25 @@ t_list* recibir_paquete(int socket_cliente){
 	free(buffer);
 	return valores;
 }
+
+int recibir_int(int socket) {
+
+    int numero;
+
+    recv(socket, &numero, sizeof(int), MSG_WAITALL);
+
+    return numero;
+}
+
+char* recibir_string(int socket) {
+
+    int size;
+
+    recv(socket, &size, sizeof(int), MSG_WAITALL);
+
+    char* buffer = malloc(size);
+
+    recv(socket, buffer, size, MSG_WAITALL);
+
+    return buffer;
+}

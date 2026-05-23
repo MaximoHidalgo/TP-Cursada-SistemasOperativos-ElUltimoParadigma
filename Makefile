@@ -1,7 +1,7 @@
 .PHONY: all run stop clean fueraLogs debug release
 
 # Argumentos definidos para la prueba
-PATH_PSEUDOCODIGO = ../pseudocodigo/proceso_inicial.txt
+PATH_PSEUDOCODIGO = prueba_rr.txt
 ID_CPU = CPU_1
 TAM_STICK = 1024
 TIPO_IO = IO_STDIN
@@ -37,7 +37,9 @@ run:
 
 	@echo "4. Levantando Clientes (CPU e IO)..."
 	$(TERMINAL) "cd cpu && ./bin/cpu ./cpu.config $(ID_CPU)" &
-	$(TERMINAL) "cd io && ./bin/io ./io.config $(TIPO_IO)" &
+	$(TERMINAL) "cd io && ./bin/io ./io.config STDIN" &
+	$(TERMINAL) "cd io && ./bin/io ./io.config STDOUT" &
+	$(TERMINAL) "cd io && ./bin/io ./io.config SLEEP" &
 
 	@echo "¡Se abrieron 6 terminales independientes!"
 

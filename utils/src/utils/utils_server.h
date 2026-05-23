@@ -13,15 +13,18 @@
 #include<netdb.h>
 #include<commons/collections/list.h>
 #include<assert.h>
+#include <pthread.h>
 
 extern t_log* logger;
 
-void* recibir_buffer(int*, int);
 int iniciar_servidor(char* puerto);
 int esperar_cliente(int);
-t_list* recibir_paquete(int);
+int recibir_operacion(int);
+void* recibir_buffer(int*, int);
 void recibir_mensaje(int);
 char* recibir_handshake(int socket_cliente);
-int recibir_operacion(int);
+t_list* recibir_paquete(int);
+int recibir_int(int socket); //Con kernel memory, Ver si queda en utils
+char* recibir_string(int socket); //Con kernel memory, Ver si queda en utils
 
 #endif //UTILS_SERVER_H_
