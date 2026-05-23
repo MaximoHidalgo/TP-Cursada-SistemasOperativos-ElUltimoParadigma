@@ -128,37 +128,49 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, int sock
 
     // 2. Comparamos usando la función de las Commons
     if (string_equals_ignore_case(instruccion->identificador, "SET")) {
-        // Asigna al registro el valor pasado como parámetro
-        // Ejemplo: SET AX 6
         uint32_t valor = atoi(instruccion->parametro2);
         asignar_valor_a_registro(contexto, instruccion->parametro1, valor);
     } 
     else if (string_equals_ignore_case(instruccion->identificador, "SUM")) {
-        // Suma al Registro Destino el Registro Origen
-        // Ejemplo: SUM AX BX
-        // sumar_registros(contexto, instruccion->parametro1, instruccion->parametro2);
+        // TODO: sumar_registros(contexto, instruccion->parametro1, instruccion->parametro2);
     }
     else if (string_equals_ignore_case(instruccion->identificador, "JNZ")) {
-        // Si el valor del registro es distinto de cero, actualiza el program counter (PC)
-        // Ejemplo: JNZ AX 4
-        // ejecutar_jnz(contexto, instruccion->parametro1, atoi(instruccion->parametro2));
+        // TODO: ejecutar_jnz(contexto, instruccion->parametro1, atoi(instruccion->parametro2));
     }
     
     // --- ZONA DE SYSCALLS ---
     else if (string_equals_ignore_case(instruccion->identificador, "SLEEP")) {
         log_info(logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
         
-        // 1. Enviar el contexto actualizado de vuelta a Kernel Memory
+        // 1. Actualizamos contexto en memoria
         enviar_contexto_a_memoria(contexto, socket_memoria);
         
-        // 2. Avisarle al Scheduler el motivo del desalojo y los parámetros
-        // enviar_syscall_al_scheduler(SLEEP, atoi(instruccion->parametro1), socket_scheduler);
+        // 2. Le avisamos al Scheduler el motivo y el tiempo
+        t_paquete* paquete_sleep = crear_paquete();
+        paquete_sleep->codigo_operacion = SYSCALL_SLEEP;
+        uint32_t tiempo_sleep = atoi(instruccion->parametro1);
+        
+        agregar_a_paquete(paquete_sleep, &(contexto->pid), sizeof(uint32_t));
+        agregar_a_paquete(paquete_sleep, &tiempo_sleep, sizeof(uint32_t));
+        enviar_paquete(paquete_sleep, socket_scheduler);
+        eliminar_paquete(paquete_sleep);
         
         desalojar = 1; // Cortamos el ciclo
     }
     else if (string_equals_ignore_case(instruccion->identificador, "EXIT")) {
+        log_info(logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
+        
+        // 1. Actualizamos contexto en memoria
         enviar_contexto_a_memoria(contexto, socket_memoria);
-        // enviar_syscall_al_scheduler(EXIT, 0, socket_scheduler);
+        
+        // 2. Le avisamos al Scheduler que el proceso terminó
+        t_paquete* paquete_exit = crear_paquete();
+        paquete_exit->codigo_operacion = SYSCALL_EXIT;
+        
+        agregar_a_paquete(paquete_exit, &(contexto->pid), sizeof(uint32_t));
+        enviar_paquete(paquete_exit, socket_scheduler);
+        eliminar_paquete(paquete_exit);
+        
         desalojar = 1; // Cortamos el ciclo
     }
     else {
