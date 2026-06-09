@@ -1,16 +1,13 @@
-#ifndef UTILS_ESTRUCTURAS_H_
-#define UTILS_ESTRUCTURAS_H_
+#ifndef ESTRUCTURAS_H_
+#define ESTRUCTURAS_H_
 
 #include <stdint.h>
 #include <errno.h>
 #include<commons/log.h>
 #include<commons/string.h>
 #include<commons/config.h>
-#include "utils_client.h"
-#include "utils_server.h"
-
-
-
+#include "utils/utils_client.h"
+#include "utils/utils_server.h"
 
 typedef struct {
     char* identificador;
@@ -29,4 +26,4 @@ int chequear_interrupciones(int socket_scheduler, t_log* logger);
 
 
 
-#endif //UTILS_ESTRUCTURAS_H_
+#endif //ESTRUCTURAS_H_

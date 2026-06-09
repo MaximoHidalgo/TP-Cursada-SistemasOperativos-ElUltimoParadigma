@@ -1,7 +1,7 @@
 #ifndef CICLO_INSTRUCCION_H_
 #define CICLO_INSTRUCCION_H_
 
-#include <utils/utils_estructuras.h>
+#include "estructuras.h"
 
 void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_conexiones_cpu* conexiones, t_log* logger);
 void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, int conexion_scheduler, t_log* logger);

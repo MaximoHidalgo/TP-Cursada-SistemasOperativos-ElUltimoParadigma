@@ -1,4 +1,4 @@
-#include "utils_estructuras.h"
+#include "estructuras.h"
 
 t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, int conexion_memory, t_log* logger) {
     t_paquete* paquete_solicitud = crear_paquete();

@@ -7,6 +7,8 @@
 #include <commons/config.h>
 #include <commons/log.h>
 #include "pcb.h"
+#include <stdlib.h>
+#include <commons/string.h>
 
 typedef enum {
     ALGORITMO_COLA_FIFO,

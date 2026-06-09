@@ -1,7 +1,4 @@
-#include <utils/utils_client.h>
-#include <utils/utils_server.h>
-#include <utils/utils_estructuras.h>
-#include "ciclo_instruccion.h"
+#include "main.h"
 
 void manejar_ejecucion_proceso(int pid_recibido, t_conexiones_cpu* conexiones, t_log* logger) {
     log_info(logger, "## PID recibido para ejecutar: %d", pid_recibido);

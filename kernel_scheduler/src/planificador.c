@@ -1,10 +1,6 @@
 #include "planificador.h"
 #include "rr.h"
 
-#include <stdlib.h>
-#include <string.h>
-#include <commons/string.h>
-
 static t_algoritmo_planificacion algoritmo_planificacion_desde_string(char* algoritmo) {
     if (algoritmo == NULL) {
         return ALGORITMO_PLANIFICACION_INVALIDO;
