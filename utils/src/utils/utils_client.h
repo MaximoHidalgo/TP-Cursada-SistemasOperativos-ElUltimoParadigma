@@ -91,6 +91,17 @@ typedef struct {
     uint32_t pc;
 } t_peticion_fetch_instruccion;
 
+typedef struct {
+    uint32_t direccion_fisica;
+    uint32_t tamanio;
+} t_peticion_lectura;
+
+typedef struct {
+    uint32_t direccion_fisica;
+    uint32_t tamanio;
+    void* contenido;
+} t_peticion_escritura;
+
 void* serializar_paquete(t_paquete* paquete, int bytes);
 int crear_conexion(char* ip, char* puerto);
 void crear_buffer(t_paquete* paquete);
@@ -117,6 +128,14 @@ void destruir_peticion_crear_proceso(t_peticion_crear_proceso* peticion);
 void enviar_peticion_fetch_instruccion(uint32_t pid, uint32_t pc, int socket);
 t_peticion_fetch_instruccion* deserializar_peticion_fetch_instruccion(void* buffer);
 void destruir_peticion_fetch_instruccion(t_peticion_fetch_instruccion* peticion);
+
+void enviar_peticion_lectura(uint32_t direccion_fisica, uint32_t tamanio, int socket);
+t_peticion_lectura* deserializar_peticion_lectura(void* buffer);
+void destruir_peticion_lectura(t_peticion_lectura* peticion);
+
+void enviar_peticion_escritura(uint32_t direccion_fisica, uint32_t tamanio, void* contenido, int socket);
+t_peticion_escritura* deserializar_peticion_escritura(void* buffer);
+void destruir_peticion_escritura(t_peticion_escritura* peticion);
 
 
 #endif // UTILS_CLIENTE_H_

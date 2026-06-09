@@ -240,3 +240,73 @@ t_peticion_fetch_instruccion* deserializar_peticion_fetch_instruccion(void* buff
 void destruir_peticion_fetch_instruccion(t_peticion_fetch_instruccion* peticion) {
     if (peticion) free(peticion);
 }
+
+void enviar_peticion_lectura(uint32_t direccion_fisica, uint32_t tamanio, int socket) {
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = LEER_MEMORIA;
+    agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    enviar_paquete(paquete, socket);
+    eliminar_paquete(paquete);
+}
+
+t_peticion_lectura* deserializar_peticion_lectura(void* buffer) {
+    t_peticion_lectura* peticion = malloc(sizeof(t_peticion_lectura));
+    int desplazamiento = 0;
+    int tam_dir, tam_tam;
+    
+    memcpy(&tam_dir, buffer + desplazamiento, sizeof(int));
+    desplazamiento += sizeof(int);
+    memcpy(&(peticion->direccion_fisica), buffer + desplazamiento, sizeof(uint32_t));
+    desplazamiento += sizeof(int); // Payload
+    
+    memcpy(&tam_tam, buffer + desplazamiento, sizeof(int));
+    desplazamiento += sizeof(int);
+    memcpy(&(peticion->tamanio), buffer + desplazamiento, sizeof(uint32_t));
+    
+    return peticion;
+}
+
+void destruir_peticion_lectura(t_peticion_lectura* peticion) {
+    if (peticion) free(peticion);
+}
+
+void enviar_peticion_escritura(uint32_t direccion_fisica, uint32_t tamanio, void* contenido, int socket) {
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = ESCRIBIR_MEMORIA;
+    agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    agregar_a_paquete(paquete, contenido, tamanio);
+    enviar_paquete(paquete, socket);
+    eliminar_paquete(paquete);
+}
+
+t_peticion_escritura* deserializar_peticion_escritura(void* buffer) {
+    t_peticion_escritura* peticion = malloc(sizeof(t_peticion_escritura));
+    int desplazamiento = 0;
+    int tam_dir, tam_tam, tam_cont;
+    
+    memcpy(&tam_dir, buffer + desplazamiento, sizeof(int));
+    desplazamiento += sizeof(int);
+    memcpy(&(peticion->direccion_fisica), buffer + desplazamiento, sizeof(uint32_t));
+    desplazamiento += sizeof(int); // Payload
+    
+    memcpy(&tam_tam, buffer + desplazamiento, sizeof(int));
+    desplazamiento += sizeof(int);
+    memcpy(&(peticion->tamanio), buffer + desplazamiento, sizeof(uint32_t));
+    desplazamiento += sizeof(int); // Payload
+    
+    memcpy(&tam_cont, buffer + desplazamiento, sizeof(int));
+    desplazamiento += sizeof(int);
+    peticion->contenido = malloc(peticion->tamanio);
+    memcpy(peticion->contenido, buffer + desplazamiento, peticion->tamanio);
+    
+    return peticion;
+}
+
+void destruir_peticion_escritura(t_peticion_escritura* peticion) {
+    if (peticion) {
+        if (peticion->contenido) free(peticion->contenido);
+        free(peticion);
+    }
+}
