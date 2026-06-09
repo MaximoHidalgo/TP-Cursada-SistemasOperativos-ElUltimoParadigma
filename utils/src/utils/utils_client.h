@@ -13,6 +13,12 @@
 #include<commons/config.h>
 #include<readline/readline.h>
 
+// Macros para Magic Strings y Constantes
+#define HANDSHAKE_CPU "CPU"
+#define HANDSHAKE_SCHEDULER "SCHEDULER"
+#define HANDSHAKE_STICK "STICK"
+#define MSG_OK "OK"
+
 typedef enum{
 	MENSAJE,
 	CREAR_PROCESO,
@@ -69,6 +75,21 @@ typedef struct {
     // Más adelante acá irán las estructuras de la tabla de segmentos
 } t_contexto_ejecucion;
 
+typedef struct {
+    int scheduler;
+    int memoria;
+    int sticks;
+} t_conexiones_cpu;
+
+typedef struct {
+    uint32_t pid;
+    char* path;
+} t_peticion_crear_proceso;
+
+typedef struct {
+    uint32_t pid;
+    uint32_t pc;
+} t_peticion_fetch_instruccion;
 
 void* serializar_paquete(t_paquete* paquete, int bytes);
 int crear_conexion(char* ip, char* puerto);
@@ -82,12 +103,20 @@ void enviar_mensaje(char* mensaje, int socket_cliente);
 
 //FUNCIONES USADAS POR LA CPU, REVISAR PARA APROVECHAR EN LAS DEMAS
 void validar_argumentos(int argc);
-void limpieza_programa(int conexion1, int conexion2, int conexion3, t_log* logger, t_config* config);
+void limpieza_programa(t_conexiones_cpu* conexiones, t_log* logger, t_config* config);
 void enviar_int(int socket, int numero); //Con kernel memory, Ver si queda en utils
 void enviar_string(int socket, char* texto); //Con kernel memory, Ver si queda en utils
 void serializar_contexto(t_paquete* paquete, t_contexto_ejecucion* contexto);
 void deserializar_contexto(void* stream, t_contexto_ejecucion* contexto);
 void enviar_contexto(t_contexto_ejecucion* contexto, int socket_cliente);
+
+void enviar_peticion_crear_proceso(uint32_t pid, char* path, int socket);
+t_peticion_crear_proceso* deserializar_peticion_crear_proceso(void* buffer);
+void destruir_peticion_crear_proceso(t_peticion_crear_proceso* peticion);
+
+void enviar_peticion_fetch_instruccion(uint32_t pid, uint32_t pc, int socket);
+t_peticion_fetch_instruccion* deserializar_peticion_fetch_instruccion(void* buffer);
+void destruir_peticion_fetch_instruccion(t_peticion_fetch_instruccion* peticion);
 
 
 #endif // UTILS_CLIENTE_H_

@@ -115,7 +115,7 @@ t_instruccion* decode(char* instruccion_texto) {
     return instruccion;
 }
 
-int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, int socket_scheduler, int socket_memoria, t_log* logger) {
+int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexiones_cpu* conexiones, t_log* logger) {
     int desalojar = 0;
 
     // 1. Log mínimo y obligatorio de ejecución
@@ -143,7 +143,7 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, int sock
         log_info(logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
         
         // 1. Actualizamos contexto en memoria
-        enviar_contexto_a_memoria(contexto, socket_memoria);
+        enviar_contexto_a_memoria(contexto, conexiones->memoria);
         
         // 2. Le avisamos al Scheduler el motivo y el tiempo
         t_paquete* paquete_sleep = crear_paquete();
@@ -152,7 +152,7 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, int sock
         
         agregar_a_paquete(paquete_sleep, &(contexto->pid), sizeof(uint32_t));
         agregar_a_paquete(paquete_sleep, &tiempo_sleep, sizeof(uint32_t));
-        enviar_paquete(paquete_sleep, socket_scheduler);
+        enviar_paquete(paquete_sleep, conexiones->scheduler);
         eliminar_paquete(paquete_sleep);
         
         desalojar = 1; // Cortamos el ciclo
@@ -161,14 +161,14 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, int sock
         log_info(logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
         
         // 1. Actualizamos contexto en memoria
-        enviar_contexto_a_memoria(contexto, socket_memoria);
+        enviar_contexto_a_memoria(contexto, conexiones->memoria);
         
         // 2. Le avisamos al Scheduler que el proceso terminó
         t_paquete* paquete_exit = crear_paquete();
         paquete_exit->codigo_operacion = SYSCALL_EXIT;
         
         agregar_a_paquete(paquete_exit, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paquete_exit, socket_scheduler);
+        enviar_paquete(paquete_exit, conexiones->scheduler);
         eliminar_paquete(paquete_exit);
         
         desalojar = 1; // Cortamos el ciclo

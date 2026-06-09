@@ -3,6 +3,19 @@
 #include <utils/utils_estructuras.h>
 #include "ciclo_instruccion.h"
 
+void manejar_ejecucion_proceso(int pid_recibido, t_conexiones_cpu* conexiones, t_log* logger) {
+    log_info(logger, "## PID recibido para ejecutar: %d", pid_recibido);
+
+    t_contexto_ejecucion* contexto = pedir_contexto_a_memoria(pid_recibido, conexiones->memoria, logger);
+
+    if (contexto != NULL) {
+        ejecutar_ciclo_de_instruccion(contexto, conexiones, logger);
+        free(contexto);
+    } else {
+        log_error(logger, "Memoria devolvió un contexto nulo para el PID %d", pid_recibido);
+    }
+}
+
 int main(int argc, char* argv[]) {
 
     validar_argumentos(argc);
@@ -19,7 +32,7 @@ int main(int argc, char* argv[]) {
     t_config* config = config_create(path_config);
     if (config == NULL) {
         log_error(logger, "No se pudo leer el archivo de configuracion");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     char* ip_scheduler = config_get_string_value(config, "IP_SCHEDULER");
@@ -29,69 +42,63 @@ int main(int argc, char* argv[]) {
     char* ip_sticks= config_get_string_value(config, "IP_STICK");
     char* puerto_sticks = config_get_string_value(config,"PUERTO_STICK");
     
+    t_conexiones_cpu* conexiones = malloc(sizeof(t_conexiones_cpu));
+
     log_info(logger, "Intentando conectar Kernel Memory...");
-    int conexion_memory = crear_conexion(ip_memory, puerto_memory);
-    if (conexion_memory != -1) {
+    conexiones->memoria = crear_conexion(ip_memory, puerto_memory);
+    if (conexiones->memoria != -1) {
         log_info(logger, "## Conectado a Kernel Memory");
-        enviar_mensaje(id_cpu, conexion_memory);
+        enviar_mensaje(id_cpu, conexiones->memoria);
     }
 
     log_info(logger, "Intentando conectar Kernel Scheduler...");
-    int conexion_scheduler = crear_conexion(ip_scheduler, puerto_scheduler);
-    if (conexion_scheduler != -1) {
+    conexiones->scheduler = crear_conexion(ip_scheduler, puerto_scheduler);
+    if (conexiones->scheduler != -1) {
         log_info(logger, "## Conectado a Kernel Scheduler");
-        enviar_mensaje(id_cpu, conexion_scheduler);
+        enviar_mensaje(id_cpu, conexiones->scheduler);
     }
 
     log_info(logger, "Intentando conectar con los Memory Sticks...");
-    int conexion_sticks = crear_conexion(ip_sticks, puerto_sticks);
-    if (conexion_sticks != -1) {
+    conexiones->sticks = crear_conexion(ip_sticks, puerto_sticks);
+    if (conexiones->sticks != -1) {
         log_info(logger, "## Conectado a Memory Stick");
-        enviar_mensaje(id_cpu, conexion_sticks);
+        enviar_mensaje(id_cpu, conexiones->sticks);
     }
 
-    // --- BUCLE INFINITO DE LA CPU ---
     while (1) {
         log_info(logger, "Esperando un nuevo PID del Kernel Scheduler...");
-        int process_ID = recibir_operacion(conexion_scheduler);
+        int process_ID = recibir_operacion(conexiones->scheduler);
         
-        if (process_ID == PID_A_EJECUTAR) {
-            int size;
-            void* buffer = recibir_buffer(&size, conexion_scheduler);
-            
-            // CORRECCIÓN DE LECTURA DEL PID
-            int desplazamiento = 0;
-            int size_payload;
-            memcpy(&size_payload, buffer + desplazamiento, sizeof(int));
-            desplazamiento += sizeof(int);
-            
-            int pid_recibido;
-            memcpy(&pid_recibido, buffer + desplazamiento, sizeof(int));
-            free(buffer);
+        switch(process_ID) {
+            case PID_A_EJECUTAR:
+            {
+                int size;
+                void* buffer = recibir_buffer(&size, conexiones->scheduler);
+                
+                int desplazamiento = 0;
+                int size_payload;
+                memcpy(&size_payload, buffer + desplazamiento, sizeof(int));
+                desplazamiento += sizeof(int);
+                
+                int pid_recibido;
+                memcpy(&pid_recibido, buffer + desplazamiento, sizeof(int));
+                free(buffer);
 
-            log_info(logger, "## PID recibido para ejecutar: %d", pid_recibido);
-
-            t_contexto_ejecucion* contexto = pedir_contexto_a_memoria(pid_recibido, conexion_memory, logger);
-
-            if (contexto != NULL) {
-                ejecutar_ciclo_de_instruccion(contexto, conexion_memory, conexion_scheduler, logger);
-                free(contexto);
-            } else {
-                log_error(logger, "Memoria devolvió un contexto nulo para el PID %d", pid_recibido);
+                manejar_ejecucion_proceso(pid_recibido, conexiones, logger);
+                break;
             }
-        } 
-        else if (process_ID == -1) {
-            log_error(logger, "El Kernel Scheduler se desconectó inesperadamente.");
-            break; 
-        } 
-        else {
-            log_warning(logger, "Operación desconocida recibida del Scheduler: %d", process_ID);
-            break;
+            case -1:
+                log_error(logger, "El Kernel Scheduler se desconectó inesperadamente.");
+                limpieza_programa(conexiones, logger, config);
+                printf("Termino la CPU y se cerro correctamente\n");
+                return EXIT_FAILURE;
+            default:
+                log_warning(logger, "Operación desconocida recibida del Scheduler: %d", process_ID);
+                limpieza_programa(conexiones, logger, config);
+                return EXIT_FAILURE;
         }
     }
 
-    limpieza_programa(conexion_scheduler, conexion_memory, conexion_sticks, logger, config);
-    printf("Termino la CPU y se cerro correctamente\n");
-
+    limpieza_programa(conexiones, logger, config);
     return 0;
 }

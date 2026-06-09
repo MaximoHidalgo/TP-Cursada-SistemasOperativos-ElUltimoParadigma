@@ -41,13 +41,33 @@ void ejecutar_sleep(int pid, int socket_scheduler, t_log* logger) {
     usleep(milisegundos * 1000);
 }
 
+void procesar_peticion_io(int socket_scheduler, char* IoName, t_log* logger) {
+    int pid = recibir_int(socket_scheduler); 
+    
+    log_info(logger, "## PID: %d - Inicio de IO", pid);
+
+    if (string_equals_ignore_case(IoName, "SLEEP")) {
+        ejecutar_sleep(pid, socket_scheduler, logger);
+    } 
+    else if (string_equals_ignore_case(IoName, "STDOUT")) {
+        ejecutar_stdout(pid, socket_scheduler, logger);
+    } 
+    else if (string_equals_ignore_case(IoName, "STDIN")) {
+        ejecutar_stdin(pid, socket_scheduler, logger);
+    }
+
+    log_info(logger, "## PID: %d - Fin de IO", pid);
+    
+    enviar_mensaje(MSG_OK, socket_scheduler);
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 3){
         printf("Error en parametros. Uso: ./io [path] [io]\n");
         return EXIT_FAILURE;
     }
-    char* ConfigPath = argv[1]; //Guardamos el path en una variable
-    char* IoName = argv[2]; //Guardamos si es STDIN, STOUT, SLEEP en una variable
+    char* ConfigPath = argv[1];
+    char* IoName = argv[2]; 
 
     t_config* config = config_create(ConfigPath);
     if (config == NULL){
@@ -55,12 +75,10 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    //Si existe el archivo config y lo pudimos leer, guardamos la ip y puerto del kernel
     char* ipKernel = config_get_string_value(config, "IP_SCHEDULER");
     char* puertoKernel = config_get_string_value(config, "PUERTO_SCHEDULER");
     char* log_level_str = config_get_string_value(config, "LOG_LEVEL");
     
-    //Inicializamos el log
     t_log_level nivelLog = log_level_from_string(log_level_str);
     t_log* logger = log_create("io.log", IoName, true, nivelLog);
 
@@ -70,7 +88,6 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    //Ahora si todo salio bien, nos conectamos al kernel
     int socket_scheduler = crear_conexion(ipKernel, puertoKernel);
 
     if(socket_scheduler == -1){
@@ -80,7 +97,6 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    //Si se conecto, lo avisamos
     log_info(logger, "## Conectado a Kernel Scheduler");
     enviar_mensaje(IoName, socket_scheduler);
     log_info(logger, "Interfaz %s lista. Presione ENTER para cerrar la conexión", IoName);
@@ -88,37 +104,24 @@ int main(int argc, char* argv[]) {
     while (1) {
         int cod_op = recibir_operacion(socket_scheduler);
         
-        if (cod_op == PETICION_IO) { 
-            int pid = recibir_int(socket_scheduler); 
-            
-            log_info(logger, "## PID: %d - Inicio de IO", pid);
-
-            if (string_equals_ignore_case(IoName, "SLEEP")) {
-                ejecutar_sleep(pid, socket_scheduler, logger);
-            } 
-            else if (string_equals_ignore_case(IoName, "STDOUT")) {
-                ejecutar_stdout(pid, socket_scheduler, logger);
-            } 
-            else if (string_equals_ignore_case(IoName, "STDIN")) {
-                ejecutar_stdin(pid, socket_scheduler, logger);
-            }
-
-            log_info(logger, "## PID: %d - Fin de IO", pid);
-            
-            enviar_mensaje("OK", socket_scheduler);
-        }
-        else if (cod_op == -1) {
-            log_error(logger, "Se desconectó el Kernel Scheduler.");
-            break;
+        switch(cod_op) {
+            case PETICION_IO:
+                procesar_peticion_io(socket_scheduler, IoName, logger);
+                break;
+            case -1:
+                log_error(logger, "Se desconectó el Kernel Scheduler.");
+                liberar_conexion(socket_scheduler);
+                log_destroy(logger);
+                config_destroy(config);
+                return EXIT_FAILURE;
+            default:
+                log_warning(logger, "Operación desconocida: %d", cod_op);
+                break;
         }
     }
 
-    //Limpiamos recursos
     liberar_conexion(socket_scheduler);
     log_destroy(logger);
     config_destroy(config);
-
-    
     return 0;
 }
-

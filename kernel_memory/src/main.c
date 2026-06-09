@@ -7,20 +7,31 @@ typedef struct {
     int pid;
     char** instrucciones;
     int cantidad_instrucciones;
-    t_contexto_ejecucion* contexto; // AHORA LA MEMORIA GUARDA EL CONTEXTO
+    t_contexto_ejecucion* contexto; 
 } t_programa;
 
-t_list* programas;
-int instruction_delay;
-char* base_path;
+typedef struct {
+    t_list* programas;
+    int instruction_delay;
+    char* base_path;
+    pthread_mutex_t mutex_programas;
+} t_memory_context;
 
+typedef struct {
+    int cliente_fd;
+    t_memory_context* ctx;
+} t_args_hilo_cliente;
 
-t_programa* buscar_programa(int pid) {
-    for (int i = 0; i < list_size(programas); i++) {
-        t_programa* prog = list_get(programas, i);
-        if (prog->pid == pid)
+t_programa* buscar_programa(t_memory_context* ctx, int pid) {
+    pthread_mutex_lock(&ctx->mutex_programas);
+    for (int i = 0; i < list_size(ctx->programas); i++) {
+        t_programa* prog = list_get(ctx->programas, i);
+        if (prog->pid == pid) {
+            pthread_mutex_unlock(&ctx->mutex_programas);
             return prog;
+        }
     }
+    pthread_mutex_unlock(&ctx->mutex_programas);
     return NULL;
 }
 
@@ -40,7 +51,7 @@ char** leer_lineas(FILE* f, int* cantidad) {
     return lineas;
 }
 
-void crear_proceso(int pid, char* path) {
+void crear_proceso(t_memory_context* ctx, int pid, char* path) {
     FILE* f = fopen(path, "r");
 
     if (!f) {
@@ -53,23 +64,24 @@ void crear_proceso(int pid, char* path) {
     prog->instrucciones = leer_lineas(f, &prog->cantidad_instrucciones);
     fclose(f);
 
-    // INICIALIZAMOS EL CONTEXTO EN CERO PARA ESTE PROCESO
     prog->contexto = malloc(sizeof(t_contexto_ejecucion));
     prog->contexto->pid = pid;
-    memset(&(prog->contexto->registros), 0, sizeof(t_registros)); // Pone el PC y todos los reg en 0
+    memset(&(prog->contexto->registros), 0, sizeof(t_registros));
 
-    list_add(programas, prog);
+    pthread_mutex_lock(&ctx->mutex_programas);
+    list_add(ctx->programas, prog);
+    pthread_mutex_unlock(&ctx->mutex_programas);
 
     log_info(logger, "## PID: %d - Proceso Creado con %d instrucciones", pid, prog->cantidad_instrucciones);
 }
 
-char* obtener_instruccion(int pid, int pc) {
-    t_programa* prog = buscar_programa(pid);
+char* obtener_instruccion(t_memory_context* ctx, int pid, int pc) {
+    t_programa* prog = buscar_programa(ctx, pid);
 
     if (!prog || pc >= prog->cantidad_instrucciones)
         return strdup("EXIT");
 
-    usleep(instruction_delay * 1000);
+    usleep(ctx->instruction_delay * 1000);
 
     char* instruccion = strdup(prog->instrucciones[pc]);
 
@@ -80,172 +92,187 @@ char* obtener_instruccion(int pid, int pc) {
 }
 
 // =======================================================
-// HILO DE ATENCIÓN A CLIENTES
+// HANDLERS
 // =======================================================
 
+void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
+    char *mensaje = recibir_handshake(cliente_fd);
+    
+    if (string_starts_with(mensaje, "STICK|")) {
+        char **partes = string_split(mensaje, "|");
+        log_info(logger, "## Memory Stick de %s bytes Conectada", partes[1]);
+        string_array_destroy(partes);
+    }
+    else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
+        log_info(logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
+    }
+    else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
+        log_info(logger, "## CPU %s Conectada", mensaje);
+    }
+    else { 
+        log_info(logger, "## Módulo Conectado: %s", mensaje);
+    }
+    free(mensaje);
+}
+
+void procesar_crear_proceso_handler(int cliente_fd, t_memory_context* ctx) {
+    int size;
+    void* buffer = recibir_buffer(&size, cliente_fd);
+    t_peticion_crear_proceso* peticion = deserializar_peticion_crear_proceso(buffer);
+    free(buffer);
+    
+    char *path_completo = string_new();
+    string_append(&path_completo, ctx->base_path);
+    string_append(&path_completo, "/");
+    string_append(&path_completo, peticion->path);
+    
+    crear_proceso(ctx, peticion->pid, path_completo);
+    enviar_mensaje(MSG_OK, cliente_fd);
+    
+    free(path_completo);
+    destruir_peticion_crear_proceso(peticion);
+}
+
+void procesar_solicitud_contexto_handler(int cliente_fd, t_memory_context* ctx) {
+    int size;
+    void* buffer = recibir_buffer(&size, cliente_fd);
+    int desplazamiento = 0;
+    int tam_pid, pid;
+    memcpy(&tam_pid, buffer + desplazamiento, sizeof(int));
+    desplazamiento += sizeof(int);
+    memcpy(&pid, buffer + desplazamiento, sizeof(int));
+    free(buffer);
+    
+    t_programa* prog = buscar_programa(ctx, pid);
+    if (prog != NULL) {
+        enviar_contexto(prog->contexto, cliente_fd);
+    } else {
+        log_error(logger, "Error: Contexto solicitado para PID %d inexistente", pid);
+    }
+}
+
+void procesar_actualizacion_contexto_handler(int cliente_fd, t_memory_context* ctx) {
+    int size;
+    void* buffer = recibir_buffer(&size, cliente_fd);
+    t_contexto_ejecucion contexto_actualizado;
+    deserializar_contexto(buffer, &contexto_actualizado);
+    free(buffer);
+    
+    t_programa* prog = buscar_programa(ctx, contexto_actualizado.pid);
+    if (prog != NULL) {
+        pthread_mutex_lock(&ctx->mutex_programas);
+        *(prog->contexto) = contexto_actualizado;
+        pthread_mutex_unlock(&ctx->mutex_programas);
+        log_info(logger, "Contexto actualizado correctamente para PID %d", prog->contexto->pid);
+    } else {
+        log_error(logger, "Error: Intento de actualizar contexto de PID %d inexistente", contexto_actualizado.pid);
+    }
+}
+
+void procesar_fetch_instruccion_handler(int cliente_fd, t_memory_context* ctx) {
+    int size;
+    void* buffer = recibir_buffer(&size, cliente_fd);
+    
+    t_peticion_fetch_instruccion* peticion = deserializar_peticion_fetch_instruccion(buffer);
+    free(buffer);
+    
+    char *instr = obtener_instruccion(ctx, peticion->pid, peticion->pc);
+    
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = ENVIO_INSTRUCCION;
+    agregar_a_paquete(paquete, instr, strlen(instr) + 1);
+    enviar_paquete(paquete, cliente_fd);
+    eliminar_paquete(paquete);
+    
+    free(instr);
+    destruir_peticion_fetch_instruccion(peticion);
+}
+
 void atender_cliente(void *arg) {
-    int cliente_fd = *(int *)arg;
-    free(arg);
+    t_args_hilo_cliente* args = (t_args_hilo_cliente*)arg;
+    int cliente_fd = args->cliente_fd;
+    t_memory_context* ctx = args->ctx;
+    free(args);
 
     while (1) {
         int cod_op = recibir_operacion(cliente_fd);
 
-        if (cod_op == MENSAJE) {
-            char *mensaje = recibir_handshake(cliente_fd);
-            
-            if (string_starts_with(mensaje, "STICK|")) {
-                char **partes = string_split(mensaje, "|");
-                log_info(logger, "## Memory Stick de %s bytes Conectada", partes[3]);
-                string_array_destroy(partes);
+        switch(cod_op) {
+            case MENSAJE:
+                procesar_mensaje_handshake(cliente_fd, ctx);
+                break;
+            case CREAR_PROCESO:
+                procesar_crear_proceso_handler(cliente_fd, ctx);
+                break;
+            case SOLICITUD_CONTEXTO:
+                procesar_solicitud_contexto_handler(cliente_fd, ctx);
+                break;
+            case ACTUALIZACION_CONTEXTO:
+                procesar_actualizacion_contexto_handler(cliente_fd, ctx);
+                break;
+            case FETCH_INSTRUCCION:
+                procesar_fetch_instruccion_handler(cliente_fd, ctx);
+                break;
+            case LEER_MEMORIA:
+            case ESCRIBIR_MEMORIA:
+                enviar_mensaje(MSG_OK, cliente_fd);
+                break;
+            case CONSULTAR_ESPACIO_LIBRE:
+            {
+                int espacio_fijo_mock = 999999; 
+                send(cliente_fd, &espacio_fijo_mock, sizeof(int), 0); 
+                break;
             }
-            else if (string_equals_ignore_case(mensaje, "SCHEDULER")) {
-                // CORRECCIÓN: Log exacto como pide el TP
-                log_info(logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
-            }
-            else if (string_starts_with(mensaje, "CPU")) {
-                log_info(logger, "## CPU %s Conectada", mensaje);
-            }
-            else { 
-                log_info(logger, "## Módulo Conectado: %s", mensaje);
-            }
-            free(mensaje);
-        }
-        else if (cod_op == CREAR_PROCESO) {
-            int size;
-            void* buffer = recibir_buffer(&size, cliente_fd);
-            int desplazamiento = 0;
-            int tam_pid, pid;
-            memcpy(&tam_pid, buffer + desplazamiento, sizeof(int));
-            desplazamiento += sizeof(int);
-            memcpy(&pid, buffer + desplazamiento, sizeof(int));
-            desplazamiento += sizeof(int);
-            int tam_path;
-            memcpy(&tam_path, buffer + desplazamiento, sizeof(int));
-            desplazamiento += sizeof(int);
-            
-            char* path_relativo = malloc(tam_path);
-            memcpy(path_relativo, buffer + desplazamiento, tam_path);
-            desplazamiento += tam_path;
-            
-            char *path_completo = string_new();
-            string_append(&path_completo, base_path);
-            string_append(&path_completo, "/");
-            string_append(&path_completo, path_relativo);
-            
-            crear_proceso(pid, path_completo);
-            enviar_mensaje("OK", cliente_fd);
-            
-            free(path_relativo);
-            free(path_completo);
-            free(buffer);
-        }
-        else if (cod_op == SOLICITUD_CONTEXTO) {
-            int size;
-            void* buffer = recibir_buffer(&size, cliente_fd);
-            int desplazamiento = 0;
-            int tam_pid, pid;
-            memcpy(&tam_pid, buffer + desplazamiento, sizeof(int));
-            desplazamiento += sizeof(int);
-            memcpy(&pid, buffer + desplazamiento, sizeof(int));
-            free(buffer);
-            
-            t_programa* prog = buscar_programa(pid);
-            if (prog != NULL) {
-                enviar_contexto(prog->contexto, cliente_fd);
-            } else {
-                log_error(logger, "Error: Contexto solicitado para PID %d inexistente", pid);
-            }
-        }
-        else if (cod_op == ACTUALIZACION_CONTEXTO) {
-            int size;
-            void* buffer = recibir_buffer(&size, cliente_fd);
-            t_contexto_ejecucion contexto_actualizado;
-            deserializar_contexto(buffer, &contexto_actualizado);
-            free(buffer);
-            
-            t_programa* prog = buscar_programa(contexto_actualizado.pid);
-            if (prog != NULL) {
-                *(prog->contexto) = contexto_actualizado;
-                log_info(logger, "Contexto actualizado correctamente para PID %d", prog->contexto->pid);
-            } else {
-                log_error(logger, "Error: Intento de actualizar contexto de PID %d inexistente", contexto_actualizado.pid);
-            }
-        }
-        else if (cod_op == FETCH_INSTRUCCION) {
-            int size;
-            void* buffer = recibir_buffer(&size, cliente_fd);
-            int desplazamiento = 0;
-            int tam_pid, pid;
-            memcpy(&tam_pid, buffer + desplazamiento, sizeof(int)); desplazamiento += sizeof(int);
-            memcpy(&pid, buffer + desplazamiento, sizeof(int)); desplazamiento += sizeof(int);
-            int tam_pc, pc;
-            memcpy(&tam_pc, buffer + desplazamiento, sizeof(int)); desplazamiento += sizeof(int);
-            memcpy(&pc, buffer + desplazamiento, sizeof(int)); desplazamiento += sizeof(int);
-            free(buffer);
-            
-            char *instr = obtener_instruccion(pid, pc);
-            
-            t_paquete* paquete = crear_paquete();
-            paquete->codigo_operacion = ENVIO_INSTRUCCION;
-            agregar_a_paquete(paquete, instr, strlen(instr) + 1);
-            enviar_paquete(paquete, cliente_fd);
-            eliminar_paquete(paquete);
-            
-            free(instr);
-        }
-        else if (cod_op == LEER_MEMORIA) {
-            enviar_mensaje("OK", cliente_fd);
-        }
-        else if (cod_op == ESCRIBIR_MEMORIA) {
-            enviar_mensaje("OK", cliente_fd);
-        }
-        else if (cod_op == CONSULTAR_ESPACIO_LIBRE) {
-            int espacio_fijo_mock = 999999; 
-            send(cliente_fd, &espacio_fijo_mock, sizeof(int), 0); 
-        }
-        else if (cod_op == -1) {
-            log_warning(logger, "Cliente desconectado");
-            break;
-        }
-        else {
-            log_warning(logger, "Operación desconocida: %d", cod_op);
-            break;
+            case -1:
+                log_warning(logger, "Cliente desconectado");
+                close(cliente_fd);
+                return;
+            default:
+                log_warning(logger, "Operación desconocida: %d", cod_op);
+                close(cliente_fd);
+                return;
         }
     }
-    close(cliente_fd);
 }
 
 int main(int argc, char *argv[]) {
-    // Iniciar Logger
     logger = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_DEBUG);
 
-    // Levantar Configuración
     t_config *config = config_create("kernelMemory.config");
     if (config == NULL) {
         log_error(logger, "No se pudo leer la configuración de la memoria");
         return EXIT_FAILURE;
     }
 
+    t_memory_context* ctx = malloc(sizeof(t_memory_context));
+    ctx->programas = list_create();
+    ctx->instruction_delay = config_get_int_value(config, "INSTRUCTION_DELAY");
+    ctx->base_path = strdup(config_get_string_value(config, "SCRIPTS_BASEPATH"));
+    pthread_mutex_init(&ctx->mutex_programas, NULL);
+
     char *puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
-    base_path = config_get_string_value(config, "SCRIPTS_BASEPATH");
-    instruction_delay = config_get_int_value(config, "INSTRUCTION_DELAY");
 
-    programas = list_create();
-
-    // Iniciar el Servidor del Kernel Memory
     int server_fd = iniciar_servidor(puerto_memory);
+    if(server_fd == -1) {
+        return EXIT_FAILURE;
+    }
+    
     log_info(logger, "Kernel Memory listo para recibir clientes en el puerto %s", puerto_memory);
 
-    // Bucle principal para atender clientes
     while (1) {
-        int* cliente_fd = malloc(sizeof(int));
-        *cliente_fd = esperar_cliente(server_fd);
+        int cliente_fd = esperar_cliente(server_fd);
+        if(cliente_fd == -1) continue;
+
+        t_args_hilo_cliente* args = malloc(sizeof(t_args_hilo_cliente));
+        args->cliente_fd = cliente_fd;
+        args->ctx = ctx;
 
         pthread_t hilo_cliente;
-        pthread_create(&hilo_cliente, NULL, (void*)atender_cliente, cliente_fd);
+        pthread_create(&hilo_cliente, NULL, (void*)atender_cliente, args);
         pthread_detach(hilo_cliente); 
     }
     
+    // Unreachable, but for completeness
     config_destroy(config);
     return 0;
 }
