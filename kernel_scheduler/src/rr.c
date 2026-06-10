@@ -1,16 +1,5 @@
 #include "rr.h"
 
-#include <stdlib.h>
-#include <time.h>
-#include <utils/utils_client.h>
-
-typedef struct {
-    t_estratega_planificacion* estratega;
-    int pid;
-    int socket_cpu;
-    int quantum_ms;
-} t_args_quantum;
-
 static void dormir_milisegundos(int milisegundos) {
     struct timespec tiempo;
     tiempo.tv_sec = milisegundos / 1000;

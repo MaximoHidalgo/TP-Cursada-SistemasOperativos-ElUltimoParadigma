@@ -1,8 +1,5 @@
 #include "colas.h"
 
-#include <stdlib.h>
-#include <commons/string.h>
-
 t_algoritmo_cola algoritmo_cola_desde_string(char* algoritmo) {
     if (algoritmo == NULL) {
         return ALGORITMO_COLA_INVALIDO;

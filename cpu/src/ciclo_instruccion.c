@@ -1,19 +1,18 @@
 #include "ciclo_instruccion.h"
 
-void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, int socket_memoria, int socket_scheduler, t_log* logger) {
+void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_conexiones_cpu* conexiones, t_log* logger) {
     int desalojar = 0;
 
     while (!desalojar) {
 
         /* 1. FETCH */ 
-        char* instruccion_texto = fetch(contexto, socket_memoria, logger);
+        char* instruccion_texto = fetch(contexto, conexiones->memoria, logger);
 
         /* 2. DECODE */
         t_instruccion* instruccion_decodificada = decode(instruccion_texto);
         
         /* 3. EXECUTE */
-        // ERROR ARREGLADO: Ya no creamos una variable nueva, reasignamos la global del while
-        desalojar = execute(instruccion_decodificada, contexto, socket_scheduler, socket_memoria, logger);
+        desalojar = execute(instruccion_decodificada, contexto, conexiones, logger);
         
         // Incrementamos el PC solo si no hubo desalojo y la instrucción NO fue un JNZ
         if (!desalojar && !string_equals_ignore_case(instruccion_decodificada->identificador, "JNZ")) {
@@ -21,19 +20,14 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, int socket_me
         }
 
         /* 4. CHECK INTERRUPT */
-        // Solo chequeamos interrupciones si la instrucción anterior NO nos obligó ya a desalojar 
-        // (por ejemplo, si acabamos de hacer un EXIT, ya no importa si justo llegó el fin de quantum)
         if (!desalojar) {
-            int hubo_interrupcion = chequear_interrupciones(socket_scheduler, logger);
+            int hubo_interrupcion = chequear_interrupciones(conexiones->scheduler, logger);
             if (hubo_interrupcion) {
                 log_info(logger, "## Interrupción por Fin de Quantum recibida para PID %d", contexto->pid);
                 desalojar = 1; // Obligamos a romper el ciclo de instrucción
                 
-                // Actualizamos el contexto en memoria antes de avisarle al scheduler
-                enviar_contexto_a_memoria(contexto, socket_memoria);
-                
-                // Le avisamos al Scheduler que lo desalojamos por Fin de Quantum
-                notificar_desalojo_a_scheduler(contexto->pid, FIN_DE_QUANTUM, socket_scheduler, logger);
+                enviar_contexto_a_memoria(contexto, conexiones->memoria);
+                notificar_desalojo_a_scheduler(contexto->pid, FIN_DE_QUANTUM, conexiones->scheduler, logger);
             }
         }
 

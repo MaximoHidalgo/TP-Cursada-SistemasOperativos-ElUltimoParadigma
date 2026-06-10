@@ -21,21 +21,21 @@ int iniciar_servidor(char* puerto){
 
 	if (socket_servidor == -1){
 		log_error(logger, "Error al crear el socket");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	int err = setsockopt(socket_servidor, SOL_SOCKET, SO_REUSEPORT, &(int){1},sizeof(int));
 	if (err == -1){
 		log_error(logger, "Error al configurar el socket (setsockopt)");
 		close(socket_servidor);
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 	// Asociamos el socket a un puerto
 	err = bind(socket_servidor, servinfo -> ai_addr, servinfo->ai_addrlen);
 	if (err == -1){
 		log_error(logger, "Error al hacer bind");
 		close(socket_servidor);
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	// Escuchamos las conexiones entrantes
@@ -43,7 +43,7 @@ int iniciar_servidor(char* puerto){
 	if (err == -1){
 		log_error(logger, "Error al escuchar");
 		close(socket_servidor);
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	freeaddrinfo(servinfo);
@@ -58,7 +58,7 @@ int esperar_cliente(int socket_servidor){
 	if (socket_cliente == -1){
 		log_error(logger, "Error al intentar conectarse un cliente");
 		close(socket_servidor);
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	log_info(logger, "Se conecto un cliente!");
