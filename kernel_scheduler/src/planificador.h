@@ -59,8 +59,7 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
 void destruir_estratega_planificacion(t_estratega_planificacion* estratega);
 void destruir_mutex(void* element);
 
-void despachar_proceso_a_cpu(t_estratega_planificacion* estratega, int socket_cpu);
-
+// void despachar_proceso_a_cpu(t_estratega_planificacion* estratega, int socket_cpu);
 void planificador_registrar_io(t_estratega_planificacion* estratega, char* nombre_interfaz, int socket_fd);
 bool planificador_es_io_registrado(t_estratega_planificacion* estratega, int socket_fd);
 t_interfaz_io* buscar_interfaz_por_socket(t_estratega_planificacion* estratega, int socket_fd);
