@@ -11,6 +11,8 @@
 #include <utils/dominio/estructuras.h>
 #include <utils/dominio/opcodes.h>
 
+#include "estructuras_cpu.h"
+
 typedef struct {
     char* identificador;
     char* parametro1;//Ej: "AX", "MUTEX_1", "25000"
@@ -18,13 +20,13 @@ typedef struct {
     char* parametro3;//Por las dudas
 } t_instruccion;
 
-t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, int conexion_memory, t_log* logger);
+t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* ctx);
 void enviar_contexto_a_memoria(t_contexto_ejecucion* contexto, int conexion_memory);
-char* fetch(t_contexto_ejecucion* contexto, int conexion_memory, t_log* logger);
+char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 t_instruccion* decode(char* instruccion_texto);
-int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexiones_cpu* conexiones, t_log* logger);
+int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_registro, uint32_t valor);
-int chequear_interrupciones(int socket_scheduler, t_log* logger);
+int chequear_interrupciones(t_cpu_context* ctx);
 
 
 

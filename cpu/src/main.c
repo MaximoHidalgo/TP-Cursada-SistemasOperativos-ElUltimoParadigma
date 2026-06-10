@@ -1,77 +1,103 @@
 #include "main.h"
 
-t_log* logger;
-void manejar_ejecucion_proceso(int pid_recibido, t_conexiones_cpu* conexiones, t_log* logger) {
-    log_info(logger, "## PID recibido para ejecutar: %d", pid_recibido);
+void manejar_ejecucion_proceso(int pid_recibido, t_cpu_context* ctx) {
+    log_info(ctx->logger, "## PID recibido para ejecutar: %d", pid_recibido);
 
-    t_contexto_ejecucion* contexto = pedir_contexto_a_memoria(pid_recibido, conexiones->memoria, logger);
+    t_contexto_ejecucion* contexto = pedir_contexto_a_memoria(pid_recibido, ctx);
 
     if (contexto != NULL) {
-        ejecutar_ciclo_de_instruccion(contexto, conexiones, logger);
+        ejecutar_ciclo_de_instruccion(contexto, ctx);
         free(contexto);
     } else {
-        log_error(logger, "Memoria devolvió un contexto nulo para el PID %d", pid_recibido);
+        log_error(ctx->logger, "Memoria devolvió un contexto nulo para el PID %d", pid_recibido);
     }
 }
 
-int main(int argc, char* argv[]) {
-
+t_cpu_context* iniciar_contexto(int argc, char* argv[]) {
     validar_argumentos(argc);
 
+    t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
+    if (!ctx) return NULL;
+
+    ctx->id_cpu = strdup(argv[2]);
     char* path_config = argv[1];
-    char* id_cpu = argv[2];
 
-    printf("Se arranco el CPU correctamente con el id: %s y el path del config: %s\n", id_cpu, path_config);
+    printf("Se arranco el CPU correctamente con el id: %s y el path del config: %s\n", ctx->id_cpu, path_config);
 
-    char* nombre_log = string_from_format("%s.log", id_cpu);
-    t_log* logger = log_create(nombre_log, "CPU", true, LOG_LEVEL_INFO);
+    char* nombre_log = string_from_format("%s.log", ctx->id_cpu);
+    ctx->logger = log_create(nombre_log, "CPU", true, LOG_LEVEL_INFO);
     free(nombre_log);
 
-    t_config* config = config_create(path_config);
-    if (config == NULL) {
-        log_error(logger, "No se pudo leer el archivo de configuracion");
-        return EXIT_FAILURE;
+    ctx->config = config_create(path_config);
+    if (ctx->config == NULL) {
+        log_error(ctx->logger, "No se pudo leer el archivo de configuracion");
+        log_destroy(ctx->logger);
+        free(ctx->id_cpu);
+        free(ctx);
+        return NULL;
     }
 
-    char* ip_scheduler = config_get_string_value(config, "IP_SCHEDULER");
-    char* puerto_scheduler = config_get_string_value(config,"PUERTO_SCHEDULER");
-    char* ip_memory = config_get_string_value(config, "IP_MEMORY");
-    char* puerto_memory = config_get_string_value(config,"PUERTO_MEMORY");
-    char* ip_sticks= config_get_string_value(config, "IP_STICK");
-    char* puerto_sticks = config_get_string_value(config,"PUERTO_STICK");
+    char* ip_scheduler = config_get_string_value(ctx->config, "IP_SCHEDULER");
+    char* puerto_scheduler = config_get_string_value(ctx->config, "PUERTO_SCHEDULER");
+    char* ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
+    char* puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
+    char* ip_sticks = config_get_string_value(ctx->config, "IP_STICK");
+    char* puerto_sticks = config_get_string_value(ctx->config, "PUERTO_STICK");
     
-    t_conexiones_cpu* conexiones = malloc(sizeof(t_conexiones_cpu));
+    ctx->conexiones = malloc(sizeof(t_conexiones_cpu));
 
-    log_info(logger, "Intentando conectar Kernel Memory...");
-    conexiones->memoria = crear_conexion(ip_memory, puerto_memory);
-    if (conexiones->memoria != -1) {
-        log_info(logger, "## Conectado a Kernel Memory");
-        enviar_mensaje(id_cpu, conexiones->memoria);
+    log_info(ctx->logger, "Intentando conectar Kernel Memory...");
+    ctx->conexiones->memoria = crear_conexion(ip_memory, puerto_memory);
+    if (ctx->conexiones->memoria != -1) {
+        log_info(ctx->logger, "## Conectado a Kernel Memory");
+        enviar_mensaje(ctx->id_cpu, ctx->conexiones->memoria);
     }
 
-    log_info(logger, "Intentando conectar Kernel Scheduler...");
-    conexiones->scheduler = crear_conexion(ip_scheduler, puerto_scheduler);
-    if (conexiones->scheduler != -1) {
-        log_info(logger, "## Conectado a Kernel Scheduler");
-        enviar_mensaje(id_cpu, conexiones->scheduler);
+    log_info(ctx->logger, "Intentando conectar Kernel Scheduler...");
+    ctx->conexiones->scheduler = crear_conexion(ip_scheduler, puerto_scheduler);
+    if (ctx->conexiones->scheduler != -1) {
+        log_info(ctx->logger, "## Conectado a Kernel Scheduler");
+        enviar_mensaje(ctx->id_cpu, ctx->conexiones->scheduler);
     }
 
-    log_info(logger, "Intentando conectar con los Memory Sticks...");
-    conexiones->sticks = crear_conexion(ip_sticks, puerto_sticks);
-    if (conexiones->sticks != -1) {
-        log_info(logger, "## Conectado a Memory Stick");
-        enviar_mensaje(id_cpu, conexiones->sticks);
+    log_info(ctx->logger, "Intentando conectar con los Memory Sticks...");
+    ctx->conexiones->sticks = crear_conexion(ip_sticks, puerto_sticks);
+    if (ctx->conexiones->sticks != -1) {
+        log_info(ctx->logger, "## Conectado a Memory Stick");
+        enviar_mensaje(ctx->id_cpu, ctx->conexiones->sticks);
     }
+
+    return ctx;
+}
+
+void limpiar_contexto(t_cpu_context* ctx) {
+    if (!ctx) return;
+    
+    // Si la limpieza vieja existe, la reusamos.
+    if (ctx->conexiones) {
+        limpieza_programa(ctx->conexiones, ctx->logger, ctx->config);
+    } else {
+        if (ctx->logger) log_destroy(ctx->logger);
+        if (ctx->config) config_destroy(ctx->config);
+    }
+    
+    if (ctx->id_cpu) free(ctx->id_cpu);
+    free(ctx);
+}
+
+int main(int argc, char* argv[]) {
+    t_cpu_context* ctx = iniciar_contexto(argc, argv);
+    if (!ctx) return EXIT_FAILURE;
 
     while (1) {
-        log_info(logger, "Esperando un nuevo PID del Kernel Scheduler...");
-        int process_ID = recibir_operacion(conexiones->scheduler);
+        log_info(ctx->logger, "Esperando un nuevo PID del Kernel Scheduler...");
+        int process_ID = recibir_operacion(ctx->conexiones->scheduler);
         
         switch(process_ID) {
             case PID_A_EJECUTAR:
             {
                 int size;
-                void* buffer = recibir_buffer(&size, conexiones->scheduler);
+                void* buffer = recibir_buffer(&size, ctx->conexiones->scheduler);
                 
                 int desplazamiento = 0;
                 int size_payload;
@@ -82,21 +108,21 @@ int main(int argc, char* argv[]) {
                 memcpy(&pid_recibido, buffer + desplazamiento, sizeof(int));
                 free(buffer);
 
-                manejar_ejecucion_proceso(pid_recibido, conexiones, logger);
+                manejar_ejecucion_proceso(pid_recibido, ctx);
                 break;
             }
             case -1:
-                log_error(logger, "El Kernel Scheduler se desconectó inesperadamente.");
-                limpieza_programa(conexiones, logger, config);
+                log_error(ctx->logger, "El Kernel Scheduler se desconectó inesperadamente.");
                 printf("Termino la CPU y se cerro correctamente\n");
+                limpiar_contexto(ctx);
                 return EXIT_FAILURE;
             default:
-                log_warning(logger, "Operación desconocida recibida del Scheduler: %d", process_ID);
-                limpieza_programa(conexiones, logger, config);
+                log_warning(ctx->logger, "Operación desconocida recibida del Scheduler: %d", process_ID);
+                limpiar_contexto(ctx);
                 return EXIT_FAILURE;
         }
     }
 
-    limpieza_programa(conexiones, logger, config);
+    limpiar_contexto(ctx);
     return 0;
 }

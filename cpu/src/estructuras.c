@@ -1,22 +1,22 @@
 #include "estructuras.h"
 
-t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, int conexion_memory, t_log* logger) {
+t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* ctx) {
     t_paquete* paquete_solicitud = crear_paquete();
     paquete_solicitud->codigo_operacion = SOLICITUD_CONTEXTO; 
     
     //Agregamos el PID al paquete y lo enviamos
     agregar_a_paquete(paquete_solicitud, &pid_recibido, sizeof(int));
-    enviar_paquete(paquete_solicitud, conexion_memory);
+    enviar_paquete(paquete_solicitud, ctx->conexiones->memoria);
     eliminar_paquete(paquete_solicitud);
 
-    log_info(logger, "Solicitando contexto del PID %d a Kernel Memory...", pid_recibido);
+    log_info(ctx->logger, "Solicitando contexto del PID %d a Kernel Memory...", pid_recibido);
 
     //Quedarnos esperando la respuesta de la Memoria
-    int operacion = recibir_operacion(conexion_memory);
+    int operacion = recibir_operacion(ctx->conexiones->memoria);
 
     if (operacion == ENVIO_CONTEXTO) {
         int size;
-        void* buffer = recibir_buffer(&size, conexion_memory);
+        void* buffer = recibir_buffer(&size, ctx->conexiones->memoria);
 
         //Deserializar el buffer recibido para armar el struct localmente
         t_contexto_ejecucion* contexto = malloc(sizeof(t_contexto_ejecucion));
@@ -33,10 +33,10 @@ t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, int conexion_me
         free(buffer);
 
 
-        log_info(logger, "Contexto de ejecución del PID %d recibido exitosamente.", contexto->pid);
+        log_info(ctx->logger, "Contexto de ejecución del PID %d recibido exitosamente.", contexto->pid);
         return contexto;
     } else {
-        log_error(logger, "Error: Se esperaba el contexto de ejecución, pero llegó la operación: %d", operacion);
+        log_error(ctx->logger, "Error: Se esperaba el contexto de ejecución, pero llegó la operación: %d", operacion);
         return NULL;
     }
 }
@@ -52,23 +52,22 @@ void enviar_contexto_a_memoria(t_contexto_ejecucion* contexto, int conexion_memo
     eliminar_paquete(paquete);
 }
 
-char* fetch(t_contexto_ejecucion* contexto, int conexion_memory, t_log* logger){
+char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+    //Creamos un paquete y le cargamos el OP Code FETCH_INSTRUCCION
+    t_paquete* paquete_solicitud = crear_paquete();
+    paquete_solicitud->codigo_operacion = FETCH_INSTRUCCION; 
     
-    //Imprimir el Log mínimo y obligatorio de la cátedra
-    log_info(logger, "## PID: %d - FETCH - Program Counter: %d", contexto->pid, contexto->registros.PC);
+    enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, ctx->conexiones->memoria);
 
-    enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, conexion_memory);
-
-    //Quedarnos esperando la respuesta
-    int operacion = recibir_operacion(conexion_memory);
-
-    if (operacion == ENVIO_INSTRUCCION) {
-        t_list* lista = recibir_paquete(conexion_memory);
+    int op_code = recibir_operacion(ctx->conexiones->memoria);
+    
+    if (op_code == ENVIO_INSTRUCCION) {
+        t_list* lista = recibir_paquete(ctx->conexiones->memoria);
         char* instruccion_texto = string_duplicate(list_get(lista, 0));
         list_destroy_and_destroy_elements(lista, free);
         return instruccion_texto;
     } else {
-        log_error(logger, "Error: Se esperaba una instrucción de memoria, pero llegó: %d", operacion);
+        log_error(ctx->logger, "Error: Se esperaba una instrucción, pero llegó la operación: %d", op_code);
         return NULL;
     }
 }
@@ -103,11 +102,10 @@ t_instruccion* decode(char* instruccion_texto) {
     return instruccion;
 }
 
-int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexiones_cpu* conexiones, t_log* logger) {
+int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     int desalojar = 0;
 
-    // 1. Log mínimo y obligatorio de ejecución
-    log_info(logger, "## PID: %d - Ejecutando: %s - %s %s %s", 
+    log_info(ctx->logger, "## PID: %d - Ejecutando: %s - %s %s %s", 
              contexto->pid, 
              instruccion->identificador, 
              instruccion->parametro1 ? instruccion->parametro1 : "", 
@@ -192,11 +190,11 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
     
     // --- ZONA DE SYSCALLS ---
     else if (string_equals_ignore_case(instruccion->identificador, "SLEEP")) {
-        log_info(logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
         
         contexto->registros.PC++;
         // 1. Actualizamos contexto en memoria
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         // 2. Le avisamos al Scheduler el motivo y el tiempo
         t_paquete* paquete_sleep = crear_paquete();
@@ -205,16 +203,16 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
         
         agregar_a_paquete(paquete_sleep, &(contexto->pid), sizeof(uint32_t));
         agregar_a_paquete(paquete_sleep, &tiempo_sleep, sizeof(uint32_t));
-        enviar_paquete(paquete_sleep, conexiones->scheduler);
+        enviar_paquete(paquete_sleep, ctx->conexiones->scheduler);
         eliminar_paquete(paquete_sleep);
         
         desalojar = 1; // Cortamos el ciclo
     }
     else if (string_equals_ignore_case(instruccion->identificador, "STDOUT")) {
-        log_info(logger, "Atrapada Syscall STDOUT. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall STDOUT. Desalojando a Kernel...");
         
         contexto->registros.PC++;
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_STDOUT;
@@ -235,16 +233,16 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
         }
         agregar_a_paquete(paquete, dummy, strlen(dummy) + 1);
         
-        enviar_paquete(paquete, conexiones->scheduler);
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
         eliminar_paquete(paquete);
         
         desalojar = 1;
     }
     else if (string_equals_ignore_case(instruccion->identificador, "STDIN")) {
-        log_info(logger, "Atrapada Syscall STDIN. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall STDIN. Desalojando a Kernel...");
         
         contexto->registros.PC++;
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_STDIN;
@@ -253,16 +251,16 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
         uint32_t size = 10;
         agregar_a_paquete(paquete, &size, sizeof(uint32_t));
 
-        enviar_paquete(paquete, conexiones->scheduler);
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
         eliminar_paquete(paquete);
         
         desalojar = 1;
     }
     else if (string_equals_ignore_case(instruccion->identificador, "MUTEX_CREATE")) {
-        log_info(logger, "Atrapada Syscall MUTEX_CREATE. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall MUTEX_CREATE. Desalojando a Kernel...");
         
         contexto->registros.PC++;
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_MUTEX_CREATE;
@@ -271,16 +269,16 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
         char* recurso = instruccion->parametro1;
         agregar_a_paquete(paquete, recurso, strlen(recurso) + 1);
 
-        enviar_paquete(paquete, conexiones->scheduler);
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
         eliminar_paquete(paquete);
         
         desalojar = 1;
     }
     else if (string_equals_ignore_case(instruccion->identificador, "MUTEX_LOCK")) {
-        log_info(logger, "Atrapada Syscall MUTEX_LOCK. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall MUTEX_LOCK. Desalojando a Kernel...");
         
         contexto->registros.PC++;
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_MUTEX_LOCK;
@@ -289,16 +287,16 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
         char* recurso = instruccion->parametro1;
         agregar_a_paquete(paquete, recurso, strlen(recurso) + 1);
 
-        enviar_paquete(paquete, conexiones->scheduler);
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
         eliminar_paquete(paquete);
         
         desalojar = 1;
     }
     else if (string_equals_ignore_case(instruccion->identificador, "MUTEX_UNLOCK")) {
-        log_info(logger, "Atrapada Syscall MUTEX_UNLOCK. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall MUTEX_UNLOCK. Desalojando a Kernel...");
         
         contexto->registros.PC++;
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_MUTEX_UNLOCK;
@@ -307,29 +305,29 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_conexi
         char* recurso = instruccion->parametro1;
         agregar_a_paquete(paquete, recurso, strlen(recurso) + 1);
 
-        enviar_paquete(paquete, conexiones->scheduler);
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
         eliminar_paquete(paquete);
         
         desalojar = 1;
     }
     else if (string_equals_ignore_case(instruccion->identificador, "EXIT")) {
-        log_info(logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
+        log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
         
         // 1. Actualizamos contexto en memoria
-        enviar_contexto_a_memoria(contexto, conexiones->memoria);
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
         // 2. Le avisamos al Scheduler que el proceso terminó
         t_paquete* paquete_exit = crear_paquete();
         paquete_exit->codigo_operacion = SYSCALL_EXIT;
         
         agregar_a_paquete(paquete_exit, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paquete_exit, conexiones->scheduler);
+        enviar_paquete(paquete_exit, ctx->conexiones->scheduler);
         eliminar_paquete(paquete_exit);
         
         desalojar = 1; // Cortamos el ciclo
     }
     else {
-        log_error(logger, "Instrucción desconocida: %s", instruccion->identificador);
+        log_error(ctx->logger, "Instrucción desconocida: %s", instruccion->identificador);
         desalojar = 1;
     }
 
@@ -356,27 +354,27 @@ void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_regis
     }
 }
 
-int chequear_interrupciones(int socket_scheduler, t_log* logger) {
+int chequear_interrupciones(t_cpu_context* ctx) {
     int op_code_espiado;
     
     // Miramos si hay datos en el socket de forma no bloqueante
-    ssize_t bytes_recibidos = recv(socket_scheduler, &op_code_espiado, sizeof(int), MSG_PEEK | MSG_DONTWAIT);
+    ssize_t bytes_recibidos = recv(ctx->conexiones->scheduler, &op_code_espiado, sizeof(int), MSG_PEEK | MSG_DONTWAIT);
 
     if (bytes_recibidos > 0) {
-        int operacion = recibir_operacion(socket_scheduler);
+        int operacion = recibir_operacion(ctx->conexiones->scheduler);
         
         if (operacion == INTERRUPCION_QUANTUM) { 
             // (Acá podés recibir el buffer si el Scheduler te mandó un payload adicional)
-            log_info(logger, "## Interrupción recibida");
+            log_info(ctx->logger, "## Interrupción recibida");
             return 1;
         } else {
-            log_warning(logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
+            log_warning(ctx->logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
         }
     } else if (bytes_recibidos == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
         // No hay mensajes pendientes y la CPU sigue ejecutando tranquila.
         return 0;
     } else if (bytes_recibidos == 0) {
-        log_error(logger, "El Kernel Scheduler se ha desconectado inesperadamente.");
+        log_error(ctx->logger, "El Kernel Scheduler se ha desconectado inesperadamente.");
         return 1; // Frenamos la CPU porque se cayó el servidor
     }
     return 0;
