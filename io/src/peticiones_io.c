@@ -18,7 +18,9 @@ void ejecutar_stdin(int pid, int socket_scheduler, t_log* logger) {
     }
     texto_final[cantidad_a_leer] = '\0';
 
-    enviar_mensaje(texto_final, socket_scheduler);
+    // Para el Checkpoint 2, NO se requiere mandar el texto_final de vuelta al Scheduler.
+    // Solo validamos que la I/O termine su espera (el MSG_OK de procesar_peticion_io).
+    log_info(logger, "## Texto leido: %s", texto_final);
 
     free(leido);
     free(texto_final);

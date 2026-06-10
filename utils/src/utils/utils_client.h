@@ -12,6 +12,7 @@
 #include<commons/string.h>
 #include<commons/config.h>
 #include<readline/readline.h>
+#include<stdint.h>
 
 // Macros para Magic Strings y Constantes
 #define HANDSHAKE_CPU "CPU"
@@ -42,7 +43,12 @@ typedef enum{
 	SYSCALL_STDIN,
 	ERROR_SEG_FAULT,
 	CONSULTAR_ESPACIO_LIBRE,
-	PETICION_IO
+	PETICION_IO,
+	SYSCALL_WAIT,
+	SYSCALL_SIGNAL,
+	SYSCALL_MUTEX_CREATE,
+	SYSCALL_MUTEX_LOCK,
+	SYSCALL_MUTEX_UNLOCK
 }op_code;
 
 typedef struct { // Los uint8_t tienen 1 byte y los uint32_t 4 bytes
