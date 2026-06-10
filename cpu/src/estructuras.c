@@ -72,10 +72,13 @@ t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* 
         deserializar_contexto(buffer, size, contexto);
         free(buffer);
 
-        // (Más adelante en el Check 3 acá también deserializarás la Tabla de Segmentos)
+        int cant = contexto->tabla_segmentos ? list_size(contexto->tabla_segmentos) : 0;
+        log_info(ctx->logger, "Contexto de ejecución del PID %d recibido exitosamente con %d segmentos.", contexto->pid, cant);
+        for(int i=0; i<cant; i++) {
+            t_segmento* s = list_get(contexto->tabla_segmentos, i);
+            log_info(ctx->logger, "  -> Seg ID: %d, Base: %d, Tamanio: %d", s->id, s->base, s->tamanio);
+        }
 
-
-        log_info(ctx->logger, "Contexto de ejecución del PID %d recibido exitosamente.", contexto->pid);
         return contexto;
     } else {
         log_error(ctx->logger, "Error: Se esperaba el contexto de ejecución, pero llegó la operación: %d", operacion);
@@ -514,6 +517,27 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         
         desalojar = 1;
     }
+    else if (string_equals_ignore_case(instruccion->identificador, "INIT_PROC")) {
+        log_info(ctx->logger, "Atrapada Syscall INIT_PROC. Desalojando a Kernel...");
+        
+        contexto->registros.PC++;
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+        
+        t_paquete* paquete = crear_paquete();
+        paquete->codigo_operacion = SYSCALL_INIT_PROC;
+        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+        
+        char* script_path = instruccion->parametro1;
+        uint32_t prioridad = atoi(instruccion->parametro2);
+        
+        agregar_a_paquete(paquete, script_path, strlen(script_path) + 1);
+        agregar_a_paquete(paquete, &prioridad, sizeof(uint32_t));
+
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
+        eliminar_paquete(paquete);
+        
+        desalojar = 1;
+    }
     else if (string_equals_ignore_case(instruccion->identificador, "EXIT")) {
         log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
         
@@ -529,6 +553,9 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         eliminar_paquete(paquete_exit);
         
         desalojar = 1; // Cortamos el ciclo
+    }
+    else if (string_equals_ignore_case(instruccion->identificador, "NOOP")) {
+        // No-op: no hace nada, el PC se incrementa normalmente en el ciclo
     }
     else {
         log_error(ctx->logger, "Instrucción desconocida: %s", instruccion->identificador);

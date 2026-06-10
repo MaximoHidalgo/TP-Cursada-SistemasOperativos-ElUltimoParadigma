@@ -60,10 +60,10 @@ t_cpu_context* iniciar_contexto(int argc, char* argv[]) {
         while (recibidos < 2) {
             int resp = recibir_operacion(ctx->conexiones->memoria);
             if (resp == TAM_MAX_SEGMENTO) {
-                int size;
-                void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
-                memcpy(&ctx->tam_max_segmento, buf, sizeof(int));
-                free(buf);
+                t_list* paq = recibir_paquete(ctx->conexiones->memoria);
+                int* val = list_get(paq, 0);
+                ctx->tam_max_segmento = *val;
+                list_destroy_and_destroy_elements(paq, free);
                 log_info(ctx->logger, "Tamaño maximo de segmento recibido: %d", ctx->tam_max_segmento);
                 recibidos++;
             } else if (resp == ENVIO_TABLA_STICKS) {

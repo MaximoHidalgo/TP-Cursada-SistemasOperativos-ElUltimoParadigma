@@ -82,35 +82,41 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
 }
 
 void procesar_crear_proceso_handler(int cliente_fd, t_memory_context* ctx) {
+    // El sender (enviar_peticion_crear_proceso) usa buffer_write_uint32 + buffer_write_string
+    // que escriben directamente al stream, NO con agregar_a_paquete.
+    // Por eso debemos deserializar con buffer_reader, no con recibir_paquete.
     int size;
     void* buffer = recibir_buffer(&size, cliente_fd);
-    t_peticion_crear_proceso* peticion = deserializar_peticion_crear_proceso(buffer);
+    t_buffer_reader* reader = buffer_reader_create(buffer, size);
+    
+    uint32_t pid = buffer_read_uint32(reader);
+    char* path = buffer_read_string(reader);
+    
+    buffer_reader_destroy(reader);
     free(buffer);
     
     char *path_completo = string_new();
     string_append(&path_completo, ctx->base_path);
     string_append(&path_completo, "/");
-    string_append(&path_completo, peticion->path);
+    string_append(&path_completo, path);
     
-    crear_proceso(ctx, peticion->pid, path_completo);
+    log_info(ctx->logger, "Creando proceso PID %d con script: %s", pid, path_completo);
+    crear_proceso(ctx, pid, path_completo);
     enviar_mensaje(MSG_OK, cliente_fd);
     
     free(path_completo);
-    destruir_peticion_crear_proceso(peticion);
+    free(path);
 }
 
 void procesar_solicitud_contexto_handler(int cliente_fd, t_memory_context* ctx) {
-    int size;
-    void* buffer = recibir_buffer(&size, cliente_fd);
-    int desplazamiento = 0;
-    int tam_pid, pid;
-    memcpy(&tam_pid, buffer + desplazamiento, sizeof(int));
-    desplazamiento += sizeof(int);
-    memcpy(&pid, buffer + desplazamiento, sizeof(int));
-    free(buffer);
+    t_list* paquete = recibir_paquete(cliente_fd);
+    int pid = *(int*)list_get(paquete, 0);
+    list_destroy_and_destroy_elements(paquete, free);
     
     t_programa* prog = buscar_programa(ctx, pid);
     if (prog != NULL) {
+        int cant = prog->contexto->tabla_segmentos ? list_size(prog->contexto->tabla_segmentos) : 0;
+        log_info(ctx->logger, "DEBUG: Sending context for PID %d with %d segments", pid, cant);
         enviar_contexto(prog->contexto, cliente_fd);
     } else {
         log_error(ctx->logger, "Error: Contexto solicitado para PID %d inexistente", pid);
@@ -127,7 +133,16 @@ void procesar_actualizacion_contexto_handler(int cliente_fd, t_memory_context* c
     t_programa* prog = buscar_programa(ctx, contexto_actualizado.pid);
     if (prog != NULL) {
         pthread_mutex_lock(&ctx->mutex_programas);
-        *(prog->contexto) = contexto_actualizado;
+        
+        // Actualizamos solamente los registros (que incluyen el PC)
+        // La memoria es la dueña de la tabla de segmentos, no debemos sobreescribirla
+        // con una version potencialmente vieja del CPU.
+        prog->contexto->registros = contexto_actualizado.registros;
+        
+        if (contexto_actualizado.tabla_segmentos) {
+            list_destroy_and_destroy_elements(contexto_actualizado.tabla_segmentos, free);
+        }
+        
         pthread_mutex_unlock(&ctx->mutex_programas);
         log_info(ctx->logger, "Contexto actualizado correctamente para PID %d", prog->contexto->pid);
     } else {
@@ -370,14 +385,11 @@ void atender_cliente(void *arg) {
                 break;
             case CREAR_SEGMENTO:
             {
-                int size;
-                void* buffer = recibir_buffer(&size, cliente_fd);
-                uint32_t pid, id_seg, tamanio_seg;
-                int desp = 0;
-                memcpy(&pid, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                memcpy(&id_seg, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                memcpy(&tamanio_seg, buffer + desp, sizeof(uint32_t));
-                free(buffer);
+                t_list* paquete = recibir_paquete(cliente_fd);
+                uint32_t pid = *(uint32_t*)list_get(paquete, 0);
+                uint32_t id_seg = *(uint32_t*)list_get(paquete, 1);
+                uint32_t tamanio_seg = *(uint32_t*)list_get(paquete, 2);
+                list_destroy_and_destroy_elements(paquete, free);
 
                 int needs_compaction = 0;
                 pthread_mutex_lock(&ctx->mutex_memoria);
@@ -404,7 +416,10 @@ void atender_cliente(void *arg) {
                             prog->contexto->tabla_segmentos = list_create();
                         }
                         list_add(prog->contexto->tabla_segmentos, nuevo_seg);
+                        log_info(ctx->logger, "DEBUG: Added segment to PID %d. Total segments now: %d", pid, list_size(prog->contexto->tabla_segmentos));
                         pthread_mutex_unlock(&ctx->mutex_programas);
+                    } else {
+                        log_error(ctx->logger, "DEBUG: prog was NULL for PID %d in CREAR_SEGMENTO!", pid);
                     }
                     enviar_mensaje(MSG_OK, cliente_fd);
                 } else {
@@ -415,8 +430,9 @@ void atender_cliente(void *arg) {
             }
             case LIBERAR_PROCESO:
             {
-                uint32_t pid_a_liberar;
-                recv(cliente_fd, &pid_a_liberar, sizeof(uint32_t), MSG_WAITALL);
+                t_list* paquete = recibir_paquete(cliente_fd);
+                uint32_t pid_a_liberar = *(uint32_t*)list_get(paquete, 0);
+                list_destroy_and_destroy_elements(paquete, free);
 
                 pthread_mutex_lock(&ctx->mutex_memoria);
                 t_programa* prog = buscar_programa(ctx, pid_a_liberar);
@@ -435,13 +451,10 @@ void atender_cliente(void *arg) {
             }
             case ELIMINAR_SEGMENTO:
             {
-                int size;
-                void* buffer = recibir_buffer(&size, cliente_fd);
-                uint32_t pid, id_seg;
-                int desp = 0;
-                memcpy(&pid, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                memcpy(&id_seg, buffer + desp, sizeof(uint32_t));
-                free(buffer);
+                t_list* paquete = recibir_paquete(cliente_fd);
+                uint32_t pid = *(uint32_t*)list_get(paquete, 0);
+                uint32_t id_seg = *(uint32_t*)list_get(paquete, 1);
+                list_destroy_and_destroy_elements(paquete, free);
 
                 pthread_mutex_lock(&ctx->mutex_memoria);
                 t_programa* prog = buscar_programa(ctx, pid);

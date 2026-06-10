@@ -33,8 +33,15 @@ void crear_proceso(t_memory_context* ctx, int pid, char* path) {
     FILE* f = fopen(path, "r");
 
     if (!f) {
-        log_error(ctx->logger, "No se pudo abrir el archivo %s", path);
-        return;
+        // Fallback for tests
+        char fallback_path[512];
+        snprintf(fallback_path, sizeof(fallback_path), "../utils/scripts/%s", path);
+        f = fopen(fallback_path, "r");
+        
+        if (!f) {
+            log_error(ctx->logger, "No se pudo abrir el archivo %s ni %s", path, fallback_path);
+            return;
+        }
     }
 
     t_programa* prog = malloc(sizeof(t_programa));

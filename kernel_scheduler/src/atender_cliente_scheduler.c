@@ -325,6 +325,41 @@ void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t* pid_ptr = list_get(paquete, 0);
+    uint32_t pid = *pid_ptr;
+    char* script_path = list_get(paquete, 1);
+    uint32_t* prioridad_ptr = list_get(paquete, 2);
+    uint32_t prioridad = *prioridad_ptr;
+
+    // Guard Clause
+    if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
+        despachar_proceso_a_cpu(ctx, cliente_fd);
+        list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    static int contador_pid = 1;
+    int nuevo_pid = contador_pid++;
+
+    log_info(ctx->logger, "## Proceso %d solicita crear nuevo proceso con script %s", pid, script_path);
+
+    enviar_peticion_crear_proceso(nuevo_pid, script_path, ctx->socket_memoria);
+
+    t_proceso_planificable* pcb_nuevo = malloc(sizeof(t_proceso_planificable));
+    pcb_nuevo->pid = nuevo_pid;
+    pcb_nuevo->cola_prioridad = prioridad;
+    pcb_nuevo->bloqueo_id = 0;
+
+    planificador_encolar_new(ctx->estratega, pcb_nuevo);
+    planificador_admitir_a_ready(ctx->estratega);
+
+    devolver_ejecucion_a_cpu(ctx, cliente_fd); // Sigue en EXEC
+
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
 void atender_cliente_scheduler(void* arg) {
     t_args_hilo_scheduler* args = (t_args_hilo_scheduler*)arg;
     int cliente_fd = args->cliente_fd;
@@ -373,6 +408,9 @@ void atender_cliente_scheduler(void* arg) {
             case SYSCALL_MEM_ALLOC:
             case SYSCALL_MEM_FREE:
                 procesar_syscall_memoria(cliente_fd, ctx, mensaje_cliente);
+                break;
+            case SYSCALL_INIT_PROC:
+                procesar_syscall_init_proc(cliente_fd, ctx);
                 break;
             case FIN_DE_QUANTUM:
                 procesar_fin_quantum(cliente_fd, ctx);
