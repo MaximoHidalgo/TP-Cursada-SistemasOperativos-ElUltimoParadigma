@@ -63,6 +63,7 @@ t_memory_stick_context* iniciar_contexto(int argc, char* argv[]) {
     ctx->puerto_escucha = config_get_string_value(ctx->config, "PUERTO_STICK");
     ctx->ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
     ctx->puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
+    ctx->memory_delay = config_get_int_value(ctx->config, "MEMORY_DELAY");
     ctx->socket_kernel_memory = -1;
     ctx->socket_escucha = -1;
 
@@ -78,8 +79,10 @@ void conectar_kernel_memory(t_memory_stick_context* ctx) {
     }
     log_info(ctx->logger, "## Conectado a Kernel Memory");
 
-    // Mandar Handshake indicando el tamaño
-    char *msj_handshake = string_from_format("%s|%u", HANDSHAKE_STICK, ctx->tamanio_total);
+    // Mandar Handshake indicando el tamaño, IP y puerto de escucha
+    // Asumimos que IP_MEMORY u otra prop nos sirve. Pero el memory_stick no tiene su propia IP en config, usa 127.0.0.1 por defecto localmente?
+    // En las configs suele haber "IP_MEMORY", usamos esa o 127.0.0.1
+    char *msj_handshake = string_from_format("%s|%u|%s|%s", HANDSHAKE_STICK, ctx->tamanio_total, "127.0.0.1", ctx->puerto_escucha);
     enviar_mensaje(msj_handshake, ctx->socket_kernel_memory);
     free(msj_handshake);
 }
