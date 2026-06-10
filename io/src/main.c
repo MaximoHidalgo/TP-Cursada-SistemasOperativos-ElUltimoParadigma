@@ -1,66 +1,93 @@
 #include "main.h"
 
-int main(int argc, char* argv[]) {
+t_io_context* iniciar_contexto(int argc, char* argv[]) {
     if (argc != 3){
-        printf("Error en parametros. Uso: ./io [path] [io]\n");
-        return EXIT_FAILURE;
-    }
-    char* ConfigPath = argv[1];
-    char* IoName = argv[2]; 
-
-    t_config* config = config_create(ConfigPath);
-    if (config == NULL){
-        printf("No se pudo leer el archivo de config del modulo IO\n");
-        return EXIT_FAILURE;
+        printf("Error en parametros. Uso: ./io <path_config> <nombre_io>\n");
+        return NULL;
     }
 
-    char* ipKernel = config_get_string_value(config, "IP_SCHEDULER");
-    char* puertoKernel = config_get_string_value(config, "PUERTO_SCHEDULER");
-    char* log_level_str = config_get_string_value(config, "LOG_LEVEL");
+    t_io_context* ctx = malloc(sizeof(t_io_context));
+    if (ctx == NULL) return NULL;
+
+    ctx->io_name = strdup(argv[2]);
+    ctx->config = config_create(argv[1]);
+    
+    if (ctx->config == NULL){
+        printf("No se pudo leer el archivo de config del modulo IO (%s)\n", argv[1]);
+        free(ctx->io_name);
+        free(ctx);
+        return NULL;
+    }
+
+    char* ipKernel = config_get_string_value(ctx->config, "IP_SCHEDULER");
+    char* puertoKernel = config_get_string_value(ctx->config, "PUERTO_SCHEDULER");
+    char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
     
     t_log_level nivelLog = log_level_from_string(log_level_str);
-    t_log* logger = log_create("io.log", IoName, true, nivelLog);
+    ctx->logger = log_create("io.log", ctx->io_name, true, nivelLog);
 
-    if (logger == NULL){
+    if (ctx->logger == NULL){
         printf("No se pudo crear el logger en modulo IO\n");
-        config_destroy(config);
-        return EXIT_FAILURE;
+        config_destroy(ctx->config);
+        free(ctx->io_name);
+        free(ctx);
+        return NULL;
     }
 
-    int socket_scheduler = crear_conexion(ipKernel, puertoKernel);
+    ctx->socket_scheduler = crear_conexion(ipKernel, puertoKernel);
 
-    if(socket_scheduler == -1){
-        log_error(logger, "No se pudo establecer conexion con el Kernel Scheduler\n");
-        log_destroy(logger);
-        config_destroy(config);
-        return EXIT_FAILURE;
+    if(ctx->socket_scheduler == -1){
+        log_error(ctx->logger, "No se pudo establecer conexion con el Kernel Scheduler\n");
+        log_destroy(ctx->logger);
+        config_destroy(ctx->config);
+        free(ctx->io_name);
+        free(ctx);
+        return NULL;
     }
 
-    log_info(logger, "## Conectado a Kernel Scheduler");
-    enviar_mensaje(IoName, socket_scheduler);
-    log_info(logger, "Interfaz %s lista.", IoName);
+    log_info(ctx->logger, "## Conectado a Kernel Scheduler");
+    enviar_mensaje(ctx->io_name, ctx->socket_scheduler);
+    log_info(ctx->logger, "Interfaz %s lista.", ctx->io_name);
+    
+    return ctx;
+}
+
+void limpiar_contexto(t_io_context* ctx) {
+    if (ctx == NULL) return;
+    
+    if (ctx->socket_scheduler != -1) {
+        liberar_conexion(ctx->socket_scheduler);
+    }
+    if (ctx->logger) log_destroy(ctx->logger);
+    if (ctx->config) config_destroy(ctx->config);
+    if (ctx->io_name) free(ctx->io_name);
+    
+    free(ctx);
+}
+
+int main(int argc, char* argv[]) {
+    t_io_context* ctx = iniciar_contexto(argc, argv);
+    if (ctx == NULL) {
+        return EXIT_FAILURE;
+    }
 
     while (1) {
-        int cod_op = recibir_operacion(socket_scheduler);
+        int cod_op = recibir_operacion(ctx->socket_scheduler);
         
         switch(cod_op) {
             case PETICION_IO:
-                procesar_peticion_io(socket_scheduler, IoName, logger);
+                procesar_peticion_io(ctx);
                 break;
             case -1:
-                log_error(logger, "Se desconectó el Kernel Scheduler.");
-                liberar_conexion(socket_scheduler);
-                log_destroy(logger);
-                config_destroy(config);
+                log_error(ctx->logger, "Se desconectó el Kernel Scheduler.");
+                limpiar_contexto(ctx);
                 return EXIT_FAILURE;
             default:
-                log_warning(logger, "Operación desconocida: %d", cod_op);
+                log_warning(ctx->logger, "Operación desconocida: %d", cod_op);
                 break;
         }
     }
 
-    liberar_conexion(socket_scheduler);
-    log_destroy(logger);
-    config_destroy(config);
+    limpiar_contexto(ctx);
     return 0;
 }

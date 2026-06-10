@@ -1,10 +1,13 @@
 #ifndef PETICIONES_SWAP_H
 #define PETICIONES_SWAP_H
 
-#include <utils/utils_client.h>
-#include <utils/utils_server.h>
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
+#include "estructuras.h"
 
-void procesar_peticion_lectura(int socket_kernel_memory, t_log* logger);
-void procesar_peticion_escritura(int socket_kernel_memory, t_log* logger);
+void procesar_peticion_lectura(t_swap_context* ctx);
+void procesar_peticion_escritura(t_swap_context* ctx);
 
 #endif

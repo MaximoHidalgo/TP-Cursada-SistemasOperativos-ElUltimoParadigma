@@ -1,20 +1,16 @@
 #ifndef ATENDER_CPU_H_
 #define ATENDER_CPU_H_
 
-#include <utils/utils_server.h>
-#include <utils/utils_client.h>
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <commons/log.h>
 #include <commons/config.h>
-
-typedef struct {
-    void* espacio_memoria;
-    uint32_t tamanio_total;
-    t_log* logger;
-    pthread_mutex_t mutex_memoria;
-} t_memory_stick_context;
+#include "estructuras.h"
 
 typedef struct {
     int socket_cliente;
