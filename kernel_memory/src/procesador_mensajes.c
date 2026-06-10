@@ -6,25 +6,29 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     
     if (string_starts_with(mensaje, "STICK|")) {
         char **partes = string_split(mensaje, "|");
-        int stick_size = atoi(partes[1]);
+        uint32_t stick_size = atoi(partes[1]);
+        char* stick_ip = strdup(partes[2]);
+        int stick_puerto = atoi(partes[3]);
         
         pthread_mutex_lock(&ctx->mutex_memoria);
         
-        // Ampliar espacio
-        void* nuevo_espacio = realloc(ctx->espacio_memoria, ctx->memoria_total + stick_size);
-        if (nuevo_espacio) {
-            ctx->espacio_memoria = nuevo_espacio;
-            
-            t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
-            nuevo_hueco->base = ctx->memoria_total;
-            nuevo_hueco->limite = ctx->memoria_total + stick_size;
-            list_add(ctx->huecos_libres, nuevo_hueco);
-            
-            ctx->memoria_total += stick_size;
-            log_info(ctx->logger, "## Memory Stick de %d bytes Conectada. Memoria total: %d", stick_size, ctx->memoria_total);
-        } else {
-            log_error(ctx->logger, "Error al hacer realloc de la memoria para el Memory Stick");
-        }
+        t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
+        stick->socket_fd = cliente_fd;
+        stick->tamanio = stick_size;
+        stick->base_address = ctx->memoria_total;
+        stick->id = list_size(ctx->memory_sticks) + 1;
+        stick->ip = stick_ip;
+        stick->puerto = stick_puerto;
+        
+        list_add(ctx->memory_sticks, stick);
+        
+        t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
+        nuevo_hueco->base = ctx->memoria_total;
+        nuevo_hueco->limite = ctx->memoria_total + stick_size;
+        list_add(ctx->huecos_libres, nuevo_hueco);
+        
+        ctx->memoria_total += stick_size;
+        log_info(ctx->logger, "## Memory Stick de %d bytes Conectada en %s:%d. Memoria total: %d", stick_size, stick_ip, stick_puerto, ctx->memoria_total);
         
         pthread_mutex_unlock(&ctx->mutex_memoria);
         
@@ -35,6 +39,26 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     }
     else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
         log_info(ctx->logger, "## CPU %s Conectada", mensaje);
+        
+        // Enviar tabla de memory sticks a la CPU
+        pthread_mutex_lock(&ctx->mutex_memoria);
+        t_paquete* paq = crear_paquete();
+        paq->codigo_operacion = ENVIO_TABLA_STICKS; // Requiere opcode nuevo, o enviarlo como mensaje. Mejor opcode
+        int cant = list_size(ctx->memory_sticks);
+        agregar_a_paquete(paq, &cant, sizeof(int));
+        for (int i = 0; i < cant; i++) {
+            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+            agregar_a_paquete(paq, &(stick->id), sizeof(int));
+            agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
+            agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
+            agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
+            int ip_len = strlen(stick->ip) + 1;
+            agregar_a_paquete(paq, &ip_len, sizeof(int));
+            agregar_a_paquete(paq, stick->ip, ip_len);
+        }
+        enviar_paquete(paq, cliente_fd);
+        eliminar_paquete(paq);
+        pthread_mutex_unlock(&ctx->mutex_memoria);
     }
     else { 
         log_info(ctx->logger, "## Módulo Conectado: %s", mensaje);
@@ -262,15 +286,11 @@ void atender_cliente(void *arg) {
                 free(buffer);
 
                 pthread_mutex_lock(&ctx->mutex_memoria);
-                void* data_leida = malloc(tamanio);
-                memcpy(data_leida, ctx->espacio_memoria + dir_fisica, tamanio);
+                void* data_leida = leer_memoria_distribuida(ctx, dir_fisica, tamanio);
                 pthread_mutex_unlock(&ctx->mutex_memoria);
 
                 t_paquete* paq = crear_paquete();
-                paq->codigo_operacion = MENSAJE; // Enviamos como si fuera un mensaje con la data, o un op_code nuevo. No, utilizeremos buffer crudo
-                // Para recibirlo en cpu, cpu espera ENVIO_DATOS o manda LEER_MEMORIA y usa recv()
-                // Wait, el deserializador de utils NO contempla lectura de datos crudos. Espera MSG_OK?
-                // Vamos a mandar MSG_OK y pegarle el contenido de data_leida.
+                paq->codigo_operacion = MENSAJE; 
                 agregar_a_paquete(paq, data_leida, tamanio);
                 enviar_paquete(paq, cliente_fd);
                 eliminar_paquete(paq);
@@ -287,21 +307,11 @@ void atender_cliente(void *arg) {
                 memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
                 memcpy(&tamanio, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
                 
-                // Si mandamos el tamanio en la peticion por deserializar_peticion_escritura que lee buffer_read_int?
-                // Revisemos deserializar_peticion_escritura... wait, en kernel_memory no usamos deserializar_peticion_escritura, 
-                // lo desarmamos a mano. Pero cpu envia usando enviar_peticion_escritura que es:
-                // buffer_write_uint32(dir_fisica), buffer_write_uint32(tamanio), buffer_write_int(tamanio), buffer_write(contenido, tamanio)
-                // Wait! Enviar peticion escritura hace:
-                // buffer_write_uint32(paquete->buffer, direccion_fisica);
-                // buffer_write_uint32(paquete->buffer, tamanio);
-                // buffer_write_int(paquete->buffer, tamanio); 
-                // buffer_write(paquete->buffer, contenido, tamanio);
-                
                 int tamanio_rep;
                 memcpy(&tamanio_rep, buffer + desp, sizeof(int)); desp += sizeof(int);
                 
                 pthread_mutex_lock(&ctx->mutex_memoria);
-                memcpy(ctx->espacio_memoria + dir_fisica, buffer + desp, tamanio);
+                escribir_memoria_distribuida(ctx, dir_fisica, tamanio, buffer + desp);
                 pthread_mutex_unlock(&ctx->mutex_memoria);
                 
                 free(buffer);

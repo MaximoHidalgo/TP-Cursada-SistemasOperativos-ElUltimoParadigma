@@ -242,11 +242,8 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
             eliminar_paquete(paq);
             desalojar = 1;
         } else {
-            enviar_peticion_lectura(dir_fisica, tam, ctx->conexiones->memoria);
-            int op = recibir_operacion(ctx->conexiones->memoria);
-            if (op == MENSAJE) { 
-                int size;
-                void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
+            void* buf = leer_memoria_distribuida_cpu(ctx, dir_fisica, tam);
+            if (buf != NULL) {
                 uint32_t valor = 0;
                 memcpy(&valor, buf, tam);
                 free(buf);
@@ -272,16 +269,8 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
             eliminar_paquete(paq);
             desalojar = 1;
         } else {
-            enviar_peticion_escritura(dir_fisica, tam, &valor, ctx->conexiones->memoria);
-            int op = recibir_operacion(ctx->conexiones->memoria);
-            if (op == MENSAJE) {
-                int size;
-                char* msj = recibir_buffer(&size, ctx->conexiones->memoria);
-                if (string_equals_ignore_case(msj, "OK")) {
-                    log_info(ctx->logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);
-                }
-                free(msj);
-            }
+            escribir_memoria_distribuida_cpu(ctx, dir_fisica, tam, &valor);
+            log_info(ctx->logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);
         }
     }
     else if (string_equals_ignore_case(instruccion->identificador, "COPY_MEM")) {
@@ -302,22 +291,10 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
             eliminar_paquete(paq);
             desalojar = 1;
         } else {
-            enviar_peticion_lectura(dir_fisica_si, tam, ctx->conexiones->memoria);
-            int op_read = recibir_operacion(ctx->conexiones->memoria);
-            if (op_read == MENSAJE) {
-                int size;
-                void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
-                
-                enviar_peticion_escritura(dir_fisica_di, tam, buf, ctx->conexiones->memoria);
-                int op_write = recibir_operacion(ctx->conexiones->memoria);
-                if (op_write == MENSAJE) {
-                    int size_w;
-                    char* msj_w = recibir_buffer(&size_w, ctx->conexiones->memoria);
-                    if (string_equals_ignore_case(msj_w, "OK")) {
-                        log_info(ctx->logger, "PID: %d - Acción: COPY_MEM - Origen Fisico: %d - Destino Fisico: %d", contexto->pid, dir_fisica_si, dir_fisica_di);
-                    }
-                    free(msj_w);
-                }
+            void* buf = leer_memoria_distribuida_cpu(ctx, dir_fisica_si, tam);
+            if (buf != NULL) {
+                escribir_memoria_distribuida_cpu(ctx, dir_fisica_di, tam, buf);
+                log_info(ctx->logger, "PID: %d - Acción: COPY_MEM - Origen Fisico: %d - Destino Fisico: %d", contexto->pid, dir_fisica_si, dir_fisica_di);
                 free(buf);
             }
         }
@@ -345,51 +322,103 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
     }
     else if (string_equals_ignore_case(instruccion->identificador, "STDOUT")) {
         log_info(ctx->logger, "Atrapada Syscall STDOUT. Desalojando a Kernel...");
-        
         contexto->registros.PC++;
         enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
-        t_paquete* paquete = crear_paquete();
-        paquete->codigo_operacion = SYSCALL_STDOUT;
-        // Podríamos enviar más parámetros si fuera necesario, según prueba_io.txt STDOUT toma registros
-        // por ahora mandamos un string dummy o si el checkpoint 2 no evalúa STDOUT en profundidad...
-        // Wait, prueba_io.txt tiene: STDOUT CX DX
-        // Ojo, si STDOUT es a una Interfaz STDOUT, sólo le avisamos al kernel.
-        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+        uint32_t dir_logica = 0, tamanio = 0;
         char* reg1 = instruccion->parametro1;
+        if (string_equals_ignore_case(reg1, "AX")) dir_logica = contexto->registros.AX;
+        else if (string_equals_ignore_case(reg1, "EAX")) dir_logica = contexto->registros.EAX;
+        else if (string_equals_ignore_case(reg1, "BX")) dir_logica = contexto->registros.BX;
+        else if (string_equals_ignore_case(reg1, "EBX")) dir_logica = contexto->registros.EBX;
+        else if (string_equals_ignore_case(reg1, "CX")) dir_logica = contexto->registros.CX;
+        else if (string_equals_ignore_case(reg1, "ECX")) dir_logica = contexto->registros.ECX;
+        else if (string_equals_ignore_case(reg1, "DX")) dir_logica = contexto->registros.DX;
+        else if (string_equals_ignore_case(reg1, "EDX")) dir_logica = contexto->registros.EDX;
+        else if (string_equals_ignore_case(reg1, "SI")) dir_logica = contexto->registros.SI;
+        else if (string_equals_ignore_case(reg1, "DI")) dir_logica = contexto->registros.DI;
+        
         char* reg2 = instruccion->parametro2;
-        char dummy[100];
-        if (reg1 && reg2) {
-            sprintf(dummy, "%s %s", reg1, reg2);
-        } else if (reg1) {
-            sprintf(dummy, "%s", reg1);
+        if (string_equals_ignore_case(reg2, "AX")) tamanio = contexto->registros.AX;
+        else if (string_equals_ignore_case(reg2, "EAX")) tamanio = contexto->registros.EAX;
+        else if (string_equals_ignore_case(reg2, "BX")) tamanio = contexto->registros.BX;
+        else if (string_equals_ignore_case(reg2, "EBX")) tamanio = contexto->registros.EBX;
+        else if (string_equals_ignore_case(reg2, "CX")) tamanio = contexto->registros.CX;
+        else if (string_equals_ignore_case(reg2, "ECX")) tamanio = contexto->registros.ECX;
+        else if (string_equals_ignore_case(reg2, "DX")) tamanio = contexto->registros.DX;
+        else if (string_equals_ignore_case(reg2, "EDX")) tamanio = contexto->registros.EDX;
+        else if (string_equals_ignore_case(reg2, "SI")) tamanio = contexto->registros.SI;
+        else if (string_equals_ignore_case(reg2, "DI")) tamanio = contexto->registros.DI;
+
+        uint32_t dir_fisica = 0;
+        if (mmu_traducir(contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
+            log_error(ctx->logger, "Segmentation Fault en STDOUT logica %d", dir_logica);
+            t_paquete* paq = crear_paquete();
+            paq->codigo_operacion = SYSCALL_SEG_FAULT;
+            agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
+            enviar_paquete(paq, ctx->conexiones->scheduler);
+            eliminar_paquete(paq);
+            desalojar = 1;
         } else {
-            strcpy(dummy, "NONE");
+            t_paquete* paquete = crear_paquete();
+            paquete->codigo_operacion = SYSCALL_STDOUT;
+            agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+            agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
+            agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+            enviar_paquete(paquete, ctx->conexiones->scheduler);
+            eliminar_paquete(paquete);
+            desalojar = 1;
         }
-        agregar_a_paquete(paquete, dummy, strlen(dummy) + 1);
-        
-        enviar_paquete(paquete, ctx->conexiones->scheduler);
-        eliminar_paquete(paquete);
-        
-        desalojar = 1;
     }
     else if (string_equals_ignore_case(instruccion->identificador, "STDIN")) {
         log_info(ctx->logger, "Atrapada Syscall STDIN. Desalojando a Kernel...");
-        
         contexto->registros.PC++;
         enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
         
-        t_paquete* paquete = crear_paquete();
-        paquete->codigo_operacion = SYSCALL_STDIN;
-        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+        uint32_t dir_logica = 0, tamanio = 0;
+        char* reg1 = instruccion->parametro1;
+        if (string_equals_ignore_case(reg1, "AX")) dir_logica = contexto->registros.AX;
+        else if (string_equals_ignore_case(reg1, "EAX")) dir_logica = contexto->registros.EAX;
+        else if (string_equals_ignore_case(reg1, "BX")) dir_logica = contexto->registros.BX;
+        else if (string_equals_ignore_case(reg1, "EBX")) dir_logica = contexto->registros.EBX;
+        else if (string_equals_ignore_case(reg1, "CX")) dir_logica = contexto->registros.CX;
+        else if (string_equals_ignore_case(reg1, "ECX")) dir_logica = contexto->registros.ECX;
+        else if (string_equals_ignore_case(reg1, "DX")) dir_logica = contexto->registros.DX;
+        else if (string_equals_ignore_case(reg1, "EDX")) dir_logica = contexto->registros.EDX;
+        else if (string_equals_ignore_case(reg1, "SI")) dir_logica = contexto->registros.SI;
+        else if (string_equals_ignore_case(reg1, "DI")) dir_logica = contexto->registros.DI;
         
-        uint32_t size = 10;
-        agregar_a_paquete(paquete, &size, sizeof(uint32_t));
-
-        enviar_paquete(paquete, ctx->conexiones->scheduler);
-        eliminar_paquete(paquete);
+        char* reg2 = instruccion->parametro2;
+        if (string_equals_ignore_case(reg2, "AX")) tamanio = contexto->registros.AX;
+        else if (string_equals_ignore_case(reg2, "EAX")) tamanio = contexto->registros.EAX;
+        else if (string_equals_ignore_case(reg2, "BX")) tamanio = contexto->registros.BX;
+        else if (string_equals_ignore_case(reg2, "EBX")) tamanio = contexto->registros.EBX;
+        else if (string_equals_ignore_case(reg2, "CX")) tamanio = contexto->registros.CX;
+        else if (string_equals_ignore_case(reg2, "ECX")) tamanio = contexto->registros.ECX;
+        else if (string_equals_ignore_case(reg2, "DX")) tamanio = contexto->registros.DX;
+        else if (string_equals_ignore_case(reg2, "EDX")) tamanio = contexto->registros.EDX;
+        else if (string_equals_ignore_case(reg2, "SI")) tamanio = contexto->registros.SI;
+        else if (string_equals_ignore_case(reg2, "DI")) tamanio = contexto->registros.DI;
         
-        desalojar = 1;
+        uint32_t dir_fisica = 0;
+        if (mmu_traducir(contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
+            log_error(ctx->logger, "Segmentation Fault en STDIN logica %d", dir_logica);
+            t_paquete* paq = crear_paquete();
+            paq->codigo_operacion = SYSCALL_SEG_FAULT;
+            agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
+            enviar_paquete(paq, ctx->conexiones->scheduler);
+            eliminar_paquete(paq);
+            desalojar = 1;
+        } else {
+            t_paquete* paquete = crear_paquete();
+            paquete->codigo_operacion = SYSCALL_STDIN;
+            agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+            agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
+            agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+            enviar_paquete(paquete, ctx->conexiones->scheduler);
+            eliminar_paquete(paquete);
+            desalojar = 1;
+        }
     }
     else if (string_equals_ignore_case(instruccion->identificador, "MUTEX_CREATE")) {
         log_info(ctx->logger, "Atrapada Syscall MUTEX_CREATE. Desalojando a Kernel...");
@@ -553,4 +582,88 @@ int chequear_interrupciones(t_cpu_context* ctx) {
         return 1; // Frenamos la CPU porque se cayó el servidor
     }
     return 0;
+}
+
+void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio) {
+    void* buffer = malloc(tamanio);
+    uint32_t leido = 0;
+    
+    while (leido < tamanio) {
+        uint32_t dir_actual = dir_fisica + leido;
+        t_memory_stick_info* stick_target = NULL;
+        
+        for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+            if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
+                stick_target = stick;
+                break;
+            }
+        }
+        
+        if (stick_target == NULL) {
+            log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
+            break;
+        }
+        
+        uint32_t offset_en_stick = dir_actual - stick_target->base_address;
+        uint32_t bytes_disponibles = stick_target->tamanio - offset_en_stick;
+        uint32_t bytes_a_leer = (tamanio - leido < bytes_disponibles) ? (tamanio - leido) : bytes_disponibles;
+        
+        enviar_peticion_lectura(offset_en_stick, bytes_a_leer, stick_target->socket_fd);
+        
+        int r_op = recibir_operacion(stick_target->socket_fd);
+        if (r_op == LECTURA) {
+            int size_buf;
+            void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
+            memcpy(buffer + leido, res, bytes_a_leer);
+            free(res);
+        } else {
+            log_error(ctx->logger, "Error al leer del memory stick en CPU");
+            break;
+        }
+        
+        leido += bytes_a_leer;
+    }
+    
+    return buffer;
+}
+
+void escribir_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer) {
+    uint32_t escrito = 0;
+    
+    while (escrito < tamanio) {
+        uint32_t dir_actual = dir_fisica + escrito;
+        t_memory_stick_info* stick_target = NULL;
+        
+        for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+            if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
+                stick_target = stick;
+                break;
+            }
+        }
+        
+        if (stick_target == NULL) {
+            log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
+            break;
+        }
+        
+        uint32_t offset_en_stick = dir_actual - stick_target->base_address;
+        uint32_t bytes_disponibles = stick_target->tamanio - offset_en_stick;
+        uint32_t bytes_a_escribir = (tamanio - escrito < bytes_disponibles) ? (tamanio - escrito) : bytes_disponibles;
+        
+        enviar_peticion_escritura(offset_en_stick, bytes_a_escribir, buffer + escrito, stick_target->socket_fd);
+        
+        int r_op = recibir_operacion(stick_target->socket_fd);
+        if (r_op == MENSAJE) {
+            int size_buf;
+            void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
+            free(res); // Esperamos MSG_OK
+        } else {
+            log_error(ctx->logger, "Error al escribir en memory stick en CPU");
+            break;
+        }
+        
+        escrito += bytes_a_escribir;
+    }
 }

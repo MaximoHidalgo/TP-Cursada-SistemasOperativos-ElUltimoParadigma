@@ -13,6 +13,15 @@ typedef struct {
 } t_hueco_libre;
 
 typedef struct {
+    int id;
+    int socket_fd;
+    uint32_t tamanio;
+    uint32_t base_address;
+    char* ip;
+    int puerto;
+} t_memory_stick_info;
+
+typedef struct {
     t_config* config;
     t_log* logger;
     int socket_servidor;
@@ -29,6 +38,8 @@ typedef struct {
     t_list* huecos_libres;
     t_list* segmentos_globales;
     pthread_mutex_t mutex_memoria;
+    
+    t_list* memory_sticks;
 } t_memory_context;
 
 #endif // ESTRUCTURAS_MEMORY_H

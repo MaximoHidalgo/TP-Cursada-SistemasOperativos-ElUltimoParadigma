@@ -26,18 +26,53 @@ static void devolver_ejecucion_a_cpu(t_scheduler_context* ctx, int cliente_fd) {
 }
 
 void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
-    char* mensaje = recibir_handshake(cliente_fd);
+    int size;
+    char* mensaje = recibir_buffer(&size, cliente_fd);
+
     if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
         log_info(ctx->logger, "## CPU %s Conectada", mensaje);
         ctx->estratega->socket_cpu = cliente_fd;
         despachar_proceso_a_cpu(ctx, cliente_fd);
-    } else if (string_equals_ignore_case(mensaje, "OK")) {
-        planificador_io_terminada(ctx->estratega, cliente_fd);
-        if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
-            despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
-        }
     } else {
-        planificador_registrar_io(ctx->estratega, mensaje, cliente_fd);
+        t_interfaz_io* interfaz = buscar_interfaz_por_socket(ctx->estratega, cliente_fd);
+        if (interfaz != NULL) {
+            // Mensaje de una IO ya registrada
+            if (string_equals_ignore_case(mensaje, "OK")) {
+                planificador_io_terminada(ctx->estratega, cliente_fd);
+                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
+                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+                }
+            } else {
+                // Es el texto leido por STDIN
+                t_proceso_planificable* proceso = NULL;
+                if (interfaz->solicitud_actual != NULL) {
+                    proceso = interfaz->solicitud_actual->proceso;
+                }
+                
+                if (proceso != NULL) {
+                    t_paquete* paq_write = crear_paquete();
+                    paq_write->codigo_operacion = ESCRIBIR_MEMORIA;
+                    agregar_a_paquete(paq_write, &(proceso->io_dir_fisica), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, &(proceso->io_tamanio), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, mensaje, proceso->io_tamanio);
+                    enviar_paquete(paq_write, ctx->socket_memoria);
+                    eliminar_paquete(paq_write);
+                    
+                    int r_mem = recibir_operacion(ctx->socket_memoria);
+                    if (r_mem == MENSAJE) {
+                        int s_m; char* msj_m = recibir_buffer(&s_m, ctx->socket_memoria); free(msj_m);
+                    }
+                }
+                
+                planificador_io_terminada(ctx->estratega, cliente_fd);
+                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
+                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+                }
+            }
+        } else {
+            // Es el nombre de una nueva interfaz registrandose
+            planificador_registrar_io(ctx->estratega, mensaje, cliente_fd);
+        }
     }
     free(mensaje);
 }
@@ -55,28 +90,60 @@ static void manejar_io_sleep(t_scheduler_context* ctx, t_list* paquete, uint32_t
 }
 
 static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_t pid) {
-    char* dummy = list_get(paquete, 1);
+    uint32_t* dir_fisica_ptr = list_get(paquete, 1);
+    uint32_t* tamanio_ptr = list_get(paquete, 2);
+    uint32_t dir_fisica = *dir_fisica_ptr;
+    uint32_t tamanio = *tamanio_ptr;
+    
     t_interfaz_io* interfaz = buscar_interfaz_por_nombre(ctx->estratega, "STDOUT");
     if (interfaz != NULL) {
-        int op = PETICION_IO;
-        send(interfaz->socket_fd, &op, sizeof(int), 0);
-        send(interfaz->socket_fd, &pid, sizeof(uint32_t), 0);
+        // Pedimos leer a memoria
+        t_paquete* paq_mem = crear_paquete();
+        paq_mem->codigo_operacion = LEER_MEMORIA;
+        agregar_a_paquete(paq_mem, &dir_fisica, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, &tamanio, sizeof(uint32_t));
+        enviar_paquete(paq_mem, ctx->socket_memoria);
+        eliminar_paquete(paq_mem);
         
-        int len = strlen(dummy) + 1;
-        send(interfaz->socket_fd, &len, sizeof(int), 0);
-        send(interfaz->socket_fd, dummy, len, 0);
+        int op = recibir_operacion(ctx->socket_memoria);
+        if (op == MENSAJE) {
+            int size;
+            void* buf = recibir_buffer(&size, ctx->socket_memoria);
+            
+            int op_io = PETICION_IO;
+            send(interfaz->socket_fd, &op_io, sizeof(int), 0);
+            send(interfaz->socket_fd, &pid, sizeof(uint32_t), 0);
+            
+            // Mandamos el tamaño y el buffer al IO
+            int len = tamanio + 1;
+            char* dummy = malloc(len);
+            memcpy(dummy, buf, tamanio);
+            dummy[tamanio] = '\0';
+            
+            send(interfaz->socket_fd, &len, sizeof(int), 0);
+            send(interfaz->socket_fd, dummy, len, 0);
+            free(dummy);
+            free(buf);
+        }
     }
     planificador_atender_peticion_io(ctx->estratega, ctx->estratega->proceso_exec, "STDOUT");
 }
 
 static void manejar_io_stdin(t_scheduler_context* ctx, t_list* paquete, uint32_t pid) {
-    uint32_t* size_ptr = list_get(paquete, 1);
+    uint32_t* dir_fisica_ptr = list_get(paquete, 1);
+    uint32_t* tamanio_ptr = list_get(paquete, 2);
+    uint32_t dir_fisica = *dir_fisica_ptr;
+    uint32_t tamanio = *tamanio_ptr;
+    
     t_interfaz_io* interfaz = buscar_interfaz_por_nombre(ctx->estratega, "STDIN");
     if (interfaz != NULL) {
         int op = PETICION_IO;
         send(interfaz->socket_fd, &op, sizeof(int), 0);
         send(interfaz->socket_fd, &pid, sizeof(uint32_t), 0);
-        send(interfaz->socket_fd, size_ptr, sizeof(uint32_t), 0);
+        send(interfaz->socket_fd, &tamanio, sizeof(uint32_t), 0);
+        
+        ctx->estratega->proceso_exec->io_dir_fisica = dir_fisica;
+        ctx->estratega->proceso_exec->io_tamanio = tamanio;
     }
     planificador_atender_peticion_io(ctx->estratega, ctx->estratega->proceso_exec, "STDIN");
 }

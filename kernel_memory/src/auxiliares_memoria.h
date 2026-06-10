@@ -9,4 +9,7 @@ t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio,
 void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento);
 void compactar_memoria(t_memory_context* ctx);
 
+void* leer_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio);
+void escribir_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer);
+
 #endif

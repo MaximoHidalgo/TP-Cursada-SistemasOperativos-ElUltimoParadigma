@@ -35,6 +35,7 @@ t_memory_context* iniciar_contexto(int argc, char* argv[]) {
     ctx->allocation_strategy = strdup(config_get_string_value(ctx->config, "ALLOCATION_STRATEGY"));
     ctx->huecos_libres = list_create();
     ctx->segmentos_globales = list_create();
+    ctx->memory_sticks = list_create();
     pthread_mutex_init(&ctx->mutex_memoria, NULL);
     
     return ctx;
