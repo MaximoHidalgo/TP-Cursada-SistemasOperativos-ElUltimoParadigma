@@ -5,17 +5,17 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     
     if (string_starts_with(mensaje, "STICK|")) {
         char **partes = string_split(mensaje, "|");
-        log_info(logger, "## Memory Stick de %s bytes Conectada", partes[1]);
+        log_info(ctx->logger, "## Memory Stick de %s bytes Conectada", partes[1]);
         string_array_destroy(partes);
     }
     else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
-        log_info(logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
+        log_info(ctx->logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
     }
     else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
-        log_info(logger, "## CPU %s Conectada", mensaje);
+        log_info(ctx->logger, "## CPU %s Conectada", mensaje);
     }
     else { 
-        log_info(logger, "## Módulo Conectado: %s", mensaje);
+        log_info(ctx->logger, "## Módulo Conectado: %s", mensaje);
     }
     free(mensaje);
 }
@@ -52,7 +52,7 @@ void procesar_solicitud_contexto_handler(int cliente_fd, t_memory_context* ctx) 
     if (prog != NULL) {
         enviar_contexto(prog->contexto, cliente_fd);
     } else {
-        log_error(logger, "Error: Contexto solicitado para PID %d inexistente", pid);
+        log_error(ctx->logger, "Error: Contexto solicitado para PID %d inexistente", pid);
     }
 }
 
@@ -68,9 +68,9 @@ void procesar_actualizacion_contexto_handler(int cliente_fd, t_memory_context* c
         pthread_mutex_lock(&ctx->mutex_programas);
         *(prog->contexto) = contexto_actualizado;
         pthread_mutex_unlock(&ctx->mutex_programas);
-        log_info(logger, "Contexto actualizado correctamente para PID %d", prog->contexto->pid);
+        log_info(ctx->logger, "Contexto actualizado correctamente para PID %d", prog->contexto->pid);
     } else {
-        log_error(logger, "Error: Intento de actualizar contexto de PID %d inexistente", contexto_actualizado.pid);
+        log_error(ctx->logger, "Error: Intento de actualizar contexto de PID %d inexistente", contexto_actualizado.pid);
     }
 }
 
@@ -129,11 +129,11 @@ void atender_cliente(void *arg) {
                 break;
             }
             case -1:
-                log_warning(logger, "Cliente desconectado");
+                log_warning(ctx->logger, "Cliente desconectado");
                 close(cliente_fd);
                 return;
             default:
-                log_warning(logger, "Operación desconocida: %d", cod_op);
+                log_warning(ctx->logger, "Operación desconocida: %d", cod_op);
                 close(cliente_fd);
                 return;
         }

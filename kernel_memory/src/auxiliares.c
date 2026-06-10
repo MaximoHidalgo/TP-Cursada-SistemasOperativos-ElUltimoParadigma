@@ -33,7 +33,7 @@ void crear_proceso(t_memory_context* ctx, int pid, char* path) {
     FILE* f = fopen(path, "r");
 
     if (!f) {
-        log_error(logger, "No se pudo abrir el archivo %s", path);
+        log_error(ctx->logger, "No se pudo abrir el archivo %s", path);
         return;
     }
 
@@ -50,7 +50,7 @@ void crear_proceso(t_memory_context* ctx, int pid, char* path) {
     list_add(ctx->programas, prog);
     pthread_mutex_unlock(&ctx->mutex_programas);
 
-    log_info(logger, "## PID: %d - Proceso Creado con %d instrucciones", pid, prog->cantidad_instrucciones);
+    log_info(ctx->logger, "## PID: %d - Proceso Creado con %d instrucciones", pid, prog->cantidad_instrucciones);
 }
 
 char* obtener_instruccion(t_memory_context* ctx, int pid, int pc) {
@@ -63,7 +63,7 @@ char* obtener_instruccion(t_memory_context* ctx, int pid, int pc) {
 
     char* instruccion = strdup(prog->instrucciones[pc]);
 
-    log_info(logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s",
+    log_info(ctx->logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s",
              pid, pc, instruccion);
 
     return instruccion;

@@ -8,9 +8,11 @@
 #include <commons/string.h>
 #include <readline/readline.h>
 
-void ejecutar_stdin(int pid, int socket_scheduler, t_log* logger);
-void ejecutar_stdout(int pid, int socket_scheduler, t_log* logger);
-void ejecutar_sleep(int pid, int socket_scheduler, t_log* logger);
-void procesar_peticion_io(int socket_scheduler, char* IoName, t_log* logger);
+#include "estructuras_io.h"
+
+void ejecutar_stdin(t_io_context* ctx, int pid);
+void ejecutar_stdout(t_io_context* ctx, int pid);
+void ejecutar_sleep(t_io_context* ctx, int pid);
+void procesar_peticion_io(t_io_context* ctx);
 
 #endif
