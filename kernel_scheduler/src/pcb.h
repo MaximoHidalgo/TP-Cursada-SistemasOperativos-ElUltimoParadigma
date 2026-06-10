@@ -20,6 +20,7 @@ typedef struct {
     uint64_t instante_ready;
     uint32_t io_dir_fisica;
     uint32_t io_tamanio;
+    int bloqueo_id;
 } t_proceso_planificable;
 
 const char* planificador_nombre_estado(t_estado_proceso estado);

@@ -28,6 +28,7 @@ typedef struct {
     uint32_t id;
     uint32_t base;
     uint32_t tamanio;
+    uint32_t bloque_swap;
 } t_segmento;
 
 typedef struct {

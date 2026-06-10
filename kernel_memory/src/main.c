@@ -36,6 +36,9 @@ t_memory_context* iniciar_contexto(int argc, char* argv[]) {
     ctx->huecos_libres = list_create();
     ctx->segmentos_globales = list_create();
     ctx->memory_sticks = list_create();
+    ctx->swap_socket = -1;
+    ctx->swap_bitmap = NULL;
+    ctx->bitarray_data = NULL;
     pthread_mutex_init(&ctx->mutex_memoria, NULL);
     
     return ctx;
@@ -68,6 +71,10 @@ void limpiar_contexto(t_memory_context* ctx) {
     if (ctx->huecos_libres) list_destroy_and_destroy_elements(ctx->huecos_libres, free);
     if (ctx->segmentos_globales) list_destroy_and_destroy_elements(ctx->segmentos_globales, free);
     pthread_mutex_destroy(&ctx->mutex_memoria);
+    
+    if (ctx->swap_bitmap) bitarray_destroy(ctx->swap_bitmap);
+    if (ctx->bitarray_data) free(ctx->bitarray_data);
+    if (ctx->swap_socket != -1) close(ctx->swap_socket);
     
     if (ctx->base_path) free(ctx->base_path);
     if (ctx->config) config_destroy(ctx->config);

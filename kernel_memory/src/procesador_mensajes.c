@@ -60,6 +60,21 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
         eliminar_paquete(paq);
         pthread_mutex_unlock(&ctx->mutex_memoria);
     }
+    else if (string_starts_with(mensaje, "SWAP|")) {
+        char **partes = string_split(mensaje, "|");
+        ctx->swap_file_size = atoi(partes[1]);
+        ctx->swap_block_size = atoi(partes[2]);
+        ctx->swap_socket = cliente_fd;
+        
+        int cant_bloques = ctx->swap_file_size / ctx->swap_block_size;
+        int bits_bytes = (cant_bloques + 7) / 8;
+        ctx->bitarray_data = malloc(bits_bytes);
+        memset(ctx->bitarray_data, 0, bits_bytes);
+        ctx->swap_bitmap = bitarray_create_with_mode(ctx->bitarray_data, bits_bytes, LSB_FIRST);
+        
+        log_info(ctx->logger, "## SWAP Conectado. Tamaño: %d, Tamaño Bloque: %d, Total Bloques: %d", ctx->swap_file_size, ctx->swap_block_size, cant_bloques);
+        string_array_destroy(partes);
+    }
     else { 
         log_info(ctx->logger, "## Módulo Conectado: %s", mensaje);
     }
@@ -137,6 +152,195 @@ void procesar_fetch_instruccion_handler(int cliente_fd, t_memory_context* ctx) {
     
     free(instr);
     destruir_peticion_fetch_instruccion(peticion);
+}
+
+void procesar_suspender_proceso(int cliente_fd, t_memory_context* ctx) {
+    uint32_t pid;
+    recv(cliente_fd, &pid, sizeof(uint32_t), MSG_WAITALL);
+    
+    t_programa* prog = buscar_programa(ctx, pid);
+    if (!prog) {
+        enviar_mensaje("ERROR", cliente_fd);
+        return;
+    }
+    t_contexto_ejecucion* proc = prog->contexto;
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    
+    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
+        t_segmento* seg = list_get(proc->tabla_segmentos, i);
+        if (seg->id == 0 || seg->tamanio == 0) continue; 
+        
+        int cant_bloques_necesarios = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
+        int bloque_inicio = -1;
+        
+        int cant_bloques_swap = ctx->swap_file_size / ctx->swap_block_size;
+        for (int b = 0; b <= cant_bloques_swap - cant_bloques_necesarios; b++) {
+            bool libre = true;
+            for (int j = 0; j < cant_bloques_necesarios; j++) {
+                if (bitarray_test_bit(ctx->swap_bitmap, b + j)) {
+                    libre = false;
+                    break;
+                }
+            }
+            if (libre) {
+                bloque_inicio = b;
+                break;
+            }
+        }
+        
+        if (bloque_inicio == -1) {
+            log_error(ctx->logger, "No hay espacio en SWAP para el segmento %d del PID %d", seg->id, pid);
+            continue;
+        }
+        
+        for (int j = 0; j < cant_bloques_necesarios; j++) {
+            bitarray_set_bit(ctx->swap_bitmap, bloque_inicio + j);
+        }
+        
+        seg->bloque_swap = bloque_inicio;
+        
+        void* buffer_seg = leer_memoria_distribuida(ctx, seg->base, seg->tamanio);
+        
+        int offset = 0;
+        for (int j = 0; j < cant_bloques_necesarios; j++) {
+            void* bloque_data = malloc(ctx->swap_block_size);
+            memset(bloque_data, 0, ctx->swap_block_size);
+            int copy_size = (offset + ctx->swap_block_size <= seg->tamanio) ? ctx->swap_block_size : (seg->tamanio - offset);
+            memcpy(bloque_data, buffer_seg + offset, copy_size);
+            
+            enviar_int(ctx->swap_socket, ESCRITURA);
+            enviar_int(ctx->swap_socket, bloque_inicio + j);
+            enviar_int(ctx->swap_socket, ctx->swap_block_size);
+            send(ctx->swap_socket, bloque_data, ctx->swap_block_size, 0);
+            
+            recibir_mensaje(ctx->swap_socket, ctx->logger);
+            free(bloque_data);
+            offset += copy_size;
+        }
+        free(buffer_seg);
+        
+        // Liberar espacio en memoria principal
+        for (int h = 0; h < list_size(ctx->segmentos_globales); h++) {
+            t_segmento* gs = list_get(ctx->segmentos_globales, h);
+            if (gs->base == seg->base && gs->id == seg->id) {
+                t_hueco_libre* hueco = malloc(sizeof(t_hueco_libre));
+                hueco->base = seg->base;
+                hueco->limite = seg->base + seg->tamanio;
+                list_add(ctx->huecos_libres, hueco);
+                
+                list_remove_and_destroy_element(ctx->segmentos_globales, h, free);
+                break;
+            }
+        }
+    }
+    
+    // Consolidar huecos si es posible
+    // (Omitido para brevedad o se puede llamar a una funcion de consolidar)
+    
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+    
+    enviar_mensaje("OK", cliente_fd);
+    log_info(ctx->logger, "Proceso %d suspendido y guardado en SWAP", pid);
+}
+
+void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
+    uint32_t pid;
+    recv(cliente_fd, &pid, sizeof(uint32_t), MSG_WAITALL);
+    
+    t_programa* prog = buscar_programa(ctx, pid);
+    if (!prog) {
+        enviar_mensaje("ERROR", cliente_fd);
+        return;
+    }
+    t_contexto_ejecucion* proc = prog->contexto;
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    
+    bool hay_espacio = true;
+    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
+        t_segmento* seg = list_get(proc->tabla_segmentos, i);
+        if (seg->id == 0 || seg->tamanio == 0) continue;
+        
+        // Buscar hueco en memoria principal (First Fit para simplificar)
+        t_hueco_libre* best_hueco = NULL;
+        for (int j = 0; j < list_size(ctx->huecos_libres); j++) {
+            t_hueco_libre* h = list_get(ctx->huecos_libres, j);
+            if ((h->limite - h->base) >= seg->tamanio) {
+                best_hueco = h;
+                break;
+            }
+        }
+        if (!best_hueco) {
+            hay_espacio = false;
+            break;
+        }
+    }
+    
+    if (!hay_espacio) {
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        enviar_mensaje("ERROR", cliente_fd);
+        log_error(ctx->logger, "No hay espacio en Memoria Principal para desuspender PID %d", pid);
+        return;
+    }
+    
+    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
+        t_segmento* seg = list_get(proc->tabla_segmentos, i);
+        if (seg->id == 0 || seg->tamanio == 0) continue;
+        
+        t_hueco_libre* best_hueco = NULL;
+        for (int j = 0; j < list_size(ctx->huecos_libres); j++) {
+            t_hueco_libre* h = list_get(ctx->huecos_libres, j);
+            if ((h->limite - h->base) >= seg->tamanio) {
+                best_hueco = h;
+                break;
+            }
+        }
+        
+        // Asignar base
+        seg->base = best_hueco->base;
+        best_hueco->base += seg->tamanio;
+        if (best_hueco->base == best_hueco->limite) {
+            list_remove_element(ctx->huecos_libres, best_hueco);
+            free(best_hueco);
+        }
+        
+        t_segmento* nuevo_seg = malloc(sizeof(t_segmento));
+        nuevo_seg->id = seg->id;
+        nuevo_seg->tamanio = seg->tamanio;
+        nuevo_seg->base = seg->base;
+        nuevo_seg->bloque_swap = -1;
+        list_add(ctx->segmentos_globales, nuevo_seg);
+        
+        // Leer de SWAP y escribir en Memoria Principal
+        int cant_bloques = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
+        int offset = 0;
+        void* buffer_seg = malloc(seg->tamanio);
+        
+        for (int j = 0; j < cant_bloques; j++) {
+            enviar_int(ctx->swap_socket, LECTURA);
+            enviar_int(ctx->swap_socket, seg->bloque_swap + j);
+            
+            int opcode = recibir_operacion(ctx->swap_socket);
+            if (opcode == LECTURA) {
+                int size_buf;
+                void* res = recibir_buffer(&size_buf, ctx->swap_socket);
+                int copy_size = (offset + ctx->swap_block_size <= seg->tamanio) ? ctx->swap_block_size : (seg->tamanio - offset);
+                memcpy(buffer_seg + offset, res, copy_size);
+                free(res);
+            }
+            offset += ctx->swap_block_size;
+            bitarray_clean_bit(ctx->swap_bitmap, seg->bloque_swap + j);
+        }
+        
+        escribir_memoria_distribuida(ctx, seg->base, seg->tamanio, buffer_seg);
+        free(buffer_seg);
+        seg->bloque_swap = -1;
+    }
+    
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+    enviar_mensaje("OK", cliente_fd);
+    log_info(ctx->logger, "Proceso %d desuspendido y traído a Memoria Principal", pid);
 }
 
 void atender_cliente(void *arg) {

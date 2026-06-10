@@ -5,6 +5,7 @@
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/collections/list.h>
+#include <commons/bitarray.h>
 #include <pthread.h>
 
 typedef struct {
@@ -40,6 +41,14 @@ typedef struct {
     pthread_mutex_t mutex_memoria;
     
     t_list* memory_sticks;
+    
+    int swap_socket;
+    uint32_t swap_file_size;
+    uint32_t swap_block_size;
+    t_bitarray* swap_bitmap;
+    void* bitarray_data;
 } t_memory_context;
+
+void cleanup_memory_context(t_memory_context* ctx);
 
 #endif // ESTRUCTURAS_MEMORY_H

@@ -40,6 +40,7 @@ void serializar_contexto(t_paquete* paquete, t_contexto_ejecucion* contexto) {
         buffer_write_uint32(paquete->buffer, seg->id);
         buffer_write_uint32(paquete->buffer, seg->base);
         buffer_write_uint32(paquete->buffer, seg->tamanio);
+        buffer_write_uint32(paquete->buffer, seg->bloque_swap);
     }
 }
 
@@ -59,6 +60,7 @@ void deserializar_contexto(void* stream, int size, t_contexto_ejecucion* context
         seg->id = buffer_read_uint32(reader);
         seg->base = buffer_read_uint32(reader);
         seg->tamanio = buffer_read_uint32(reader);
+        seg->bloque_swap = buffer_read_uint32(reader);
         list_add(contexto->tabla_segmentos, seg);
     }
     

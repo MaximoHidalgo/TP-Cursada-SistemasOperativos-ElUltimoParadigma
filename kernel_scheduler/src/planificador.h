@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <commons/string.h>
+#include <unistd.h>
 
 typedef enum {
     ALGORITMO_PLANIFICACION_CMN, //El de colas multinivel
@@ -31,6 +32,8 @@ typedef struct {
     pthread_mutex_t mutex_colas;
     t_log* logger;
     int socket_cpu;
+    int socket_memoria;
+    int suspension_timeout;
 } t_estratega_planificacion;
 
 typedef struct {
