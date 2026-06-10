@@ -10,13 +10,7 @@
 #include <string.h>
 #include <commons/log.h>
 #include <commons/config.h>
-
-typedef struct {
-    void* espacio_memoria;
-    uint32_t tamanio_total;
-    t_log* logger;
-    pthread_mutex_t mutex_memoria;
-} t_memory_stick_context;
+#include "estructuras.h"
 
 typedef struct {
     int socket_cliente;
