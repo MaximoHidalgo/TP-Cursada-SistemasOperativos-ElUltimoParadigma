@@ -51,6 +51,19 @@ t_cpu_context* iniciar_contexto(int argc, char* argv[]) {
     if (ctx->conexiones->memoria != -1) {
         log_info(ctx->logger, "## Conectado a Kernel Memory");
         enviar_mensaje(ctx->id_cpu, ctx->conexiones->memoria);
+
+        int op = SOLICITUD_TAM_MAX_SEGMENTO;
+        send(ctx->conexiones->memoria, &op, sizeof(int), 0);
+        int resp = recibir_operacion(ctx->conexiones->memoria);
+        if (resp == TAM_MAX_SEGMENTO) {
+            int size;
+            void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
+            memcpy(&ctx->tam_max_segmento, buf, sizeof(int));
+            free(buf);
+            log_info(ctx->logger, "Tamaño maximo de segmento recibido: %d", ctx->tam_max_segmento);
+        } else {
+            log_error(ctx->logger, "No se recibio el TAM_MAX_SEGMENTO. Operacion recibida: %d", resp);
+        }
     }
 
     log_info(ctx->logger, "Intentando conectar Kernel Scheduler...");

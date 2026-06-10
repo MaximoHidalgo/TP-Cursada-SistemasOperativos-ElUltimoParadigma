@@ -262,6 +262,18 @@ void atender_cliente_scheduler(void* arg) {
             case SYSCALL_MUTEX_UNLOCK:
                 procesar_syscall_mutex(cliente_fd, ctx, mensaje_cliente);
                 break;
+            case SYSCALL_SEG_FAULT:
+            {
+                t_list* paquete = recibir_paquete(cliente_fd);
+                if (ctx->estratega->proceso_exec != NULL) {
+                    log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SEG_FAULT", ctx->estratega->proceso_exec->pid);
+                    ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+                    planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+                }
+                despachar_proceso_a_cpu(ctx, cliente_fd);
+                list_destroy_and_destroy_elements(paquete, free);
+                break;
+            }
             case SYSCALL_MEM_ALLOC:
             case SYSCALL_MEM_FREE:
                 procesar_syscall_memoria(cliente_fd, ctx, mensaje_cliente);

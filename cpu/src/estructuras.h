@@ -27,6 +27,7 @@ t_instruccion* decode(char* instruccion_texto);
 int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_registro, uint32_t valor);
 int chequear_interrupciones(t_cpu_context* ctx);
+int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica);
 
 
 

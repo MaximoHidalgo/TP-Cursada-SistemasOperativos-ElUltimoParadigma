@@ -1,4 +1,53 @@
 #include "estructuras.h"
+#include <math.h>
+
+uint32_t leer_registro(t_contexto_ejecucion* contexto, char* nombre_registro) {
+    if (string_equals_ignore_case(nombre_registro, "AX")) return contexto->registros.AX;
+    if (string_equals_ignore_case(nombre_registro, "EAX")) return contexto->registros.EAX;
+    if (string_equals_ignore_case(nombre_registro, "BX")) return contexto->registros.BX;
+    if (string_equals_ignore_case(nombre_registro, "EBX")) return contexto->registros.EBX;
+    if (string_equals_ignore_case(nombre_registro, "CX")) return contexto->registros.CX;
+    if (string_equals_ignore_case(nombre_registro, "ECX")) return contexto->registros.ECX;
+    if (string_equals_ignore_case(nombre_registro, "DX")) return contexto->registros.DX;
+    if (string_equals_ignore_case(nombre_registro, "EDX")) return contexto->registros.EDX;
+    if (string_equals_ignore_case(nombre_registro, "SI")) return contexto->registros.SI;
+    if (string_equals_ignore_case(nombre_registro, "DI")) return contexto->registros.DI;
+    return 0;
+}
+
+int obtener_tamanio_registro(char* nombre_registro) {
+    if (string_equals_ignore_case(nombre_registro, "AX") || string_equals_ignore_case(nombre_registro, "BX") || 
+        string_equals_ignore_case(nombre_registro, "CX") || string_equals_ignore_case(nombre_registro, "DX")) return 1;
+    if (string_equals_ignore_case(nombre_registro, "EAX") || string_equals_ignore_case(nombre_registro, "EBX") || 
+        string_equals_ignore_case(nombre_registro, "ECX") || string_equals_ignore_case(nombre_registro, "EDX") ||
+        string_equals_ignore_case(nombre_registro, "SI") || string_equals_ignore_case(nombre_registro, "DI")) return 4;
+    return 0;
+}
+
+int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
+    int num_segmento = floor((double)dir_logica / tam_max_segmento);
+    int desplazamiento = dir_logica % tam_max_segmento;
+
+    t_segmento* seg = NULL;
+    if (contexto->tabla_segmentos != NULL) {
+        for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
+            t_segmento* s = list_get(contexto->tabla_segmentos, i);
+            if (s->id == num_segmento) {
+                seg = s;
+                break;
+            }
+        }
+    }
+
+    if (!seg) return -1; // SEG FAULT
+
+    if (desplazamiento + tam_bytes > seg->tamanio) {
+        return -1; // SEG FAULT
+    }
+
+    *dir_fisica = seg->base + desplazamiento;
+    return 0;
+}
 
 t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* ctx) {
     t_paquete* paquete_solicitud = crear_paquete();
@@ -175,6 +224,102 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         } else {
             // Si no salta, debe avanzar a la siguiente instrucción porque el ciclo no incrementa PC para JNZ
             contexto->registros.PC++;
+        }
+    }
+    else if (string_equals_ignore_case(instruccion->identificador, "MOV_IN")) {
+        char* reg_datos = instruccion->parametro1;
+        int tam = obtener_tamanio_registro(reg_datos);
+        uint32_t dir_logica = contexto->registros.SI;
+        uint32_t dir_fisica = 0;
+
+        if (mmu_traducir(contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
+            log_error(ctx->logger, "Segmentation Fault accediendo a dir logica %d", dir_logica);
+            enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+            t_paquete* paq = crear_paquete();
+            paq->codigo_operacion = SYSCALL_SEG_FAULT;
+            agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
+            enviar_paquete(paq, ctx->conexiones->scheduler);
+            eliminar_paquete(paq);
+            desalojar = 1;
+        } else {
+            enviar_peticion_lectura(dir_fisica, tam, ctx->conexiones->memoria);
+            int op = recibir_operacion(ctx->conexiones->memoria);
+            if (op == MENSAJE) { 
+                int size;
+                void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
+                uint32_t valor = 0;
+                memcpy(&valor, buf, tam);
+                free(buf);
+                asignar_valor_a_registro(contexto, reg_datos, valor);
+                log_info(ctx->logger, "PID: %d - Acción: LEER - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);
+            }
+        }
+    }
+    else if (string_equals_ignore_case(instruccion->identificador, "MOV_OUT")) {
+        char* reg_datos = instruccion->parametro1;
+        int tam = obtener_tamanio_registro(reg_datos);
+        uint32_t valor = leer_registro(contexto, reg_datos);
+        uint32_t dir_logica = contexto->registros.DI;
+        uint32_t dir_fisica = 0;
+
+        if (mmu_traducir(contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
+            log_error(ctx->logger, "Segmentation Fault escribiendo a dir logica %d", dir_logica);
+            enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+            t_paquete* paq = crear_paquete();
+            paq->codigo_operacion = SYSCALL_SEG_FAULT;
+            agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
+            enviar_paquete(paq, ctx->conexiones->scheduler);
+            eliminar_paquete(paq);
+            desalojar = 1;
+        } else {
+            enviar_peticion_escritura(dir_fisica, tam, &valor, ctx->conexiones->memoria);
+            int op = recibir_operacion(ctx->conexiones->memoria);
+            if (op == MENSAJE) {
+                int size;
+                char* msj = recibir_buffer(&size, ctx->conexiones->memoria);
+                if (string_equals_ignore_case(msj, "OK")) {
+                    log_info(ctx->logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);
+                }
+                free(msj);
+            }
+        }
+    }
+    else if (string_equals_ignore_case(instruccion->identificador, "COPY_MEM")) {
+        uint32_t tam = atoi(instruccion->parametro1);
+        uint32_t dir_logica_si = contexto->registros.SI;
+        uint32_t dir_logica_di = contexto->registros.DI;
+        uint32_t dir_fisica_si = 0;
+        uint32_t dir_fisica_di = 0;
+
+        if (mmu_traducir(contexto, dir_logica_si, tam, ctx->tam_max_segmento, &dir_fisica_si) == -1 || 
+            mmu_traducir(contexto, dir_logica_di, tam, ctx->tam_max_segmento, &dir_fisica_di) == -1) {
+            log_error(ctx->logger, "Segmentation Fault en COPY_MEM");
+            enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+            t_paquete* paq = crear_paquete();
+            paq->codigo_operacion = SYSCALL_SEG_FAULT;
+            agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
+            enviar_paquete(paq, ctx->conexiones->scheduler);
+            eliminar_paquete(paq);
+            desalojar = 1;
+        } else {
+            enviar_peticion_lectura(dir_fisica_si, tam, ctx->conexiones->memoria);
+            int op_read = recibir_operacion(ctx->conexiones->memoria);
+            if (op_read == MENSAJE) {
+                int size;
+                void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
+                
+                enviar_peticion_escritura(dir_fisica_di, tam, buf, ctx->conexiones->memoria);
+                int op_write = recibir_operacion(ctx->conexiones->memoria);
+                if (op_write == MENSAJE) {
+                    int size_w;
+                    char* msj_w = recibir_buffer(&size_w, ctx->conexiones->memoria);
+                    if (string_equals_ignore_case(msj_w, "OK")) {
+                        log_info(ctx->logger, "PID: %d - Acción: COPY_MEM - Origen Fisico: %d - Destino Fisico: %d", contexto->pid, dir_fisica_si, dir_fisica_di);
+                    }
+                    free(msj_w);
+                }
+                free(buf);
+            }
         }
     }
     

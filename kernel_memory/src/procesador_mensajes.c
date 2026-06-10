@@ -207,10 +207,72 @@ void atender_cliente(void *arg) {
                 pthread_mutex_unlock(&ctx->mutex_memoria);
                 break;
             }
+            case SOLICITUD_TAM_MAX_SEGMENTO:
+            {
+                t_paquete* paq = crear_paquete();
+                paq->codigo_operacion = TAM_MAX_SEGMENTO;
+                agregar_a_paquete(paq, &ctx->segment_max_size, sizeof(int));
+                enviar_paquete(paq, cliente_fd);
+                eliminar_paquete(paq);
+                break;
+            }
             case LEER_MEMORIA:
+            {
+                int size;
+                void* buffer = recibir_buffer(&size, cliente_fd);
+                uint32_t dir_fisica, tamanio;
+                int desp = 0;
+                memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                memcpy(&tamanio, buffer + desp, sizeof(uint32_t));
+                free(buffer);
+
+                pthread_mutex_lock(&ctx->mutex_memoria);
+                void* data_leida = malloc(tamanio);
+                memcpy(data_leida, ctx->espacio_memoria + dir_fisica, tamanio);
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+
+                t_paquete* paq = crear_paquete();
+                paq->codigo_operacion = MENSAJE; // Enviamos como si fuera un mensaje con la data, o un op_code nuevo. No, utilizeremos buffer crudo
+                // Para recibirlo en cpu, cpu espera ENVIO_DATOS o manda LEER_MEMORIA y usa recv()
+                // Wait, el deserializador de utils NO contempla lectura de datos crudos. Espera MSG_OK?
+                // Vamos a mandar MSG_OK y pegarle el contenido de data_leida.
+                agregar_a_paquete(paq, data_leida, tamanio);
+                enviar_paquete(paq, cliente_fd);
+                eliminar_paquete(paq);
+                free(data_leida);
+                
+                break;
+            }
             case ESCRIBIR_MEMORIA:
+            {
+                int size;
+                void* buffer = recibir_buffer(&size, cliente_fd);
+                uint32_t dir_fisica, tamanio;
+                int desp = 0;
+                memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                memcpy(&tamanio, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                
+                // Si mandamos el tamanio en la peticion por deserializar_peticion_escritura que lee buffer_read_int?
+                // Revisemos deserializar_peticion_escritura... wait, en kernel_memory no usamos deserializar_peticion_escritura, 
+                // lo desarmamos a mano. Pero cpu envia usando enviar_peticion_escritura que es:
+                // buffer_write_uint32(dir_fisica), buffer_write_uint32(tamanio), buffer_write_int(tamanio), buffer_write(contenido, tamanio)
+                // Wait! Enviar peticion escritura hace:
+                // buffer_write_uint32(paquete->buffer, direccion_fisica);
+                // buffer_write_uint32(paquete->buffer, tamanio);
+                // buffer_write_int(paquete->buffer, tamanio); 
+                // buffer_write(paquete->buffer, contenido, tamanio);
+                
+                int tamanio_rep;
+                memcpy(&tamanio_rep, buffer + desp, sizeof(int)); desp += sizeof(int);
+                
+                pthread_mutex_lock(&ctx->mutex_memoria);
+                memcpy(ctx->espacio_memoria + dir_fisica, buffer + desp, tamanio);
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+                
+                free(buffer);
                 enviar_mensaje(MSG_OK, cliente_fd);
                 break;
+            }
             case CONSULTAR_ESPACIO_LIBRE:
             {
                 int espacio_fijo_mock = 999999; 

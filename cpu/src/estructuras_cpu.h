@@ -10,6 +10,7 @@ typedef struct {
     t_config* config;
     t_log* logger;
     t_conexiones_cpu* conexiones;
+    int tam_max_segmento;
 } t_cpu_context;
 
 #endif // ESTRUCTURAS_CPU_H
