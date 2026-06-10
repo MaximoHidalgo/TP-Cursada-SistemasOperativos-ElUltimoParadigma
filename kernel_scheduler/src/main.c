@@ -59,8 +59,9 @@ void conectar_kernel_memory(t_scheduler_context* ctx) {
     if(ctx->socket_memoria != -1) {
         log_info(ctx->logger, "## Conectado a Kernel Memory");
         enviar_mensaje(HANDSHAKE_SCHEDULER, ctx->socket_memoria);
+        ctx->estratega->socket_memoria = ctx->socket_memoria;
     } else {
-        log_error(ctx->logger, "Fallo conexion a memoria en %s:%s", ctx->ip_memory, ctx->puerto_memory);
+        log_error(ctx->logger, "Error al conectar con Kernel Memory en %s:%s", ctx->ip_memory, ctx->puerto_memory);
         limpiar_contexto(ctx);
         exit(EXIT_FAILURE);
     }
@@ -72,6 +73,7 @@ void iniciar_planificacion(t_scheduler_context* ctx) {
     t_proceso_planificable* pcb_inicial = malloc(sizeof(t_proceso_planificable));
     pcb_inicial->pid = 0; 
     pcb_inicial->cola_prioridad = 0;
+    pcb_inicial->bloqueo_id = 0;
     
     enviar_peticion_crear_proceso(pcb_inicial->pid, ctx->path_script_inicial, ctx->socket_memoria);
     

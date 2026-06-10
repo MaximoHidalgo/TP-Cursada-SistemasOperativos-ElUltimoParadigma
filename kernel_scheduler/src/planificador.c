@@ -34,6 +34,13 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
     estratega->colas_io = dictionary_create();
     estratega->mutex_creados = dictionary_create();
     estratega->quantum_rr = config_get_int_value(config, "RR_QUANTUM");
+    
+    if (config_has_property(config, "SUSPENSION_TIMEOUT")) {
+        estratega->suspension_timeout = config_get_int_value(config, "SUSPENSION_TIMEOUT");
+    } else {
+        estratega->suspension_timeout = 35000;
+    }
+
     estratega->colas = crear_colas_ready_desde_config(config, estratega->quantum_rr, logger);
     estratega->proceso_exec = NULL;
     estratega->desalojo_entre_colas = config_get_bool_compatible(config, "QUEUE_PREEMPTION");
@@ -126,6 +133,14 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
 
     t_estado_proceso estado_anterior = proceso->estado;
     proceso->estado = ESTADO_PROCESO_READY;
+    
+    if (estado_anterior == ESTADO_PROCESO_SUSP_READY) {
+        log_info(estratega->logger, "## Solicitando DESUSPENDER_PROCESO a Memoria para PID %d", proceso->pid);
+        enviar_int(estratega->socket_memoria, DESUSPENDER_PROCESO);
+        send(estratega->socket_memoria, &proceso->pid, sizeof(uint32_t), 0);
+        
+        recibir_mensaje(estratega->socket_memoria, estratega->logger);
+    }
 
     log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
              proceso->pid, 
@@ -278,6 +293,31 @@ bool planificador_es_io_registrado(t_estratega_planificacion* estratega, int soc
     return interfaz != NULL;
 }
 
+typedef struct {
+    t_estratega_planificacion* estratega;
+    t_proceso_planificable* pcb;
+    int bloqueo_id;
+} t_timer_args;
+
+void* suspension_timer_thread(void* arg) {
+    t_timer_args* a = (t_timer_args*)arg;
+    usleep(a->estratega->suspension_timeout * 1000); // usleep takes microseconds
+    
+    pthread_mutex_lock(&a->estratega->mutex_colas);
+    if (a->pcb->estado == ESTADO_PROCESO_BLOCK && a->pcb->bloqueo_id == a->bloqueo_id) {
+        log_info(a->estratega->logger, "## Proceso %d suspendido por timeout", a->pcb->pid);
+        a->pcb->estado = ESTADO_PROCESO_SUSP_BLOCK;
+        
+        enviar_int(a->estratega->socket_memoria, SUSPENDER_PROCESO);
+        send(a->estratega->socket_memoria, &a->pcb->pid, sizeof(uint32_t), 0);
+        
+        recibir_mensaje(a->estratega->socket_memoria, a->estratega->logger);
+    }
+    pthread_mutex_unlock(&a->estratega->mutex_colas);
+    free(a);
+    return NULL;
+}
+
 void planificador_atender_peticion_io(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* interfaz_nombre) {
     pthread_mutex_lock(&estratega->mutex_colas);
     t_interfaz_io* interfaz = buscar_interfaz_por_nombre(estratega, interfaz_nombre);
@@ -296,7 +336,24 @@ void planificador_atender_peticion_io(t_estratega_planificacion* estratega, t_pr
     solicitud->param2 = NULL;
     
     pcb->estado = ESTADO_PROCESO_BLOCK;
+    pcb->bloqueo_id++;
     log_info(estratega->logger, "## Proceso %d bloqueado esperando I/O en %s", pcb->pid, interfaz_nombre);
+
+    // Iniciar hilo de timer para suspender proceso
+    typedef struct {
+        t_estratega_planificacion* estratega;
+        t_proceso_planificable* pcb;
+        int bloqueo_id;
+    } t_timer_args;
+    
+    t_timer_args* args = malloc(sizeof(t_timer_args));
+    args->estratega = estratega;
+    args->pcb = pcb;
+    args->bloqueo_id = pcb->bloqueo_id;
+    
+    pthread_t timer_thread;
+    pthread_create(&timer_thread, NULL, (void*)suspension_timer_thread, args);
+    pthread_detach(timer_thread);
 
     if (interfaz->solicitud_actual == NULL) {
         interfaz->solicitud_actual = solicitud;
@@ -325,14 +382,29 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
             interfaz->solicitud_actual = NULL;
             
             t_estado_proceso estado_anterior = liberado->estado;
-            liberado->estado = ESTADO_PROCESO_READY;
+            if (estado_anterior == ESTADO_PROCESO_SUSP_BLOCK) {
+                liberado->estado = ESTADO_PROCESO_SUSP_READY;
+            } else {
+                liberado->estado = ESTADO_PROCESO_READY;
+            }
             
             log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
                      liberado->pid, 
                      planificador_nombre_estado(estado_anterior), 
                      planificador_nombre_estado(liberado->estado));
 
-            encolar_en_cola_ready(estratega->colas, liberado);
+            if (liberado->estado == ESTADO_PROCESO_SUSP_READY) {
+                // If SUSP_READY, we should put it in the new processes queue or a SUSP_READY queue.
+                // In TP, SUSP_READY goes to the new queue (cola_new) wait or directly to ready queue?
+                // "Una vez que el proceso vuelva de este evento pasará al estado Ready / Suspended Ready."
+                // "Si pasa a Suspended Ready debe ser agregado a la cola de News para que luego se pueda volver a llevar a Memoria Principal".
+                // Wait, if it goes to New, we should push it to `estratega->cola_new` and call admitir_a_ready!
+                queue_push(estratega->cola_new, liberado);
+                log_info(estratega->logger, "Proceso %d movido a cola NEW desde SUSP_READY", liberado->pid);
+                // planificador_admitir_a_ready(estratega);
+            } else {
+                encolar_en_cola_ready(estratega->colas, liberado);
+            }
             
             if (!queue_is_empty(interfaz->cola_bloqueados)) {
                 interfaz->solicitud_actual = queue_pop(interfaz->cola_bloqueados);

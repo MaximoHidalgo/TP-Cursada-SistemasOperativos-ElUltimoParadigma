@@ -14,6 +14,15 @@
 #include "estructuras_cpu.h"
 
 typedef struct {
+    int id;
+    int socket_fd;
+    uint32_t tamanio;
+    uint32_t base_address;
+    char* ip;
+    int puerto;
+} t_memory_stick_info;
+
+typedef struct {
     char* identificador;
     char* parametro1;//Ej: "AX", "MUTEX_1", "25000"
     char* parametro2;//Ej: "6", "BX" 
@@ -27,7 +36,9 @@ t_instruccion* decode(char* instruccion_texto);
 int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_registro, uint32_t valor);
 int chequear_interrupciones(t_cpu_context* ctx);
+int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica);
 
-
+void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio);
+void escribir_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer);
 
 #endif //ESTRUCTURAS_H_

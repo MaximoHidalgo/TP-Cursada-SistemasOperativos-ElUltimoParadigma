@@ -17,6 +17,7 @@ typedef struct {
     int socket_kernel_memory;
     int socket_escucha;
     pthread_mutex_t mutex_memoria;
+    int memory_delay;
 } t_memory_stick_context;
 
 #endif // ESTRUCTURAS_STICK_H_

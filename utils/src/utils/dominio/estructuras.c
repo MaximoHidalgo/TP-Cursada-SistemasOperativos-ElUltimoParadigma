@@ -30,15 +30,40 @@ void limpieza_programa(t_conexiones_cpu* conexiones, t_log* logger, t_config* co
 void serializar_contexto(t_paquete* paquete, t_contexto_ejecucion* contexto) {
     buffer_write_uint32(paquete->buffer, contexto->pid);
     buffer_write(paquete->buffer, &(contexto->registros), sizeof(t_registros));
+    
+    // Serializar tabla de segmentos
+    int cant_segmentos = contexto->tabla_segmentos != NULL ? list_size(contexto->tabla_segmentos) : 0;
+    buffer_write_uint32(paquete->buffer, cant_segmentos);
+    
+    for (int i = 0; i < cant_segmentos; i++) {
+        t_segmento* seg = list_get(contexto->tabla_segmentos, i);
+        buffer_write_uint32(paquete->buffer, seg->id);
+        buffer_write_uint32(paquete->buffer, seg->base);
+        buffer_write_uint32(paquete->buffer, seg->tamanio);
+        buffer_write_uint32(paquete->buffer, seg->bloque_swap);
+    }
 }
 
-void deserializar_contexto(void* stream, t_contexto_ejecucion* contexto) {
-    // Para simplificar, la deserialización local de struct se hace con reader
-    // En utils_client anterior se asumía que el payload venía en crudo, 
-    // pero podemos leerlo usando la abstracción
-    t_buffer_reader* reader = buffer_reader_create(stream, sizeof(uint32_t) + sizeof(t_registros));
+void deserializar_contexto(void* stream, int size, t_contexto_ejecucion* contexto) {
+    // Usar el tamaño provisto en vez de intentar adivinarlo
+    t_buffer_reader* reader = buffer_reader_create(stream, size);
     contexto->pid = buffer_read_uint32(reader);
     buffer_read(reader, &(contexto->registros), sizeof(t_registros));
+    
+    // Deserializar tabla de segmentos
+    uint32_t cant_segmentos = buffer_read_uint32(reader);
+    // Expandimos el reader para leer los segmentos (ya tiene el size correcto)
+    
+    contexto->tabla_segmentos = list_create();
+    for (uint32_t i = 0; i < cant_segmentos; i++) {
+        t_segmento* seg = malloc(sizeof(t_segmento));
+        seg->id = buffer_read_uint32(reader);
+        seg->base = buffer_read_uint32(reader);
+        seg->tamanio = buffer_read_uint32(reader);
+        seg->bloque_swap = buffer_read_uint32(reader);
+        list_add(contexto->tabla_segmentos, seg);
+    }
+    
     buffer_reader_destroy(reader);
 }
 

@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <commons/log.h>
 #include <commons/config.h>
 #include "estructuras.h"

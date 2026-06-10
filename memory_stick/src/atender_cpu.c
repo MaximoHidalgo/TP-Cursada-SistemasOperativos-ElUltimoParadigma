@@ -45,6 +45,8 @@ void procesar_lectura(int socket_cpu, t_memory_stick_context* ctx) {
 
     void* datos_leidos = malloc(peticion->tamanio);
     
+    usleep(ctx->memory_delay * 1000);
+    
     // Lectura sincronizada con mutex
     pthread_mutex_lock(&ctx->mutex_memoria);
     if (peticion->direccion_fisica + peticion->tamanio <= ctx->tamanio_total) {
@@ -72,6 +74,8 @@ void procesar_escritura(int socket_cpu, t_memory_stick_context* ctx) {
     void* buffer = recibir_buffer(&size, socket_cpu);
     t_peticion_escritura* peticion = deserializar_peticion_escritura(buffer);
     free(buffer);
+    
+    usleep(ctx->memory_delay * 1000);
 
     // Escritura sincronizada con mutex
     pthread_mutex_lock(&ctx->mutex_memoria);

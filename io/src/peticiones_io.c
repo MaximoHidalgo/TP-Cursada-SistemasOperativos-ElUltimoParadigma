@@ -20,6 +20,9 @@ void ejecutar_stdin(t_io_context* ctx, int pid) {
 
     log_info(ctx->logger, "## Texto leido: %s", texto_final);
 
+    // Enviar el texto leido al Kernel Scheduler
+    enviar_mensaje(texto_final, ctx->socket_scheduler);
+
     free(leido);
     free(texto_final);
 }
@@ -47,15 +50,16 @@ void procesar_peticion_io(t_io_context* ctx) {
 
     if (string_equals_ignore_case(ctx->io_name, "SLEEP")) {
         ejecutar_sleep(ctx, pid);
+        enviar_mensaje(MSG_OK, ctx->socket_scheduler);
     } 
     else if (string_equals_ignore_case(ctx->io_name, "STDOUT")) {
         ejecutar_stdout(ctx, pid);
+        enviar_mensaje(MSG_OK, ctx->socket_scheduler);
     } 
     else if (string_equals_ignore_case(ctx->io_name, "STDIN")) {
         ejecutar_stdin(ctx, pid);
+        // STDIN ya envía el texto leido en su funcion
     }
 
     log_info(ctx->logger, "## PID: %d - Fin de IO", pid);
-    
-    enviar_mensaje(MSG_OK, ctx->socket_scheduler);
 }

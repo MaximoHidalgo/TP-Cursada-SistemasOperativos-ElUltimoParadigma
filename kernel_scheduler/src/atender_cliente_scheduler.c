@@ -26,18 +26,53 @@ static void devolver_ejecucion_a_cpu(t_scheduler_context* ctx, int cliente_fd) {
 }
 
 void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
-    char* mensaje = recibir_handshake(cliente_fd);
+    int size;
+    char* mensaje = recibir_buffer(&size, cliente_fd);
+
     if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
         log_info(ctx->logger, "## CPU %s Conectada", mensaje);
         ctx->estratega->socket_cpu = cliente_fd;
         despachar_proceso_a_cpu(ctx, cliente_fd);
-    } else if (string_equals_ignore_case(mensaje, "OK")) {
-        planificador_io_terminada(ctx->estratega, cliente_fd);
-        if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
-            despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
-        }
     } else {
-        planificador_registrar_io(ctx->estratega, mensaje, cliente_fd);
+        t_interfaz_io* interfaz = buscar_interfaz_por_socket(ctx->estratega, cliente_fd);
+        if (interfaz != NULL) {
+            // Mensaje de una IO ya registrada
+            if (string_equals_ignore_case(mensaje, "OK")) {
+                planificador_io_terminada(ctx->estratega, cliente_fd);
+                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
+                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+                }
+            } else {
+                // Es el texto leido por STDIN
+                t_proceso_planificable* proceso = NULL;
+                if (interfaz->solicitud_actual != NULL) {
+                    proceso = interfaz->solicitud_actual->proceso;
+                }
+                
+                if (proceso != NULL) {
+                    t_paquete* paq_write = crear_paquete();
+                    paq_write->codigo_operacion = ESCRIBIR_MEMORIA;
+                    agregar_a_paquete(paq_write, &(proceso->io_dir_fisica), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, &(proceso->io_tamanio), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, mensaje, proceso->io_tamanio);
+                    enviar_paquete(paq_write, ctx->socket_memoria);
+                    eliminar_paquete(paq_write);
+                    
+                    int r_mem = recibir_operacion(ctx->socket_memoria);
+                    if (r_mem == MENSAJE) {
+                        int s_m; char* msj_m = recibir_buffer(&s_m, ctx->socket_memoria); free(msj_m);
+                    }
+                }
+                
+                planificador_io_terminada(ctx->estratega, cliente_fd);
+                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
+                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+                }
+            }
+        } else {
+            // Es el nombre de una nueva interfaz registrandose
+            planificador_registrar_io(ctx->estratega, mensaje, cliente_fd);
+        }
     }
     free(mensaje);
 }
@@ -55,28 +90,60 @@ static void manejar_io_sleep(t_scheduler_context* ctx, t_list* paquete, uint32_t
 }
 
 static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_t pid) {
-    char* dummy = list_get(paquete, 1);
+    uint32_t* dir_fisica_ptr = list_get(paquete, 1);
+    uint32_t* tamanio_ptr = list_get(paquete, 2);
+    uint32_t dir_fisica = *dir_fisica_ptr;
+    uint32_t tamanio = *tamanio_ptr;
+    
     t_interfaz_io* interfaz = buscar_interfaz_por_nombre(ctx->estratega, "STDOUT");
     if (interfaz != NULL) {
-        int op = PETICION_IO;
-        send(interfaz->socket_fd, &op, sizeof(int), 0);
-        send(interfaz->socket_fd, &pid, sizeof(uint32_t), 0);
+        // Pedimos leer a memoria
+        t_paquete* paq_mem = crear_paquete();
+        paq_mem->codigo_operacion = LEER_MEMORIA;
+        agregar_a_paquete(paq_mem, &dir_fisica, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, &tamanio, sizeof(uint32_t));
+        enviar_paquete(paq_mem, ctx->socket_memoria);
+        eliminar_paquete(paq_mem);
         
-        int len = strlen(dummy) + 1;
-        send(interfaz->socket_fd, &len, sizeof(int), 0);
-        send(interfaz->socket_fd, dummy, len, 0);
+        int op = recibir_operacion(ctx->socket_memoria);
+        if (op == MENSAJE) {
+            int size;
+            void* buf = recibir_buffer(&size, ctx->socket_memoria);
+            
+            int op_io = PETICION_IO;
+            send(interfaz->socket_fd, &op_io, sizeof(int), 0);
+            send(interfaz->socket_fd, &pid, sizeof(uint32_t), 0);
+            
+            // Mandamos el tamaño y el buffer al IO
+            int len = tamanio + 1;
+            char* dummy = malloc(len);
+            memcpy(dummy, buf, tamanio);
+            dummy[tamanio] = '\0';
+            
+            send(interfaz->socket_fd, &len, sizeof(int), 0);
+            send(interfaz->socket_fd, dummy, len, 0);
+            free(dummy);
+            free(buf);
+        }
     }
     planificador_atender_peticion_io(ctx->estratega, ctx->estratega->proceso_exec, "STDOUT");
 }
 
 static void manejar_io_stdin(t_scheduler_context* ctx, t_list* paquete, uint32_t pid) {
-    uint32_t* size_ptr = list_get(paquete, 1);
+    uint32_t* dir_fisica_ptr = list_get(paquete, 1);
+    uint32_t* tamanio_ptr = list_get(paquete, 2);
+    uint32_t dir_fisica = *dir_fisica_ptr;
+    uint32_t tamanio = *tamanio_ptr;
+    
     t_interfaz_io* interfaz = buscar_interfaz_por_nombre(ctx->estratega, "STDIN");
     if (interfaz != NULL) {
         int op = PETICION_IO;
         send(interfaz->socket_fd, &op, sizeof(int), 0);
         send(interfaz->socket_fd, &pid, sizeof(uint32_t), 0);
-        send(interfaz->socket_fd, size_ptr, sizeof(uint32_t), 0);
+        send(interfaz->socket_fd, &tamanio, sizeof(uint32_t), 0);
+        
+        ctx->estratega->proceso_exec->io_dir_fisica = dir_fisica;
+        ctx->estratega->proceso_exec->io_tamanio = tamanio;
     }
     planificador_atender_peticion_io(ctx->estratega, ctx->estratega->proceso_exec, "STDIN");
 }
@@ -115,8 +182,11 @@ void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
         log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SUCCESS", ctx->estratega->proceso_exec->pid);
         ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
         
-        // Peticion a Kernel Memory para liberar estructuras del proceso finalizado
-        // TODO: En un futuro enviar a memoria el PID a liberar usando ctx->socket_memoria
+        t_paquete* paq_liberar = crear_paquete();
+        paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+        agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+        enviar_paquete(paq_liberar, ctx->socket_memoria);
+        eliminar_paquete(paq_liberar);
         
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
     }
@@ -162,6 +232,87 @@ void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_s
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo_syscall) {
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t* pid_ptr = list_get(paquete, 0);
+    uint32_t pid = *pid_ptr;
+
+    // Guard Clause: Validación del proceso actual
+    if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
+        despachar_proceso_a_cpu(ctx, cliente_fd);
+        list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    if (tipo_syscall == SYSCALL_MEM_ALLOC) {
+        uint32_t* id_seg_ptr = list_get(paquete, 1);
+        uint32_t* tamanio_ptr = list_get(paquete, 2);
+        
+        t_paquete* paq_mem = crear_paquete();
+        paq_mem->codigo_operacion = CREAR_SEGMENTO;
+        agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, tamanio_ptr, sizeof(uint32_t));
+        enviar_paquete(paq_mem, ctx->socket_memoria);
+        eliminar_paquete(paq_mem);
+
+        int respuesta = recibir_operacion(ctx->socket_memoria);
+        
+        if (respuesta == SOLICITUD_COMPACTACION) {
+            log_info(ctx->logger, "Compactación requerida. Avisando a Memoria que puede proceder...");
+            t_paquete* paq_resp = crear_paquete();
+            paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
+            enviar_paquete(paq_resp, ctx->socket_memoria);
+            eliminar_paquete(paq_resp);
+            
+            // Esperamos la respuesta final de la creación del segmento post-compactación
+            respuesta = recibir_operacion(ctx->socket_memoria);
+        }
+
+        if (respuesta == MENSAJE) {
+            int size;
+            char* msj = recibir_buffer(&size, ctx->socket_memoria);
+            if (string_equals_ignore_case(msj, "OK")) {
+                devolver_ejecucion_a_cpu(ctx, cliente_fd);
+            } else {
+                log_error(ctx->logger, "Out of memory. Finalizando proceso %d", pid);
+                ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+                
+                t_paquete* paq_liberar = crear_paquete();
+                paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+                agregar_a_paquete(paq_liberar, &pid, sizeof(uint32_t));
+                enviar_paquete(paq_liberar, ctx->socket_memoria);
+                eliminar_paquete(paq_liberar);
+
+                planificador_liberar_exec(ctx->estratega, pid);
+                despachar_proceso_a_cpu(ctx, cliente_fd);
+            }
+            free(msj);
+        }
+    } else if (tipo_syscall == SYSCALL_MEM_FREE) {
+        uint32_t* id_seg_ptr = list_get(paquete, 1);
+
+        t_paquete* paq_mem = crear_paquete();
+        paq_mem->codigo_operacion = ELIMINAR_SEGMENTO;
+        agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
+        enviar_paquete(paq_mem, ctx->socket_memoria);
+        eliminar_paquete(paq_mem);
+
+        int respuesta = recibir_operacion(ctx->socket_memoria);
+        if (respuesta == MENSAJE) {
+            int size;
+            char* msj = recibir_buffer(&size, ctx->socket_memoria);
+            if (string_equals_ignore_case(msj, "OK")) {
+                devolver_ejecucion_a_cpu(ctx, cliente_fd);
+            }
+            free(msj);
+        }
+    }
+    
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
 void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     if (ctx->estratega->proceso_exec != NULL) {
@@ -171,6 +322,41 @@ void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
     }
     despachar_proceso_a_cpu(ctx, cliente_fd);
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
+void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t* pid_ptr = list_get(paquete, 0);
+    uint32_t pid = *pid_ptr;
+    char* script_path = list_get(paquete, 1);
+    uint32_t* prioridad_ptr = list_get(paquete, 2);
+    uint32_t prioridad = *prioridad_ptr;
+
+    // Guard Clause
+    if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
+        despachar_proceso_a_cpu(ctx, cliente_fd);
+        list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    static int contador_pid = 1;
+    int nuevo_pid = contador_pid++;
+
+    log_info(ctx->logger, "## Proceso %d solicita crear nuevo proceso con script %s", pid, script_path);
+
+    enviar_peticion_crear_proceso(nuevo_pid, script_path, ctx->socket_memoria);
+
+    t_proceso_planificable* pcb_nuevo = malloc(sizeof(t_proceso_planificable));
+    pcb_nuevo->pid = nuevo_pid;
+    pcb_nuevo->cola_prioridad = prioridad;
+    pcb_nuevo->bloqueo_id = 0;
+
+    planificador_encolar_new(ctx->estratega, pcb_nuevo);
+    planificador_admitir_a_ready(ctx->estratega);
+
+    devolver_ejecucion_a_cpu(ctx, cliente_fd); // Sigue en EXEC
+
     list_destroy_and_destroy_elements(paquete, free);
 }
 
@@ -199,6 +385,32 @@ void atender_cliente_scheduler(void* arg) {
             case SYSCALL_MUTEX_LOCK:
             case SYSCALL_MUTEX_UNLOCK:
                 procesar_syscall_mutex(cliente_fd, ctx, mensaje_cliente);
+                break;
+            case SYSCALL_SEG_FAULT:
+            {
+                t_list* paquete = recibir_paquete(cliente_fd);
+                if (ctx->estratega->proceso_exec != NULL) {
+                    log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SEG_FAULT", ctx->estratega->proceso_exec->pid);
+                    ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+                    
+                    t_paquete* paq_liberar = crear_paquete();
+                    paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+                    agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+                    enviar_paquete(paq_liberar, ctx->socket_memoria);
+                    eliminar_paquete(paq_liberar);
+                    
+                    planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+                }
+                despachar_proceso_a_cpu(ctx, cliente_fd);
+                list_destroy_and_destroy_elements(paquete, free);
+                break;
+            }
+            case SYSCALL_MEM_ALLOC:
+            case SYSCALL_MEM_FREE:
+                procesar_syscall_memoria(cliente_fd, ctx, mensaje_cliente);
+                break;
+            case SYSCALL_INIT_PROC:
+                procesar_syscall_init_proc(cliente_fd, ctx);
                 break;
             case FIN_DE_QUANTUM:
                 procesar_fin_quantum(cliente_fd, ctx);
