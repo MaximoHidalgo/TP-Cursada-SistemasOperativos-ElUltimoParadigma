@@ -1,11 +1,33 @@
 #include "procesador_mensajes.h"
+#include "auxiliares_memoria.h"
 
 void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     char *mensaje = recibir_handshake(cliente_fd);
     
     if (string_starts_with(mensaje, "STICK|")) {
         char **partes = string_split(mensaje, "|");
-        log_info(ctx->logger, "## Memory Stick de %s bytes Conectada", partes[1]);
+        int stick_size = atoi(partes[1]);
+        
+        pthread_mutex_lock(&ctx->mutex_memoria);
+        
+        // Ampliar espacio
+        void* nuevo_espacio = realloc(ctx->espacio_memoria, ctx->memoria_total + stick_size);
+        if (nuevo_espacio) {
+            ctx->espacio_memoria = nuevo_espacio;
+            
+            t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
+            nuevo_hueco->base = ctx->memoria_total;
+            nuevo_hueco->limite = ctx->memoria_total + stick_size;
+            list_add(ctx->huecos_libres, nuevo_hueco);
+            
+            ctx->memoria_total += stick_size;
+            log_info(ctx->logger, "## Memory Stick de %d bytes Conectada. Memoria total: %d", stick_size, ctx->memoria_total);
+        } else {
+            log_error(ctx->logger, "Error al hacer realloc de la memoria para el Memory Stick");
+        }
+        
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        
         string_array_destroy(partes);
     }
     else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
@@ -60,7 +82,7 @@ void procesar_actualizacion_contexto_handler(int cliente_fd, t_memory_context* c
     int size;
     void* buffer = recibir_buffer(&size, cliente_fd);
     t_contexto_ejecucion contexto_actualizado;
-    deserializar_contexto(buffer, &contexto_actualizado);
+    deserializar_contexto(buffer, size, &contexto_actualizado);
     free(buffer);
     
     t_programa* prog = buscar_programa(ctx, contexto_actualizado.pid);
@@ -118,6 +140,73 @@ void atender_cliente(void *arg) {
             case FETCH_INSTRUCCION:
                 procesar_fetch_instruccion_handler(cliente_fd, ctx);
                 break;
+            case CREAR_SEGMENTO:
+            {
+                int size;
+                void* buffer = recibir_buffer(&size, cliente_fd);
+                uint32_t pid, id_seg, tamanio_seg;
+                int desp = 0;
+                memcpy(&pid, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                memcpy(&id_seg, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                memcpy(&tamanio_seg, buffer + desp, sizeof(uint32_t));
+                free(buffer);
+
+                pthread_mutex_lock(&ctx->mutex_memoria);
+                t_segmento* nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg);
+                if (nuevo_seg != NULL) {
+                    t_programa* prog = buscar_programa(ctx, pid);
+                    if (prog != NULL) {
+                        pthread_mutex_lock(&ctx->mutex_programas);
+                        if (prog->contexto->tabla_segmentos == NULL) {
+                            prog->contexto->tabla_segmentos = list_create();
+                        }
+                        list_add(prog->contexto->tabla_segmentos, nuevo_seg);
+                        pthread_mutex_unlock(&ctx->mutex_programas);
+                    }
+                    enviar_mensaje(MSG_OK, cliente_fd);
+                } else {
+                    enviar_mensaje("OUT_OF_MEMORY", cliente_fd);
+                }
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+                break;
+            }
+            case ELIMINAR_SEGMENTO:
+            {
+                int size;
+                void* buffer = recibir_buffer(&size, cliente_fd);
+                uint32_t pid, id_seg;
+                int desp = 0;
+                memcpy(&pid, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                memcpy(&id_seg, buffer + desp, sizeof(uint32_t));
+                free(buffer);
+
+                pthread_mutex_lock(&ctx->mutex_memoria);
+                t_programa* prog = buscar_programa(ctx, pid);
+                if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
+                    pthread_mutex_lock(&ctx->mutex_programas);
+                    t_segmento* seg_a_eliminar = NULL;
+                    for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
+                        t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
+                        if (seg->id == id_seg) {
+                            seg_a_eliminar = seg;
+                            list_remove(prog->contexto->tabla_segmentos, i);
+                            break;
+                        }
+                    }
+                    pthread_mutex_unlock(&ctx->mutex_programas);
+
+                    if (seg_a_eliminar != NULL) {
+                        eliminar_segmento(ctx, seg_a_eliminar);
+                        enviar_mensaje(MSG_OK, cliente_fd);
+                    } else {
+                        enviar_mensaje("SEG_NOT_FOUND", cliente_fd);
+                    }
+                } else {
+                    enviar_mensaje("PROG_NOT_FOUND", cliente_fd);
+                }
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+                break;
+            }
             case LEER_MEMORIA:
             case ESCRIBIR_MEMORIA:
                 enviar_mensaje(MSG_OK, cliente_fd);

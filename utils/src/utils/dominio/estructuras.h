@@ -6,6 +6,7 @@
 #include <string.h>
 #include <commons/log.h>
 #include <commons/config.h>
+#include <commons/collections/list.h>
 #include "../protocolo/protocolo.h"
 #include "../sockets/sockets.h"
 
@@ -24,9 +25,15 @@ typedef struct { // Los uint8_t tienen 1 byte y los uint32_t 4 bytes
 } t_registros;
 
 typedef struct {
+    uint32_t id;
+    uint32_t base;
+    uint32_t tamanio;
+} t_segmento;
+
+typedef struct {
     uint32_t pid;
     t_registros registros;
-    // Más adelante acá irán las estructuras de la tabla de segmentos
+    t_list* tabla_segmentos;
 } t_contexto_ejecucion;
 
 typedef struct {
@@ -62,7 +69,7 @@ void limpieza_programa(t_conexiones_cpu* conexiones, t_log* logger, t_config* co
 
 // Contexto
 void serializar_contexto(t_paquete* paquete, t_contexto_ejecucion* contexto);
-void deserializar_contexto(void* stream, t_contexto_ejecucion* contexto);
+void deserializar_contexto(void* stream, int size, t_contexto_ejecucion* contexto);
 void enviar_contexto(t_contexto_ejecucion* contexto, int socket_cliente);
 
 // Crear Proceso

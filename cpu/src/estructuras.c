@@ -20,17 +20,10 @@ t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* 
 
         //Deserializar el buffer recibido para armar el struct localmente
         t_contexto_ejecucion* contexto = malloc(sizeof(t_contexto_ejecucion));
-        int desplazamiento = 0;
-        // Extraemos el PID
-        memcpy(&(contexto->pid), buffer + desplazamiento, sizeof(uint32_t));
-        desplazamiento += sizeof(uint32_t);
-        // Extraemos los registros de la CPU (PC, AX, BX, etc.) de un solo golpe
-        memcpy(&(contexto->registros), buffer + desplazamiento, sizeof(t_registros));
-        desplazamiento += sizeof(t_registros);
-
+        deserializar_contexto(buffer, size, contexto);
+        free(buffer);
 
         // (Más adelante en el Check 3 acá también deserializarás la Tabla de Segmentos)
-        free(buffer);
 
 
         log_info(ctx->logger, "Contexto de ejecución del PID %d recibido exitosamente.", contexto->pid);
@@ -43,11 +36,8 @@ t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* 
 
 void enviar_contexto_a_memoria(t_contexto_ejecucion* contexto, int conexion_memory) {
     t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = ACTUALIZACION_CONTEXTO; 
-
-    // Usamos serializar_contexto que arma el payload crudo en el stream
+    paquete->codigo_operacion = ACTUALIZACION_CONTEXTO;
     serializar_contexto(paquete, contexto);
-
     enviar_paquete(paquete, conexion_memory);
     eliminar_paquete(paquete);
 }
