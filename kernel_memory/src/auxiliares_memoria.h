@@ -5,7 +5,7 @@
 #include <utils/dominio/estructuras.h>
 
 t_hueco_libre* buscar_hueco_libre(t_memory_context* ctx, uint32_t tamanio);
-t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio);
+t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio, int* needs_compaction);
 void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento);
 void compactar_memoria(t_memory_context* ctx);
 

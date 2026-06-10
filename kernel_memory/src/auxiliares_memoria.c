@@ -26,7 +26,7 @@ t_hueco_libre* buscar_hueco_libre(t_memory_context* ctx, uint32_t tamanio) {
     return hueco_elegido;
 }
 
-t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio) {
+t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio, int* needs_compaction) {
     if (tamanio > ctx->segment_max_size) {
         log_error(ctx->logger, "Tamanio solicitado %d mayor a SEGMENT_MAX_SIZE %d", tamanio, ctx->segment_max_size);
         return NULL;
@@ -35,8 +35,6 @@ t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio)
     t_hueco_libre* hueco = buscar_hueco_libre(ctx, tamanio);
     
     if (hueco == NULL) {
-        // Necesitamos compactar o no hay memoria
-        // Verificamos si hay espacio sumando todos los huecos
         uint32_t memoria_libre_total = 0;
         for (int i = 0; i < list_size(ctx->huecos_libres); i++) {
             t_hueco_libre* h = list_get(ctx->huecos_libres, i);
@@ -44,16 +42,13 @@ t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio)
         }
 
         if (memoria_libre_total >= tamanio) {
-            log_info(ctx->logger, "Espacio suficiente pero fragmentado. Iniciando compactacion...");
-            compactar_memoria(ctx);
-            // Re-intentar buscar hueco después de compactar
-            hueco = buscar_hueco_libre(ctx, tamanio);
+            log_info(ctx->logger, "Espacio suficiente pero fragmentado. Compactacion requerida...");
+            *needs_compaction = 1;
+            return NULL;
         }
         
-        if (hueco == NULL) {
-            log_error(ctx->logger, "Out of Memory para segmento %d de %d bytes", id, tamanio);
-            return NULL; // OOM
-        }
+        log_error(ctx->logger, "Out of Memory para segmento %d de %d bytes", id, tamanio);
+        return NULL; // OOM
     }
 
     t_segmento* segmento = malloc(sizeof(t_segmento));
@@ -61,10 +56,8 @@ t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio)
     segmento->base = hueco->base;
     segmento->tamanio = tamanio;
 
-    // Actualizamos el hueco
     hueco->base += tamanio;
     if (hueco->base == hueco->limite) {
-        // Eliminar el hueco porque se consumió entero
         for (int i = 0; i < list_size(ctx->huecos_libres); i++) {
             if (list_get(ctx->huecos_libres, i) == hueco) {
                 list_remove_and_destroy_element(ctx->huecos_libres, i, free);
@@ -74,14 +67,11 @@ t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio)
     }
 
     list_add(ctx->segmentos_globales, segmento);
-    
-    // Log obligatorio
     log_info(ctx->logger, "PID: <PID_FALTANTE> - Crear Segmento: %d - Base: %d - TAMAÑO: %d", id, segmento->base, tamanio);
     return segmento;
 }
 
 void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento) {
-    // Buscar y eliminar de segmentos_globales
     for (int i = 0; i < list_size(ctx->segmentos_globales); i++) {
         if (list_get(ctx->segmentos_globales, i) == segmento) {
             list_remove(ctx->segmentos_globales, i);
@@ -89,7 +79,6 @@ void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento) {
         }
     }
 
-    // Crear un nuevo hueco
     t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
     nuevo_hueco->base = segmento->base;
     nuevo_hueco->limite = segmento->base + segmento->tamanio;
@@ -97,13 +86,37 @@ void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento) {
 
     log_info(ctx->logger, "PID: <PID_FALTANTE> - Eliminar Segmento: %d - Base: %d - TAMAÑO: %d", segmento->id, segmento->base, segmento->tamanio);
     free(segmento);
+}
 
-    // Consolidar huecos contiguos
-    // (Por simplicidad en la primera versión lo omitiremos, la compactación lo resolverá)
+bool ordenar_segmentos_por_base(void* a, void* b) {
+    t_segmento* seg1 = (t_segmento*)a;
+    t_segmento* seg2 = (t_segmento*)b;
+    return seg1->base < seg2->base;
 }
 
 void compactar_memoria(t_memory_context* ctx) {
-    // Usar usleep para el retardo de compactación
+    log_info(ctx->logger, "## Inicio de compactación");
     usleep(config_get_int_value(ctx->config, "COMPACTION_DELAY") * 1000);
-    // TODO: Implementar compactacion moviendo bloques en espacio_memoria
+    
+    list_sort(ctx->segmentos_globales, ordenar_segmentos_por_base);
+    
+    uint32_t offset_actual = 0;
+    for (int i = 0; i < list_size(ctx->segmentos_globales); i++) {
+        t_segmento* seg = list_get(ctx->segmentos_globales, i);
+        if (seg->base != offset_actual) {
+            memmove(ctx->espacio_memoria + offset_actual, ctx->espacio_memoria + seg->base, seg->tamanio);
+            seg->base = offset_actual;
+        }
+        offset_actual += seg->tamanio;
+    }
+    
+    list_clean_and_destroy_elements(ctx->huecos_libres, free);
+    if (offset_actual < ctx->memoria_total) {
+        t_hueco_libre* hueco_final = malloc(sizeof(t_hueco_libre));
+        hueco_final->base = offset_actual;
+        hueco_final->limite = ctx->memoria_total;
+        list_add(ctx->huecos_libres, hueco_final);
+    }
+    
+    log_info(ctx->logger, "## Fin de compactación");
 }

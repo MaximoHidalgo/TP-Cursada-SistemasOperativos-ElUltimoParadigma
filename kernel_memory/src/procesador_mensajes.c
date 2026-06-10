@@ -151,8 +151,23 @@ void atender_cliente(void *arg) {
                 memcpy(&tamanio_seg, buffer + desp, sizeof(uint32_t));
                 free(buffer);
 
+                int needs_compaction = 0;
                 pthread_mutex_lock(&ctx->mutex_memoria);
-                t_segmento* nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg);
+                t_segmento* nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
+                
+                if (needs_compaction) {
+                    t_paquete* paq = crear_paquete();
+                    paq->codigo_operacion = SOLICITUD_COMPACTACION;
+                    enviar_paquete(paq, cliente_fd);
+                    eliminar_paquete(paq);
+                    
+                    int res = recibir_operacion(cliente_fd);
+                    if (res == RESPUESTA_COMPACTACION) {
+                        compactar_memoria(ctx);
+                        nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
+                    }
+                }
+
                 if (nuevo_seg != NULL) {
                     t_programa* prog = buscar_programa(ctx, pid);
                     if (prog != NULL) {
@@ -167,6 +182,26 @@ void atender_cliente(void *arg) {
                 } else {
                     enviar_mensaje("OUT_OF_MEMORY", cliente_fd);
                 }
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+                break;
+            }
+            case LIBERAR_PROCESO:
+            {
+                uint32_t pid_a_liberar;
+                recv(cliente_fd, &pid_a_liberar, sizeof(uint32_t), MSG_WAITALL);
+
+                pthread_mutex_lock(&ctx->mutex_memoria);
+                t_programa* prog = buscar_programa(ctx, pid_a_liberar);
+                if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
+                    pthread_mutex_lock(&ctx->mutex_programas);
+                    for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
+                        t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
+                        eliminar_segmento(ctx, seg);
+                    }
+                    list_clean(prog->contexto->tabla_segmentos);
+                    pthread_mutex_unlock(&ctx->mutex_programas);
+                }
+                log_info(ctx->logger, "Proceso %d liberado de la memoria", pid_a_liberar);
                 pthread_mutex_unlock(&ctx->mutex_memoria);
                 break;
             }

@@ -115,8 +115,11 @@ void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
         log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SUCCESS", ctx->estratega->proceso_exec->pid);
         ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
         
-        // Peticion a Kernel Memory para liberar estructuras del proceso finalizado
-        // TODO: En un futuro enviar a memoria el PID a liberar usando ctx->socket_memoria
+        t_paquete* paq_liberar = crear_paquete();
+        paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+        agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+        enviar_paquete(paq_liberar, ctx->socket_memoria);
+        eliminar_paquete(paq_liberar);
         
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
     }
@@ -187,6 +190,18 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         eliminar_paquete(paq_mem);
 
         int respuesta = recibir_operacion(ctx->socket_memoria);
+        
+        if (respuesta == SOLICITUD_COMPACTACION) {
+            log_info(ctx->logger, "Compactación requerida. Avisando a Memoria que puede proceder...");
+            t_paquete* paq_resp = crear_paquete();
+            paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
+            enviar_paquete(paq_resp, ctx->socket_memoria);
+            eliminar_paquete(paq_resp);
+            
+            // Esperamos la respuesta final de la creación del segmento post-compactación
+            respuesta = recibir_operacion(ctx->socket_memoria);
+        }
+
         if (respuesta == MENSAJE) {
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);
@@ -195,6 +210,13 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             } else {
                 log_error(ctx->logger, "Out of memory. Finalizando proceso %d", pid);
                 ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+                
+                t_paquete* paq_liberar = crear_paquete();
+                paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+                agregar_a_paquete(paq_liberar, &pid, sizeof(uint32_t));
+                enviar_paquete(paq_liberar, ctx->socket_memoria);
+                eliminar_paquete(paq_liberar);
+
                 planificador_liberar_exec(ctx->estratega, pid);
                 despachar_proceso_a_cpu(ctx, cliente_fd);
             }
@@ -268,6 +290,13 @@ void atender_cliente_scheduler(void* arg) {
                 if (ctx->estratega->proceso_exec != NULL) {
                     log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SEG_FAULT", ctx->estratega->proceso_exec->pid);
                     ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+                    
+                    t_paquete* paq_liberar = crear_paquete();
+                    paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+                    agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+                    enviar_paquete(paq_liberar, ctx->socket_memoria);
+                    eliminar_paquete(paq_liberar);
+                    
                     planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
                 }
                 despachar_proceso_a_cpu(ctx, cliente_fd);
