@@ -5,7 +5,10 @@
 #include "planificador.h"
 #include <stdlib.h>
 #include <time.h>
-#include <utils/utils_client.h>
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
 
 typedef struct {
     t_estratega_planificacion* estratega;

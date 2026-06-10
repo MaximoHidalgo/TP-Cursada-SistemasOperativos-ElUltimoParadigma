@@ -1,5 +1,6 @@
 #include "main.h"
 
+t_log* logger;
 int main(void){
     
     logger = log_create("swap.log","SWAP", true, LOG_LEVEL_INFO);

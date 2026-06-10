@@ -1,55 +1,13 @@
-#ifndef UTILS_CLIENTE_H_
-#define UTILS_CLIENTE_H_
+#ifndef DOMINIO_ESTRUCTURAS_H_
+#define DOMINIO_ESTRUCTURAS_H_
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<signal.h>
-#include<unistd.h>
-#include<sys/socket.h>
-#include<netdb.h>
-#include<string.h>
-#include<commons/log.h>
-#include<commons/string.h>
-#include<commons/config.h>
-#include<readline/readline.h>
-#include<stdint.h>
-
-// Macros para Magic Strings y Constantes
-#define HANDSHAKE_CPU "CPU"
-#define HANDSHAKE_SCHEDULER "SCHEDULER"
-#define HANDSHAKE_STICK "STICK"
-#define MSG_OK "OK"
-
-typedef enum{
-	MENSAJE,
-	CREAR_PROCESO,
-	OBTENER_INSTRUCCION,
-	PAQUETE,
-	LEER_MEMORIA,
-	ESCRIBIR_MEMORIA,
-	LECTURA,
-	ESCRITURA,
-	PID_A_EJECUTAR,
-	FETCH_INSTRUCCION,
-	ENVIO_INSTRUCCION,
-	SOLICITUD_CONTEXTO,
-	ENVIO_CONTEXTO,
-	ACTUALIZACION_CONTEXTO,
-	INTERRUPCION_QUANTUM,
-	FIN_DE_QUANTUM,
-	SYSCALL_EXIT,
-	SYSCALL_SLEEP,
-	SYSCALL_STDOUT,
-	SYSCALL_STDIN,
-	ERROR_SEG_FAULT,
-	CONSULTAR_ESPACIO_LIBRE,
-	PETICION_IO,
-	SYSCALL_WAIT,
-	SYSCALL_SIGNAL,
-	SYSCALL_MUTEX_CREATE,
-	SYSCALL_MUTEX_LOCK,
-	SYSCALL_MUTEX_UNLOCK
-}op_code;
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <commons/log.h>
+#include <commons/config.h>
+#include "../protocolo/protocolo.h"
+#include "../sockets/sockets.h"
 
 typedef struct { // Los uint8_t tienen 1 byte y los uint32_t 4 bytes
     uint32_t PC;  // Program Counter 
@@ -64,16 +22,6 @@ typedef struct { // Los uint8_t tienen 1 byte y los uint32_t 4 bytes
     uint32_t SI;  // Dirección lógica de memoria de origen 
     uint32_t DI;  // Dirección lógica de memoria de destino 
 } t_registros;
-
-typedef struct{
-	int size;
-	void* stream;
-} t_buffer;
-
-typedef struct{
-	op_code codigo_operacion;
-	t_buffer* buffer;
-} t_paquete;
 
 typedef struct {
     uint32_t pid;
@@ -108,40 +56,33 @@ typedef struct {
     void* contenido;
 } t_peticion_escritura;
 
-void* serializar_paquete(t_paquete* paquete, int bytes);
-int crear_conexion(char* ip, char* puerto);
-void crear_buffer(t_paquete* paquete);
-t_paquete* crear_paquete(void);
-void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
-void enviar_paquete(t_paquete* paquete, int socket_cliente);
-void eliminar_paquete(t_paquete* paquete);
-void liberar_conexion(int socket_cliente);
-void enviar_mensaje(char* mensaje, int socket_cliente);
-
-//FUNCIONES USADAS POR LA CPU, REVISAR PARA APROVECHAR EN LAS DEMAS
+// Funciones usadas por CPU / utilería compartida
 void validar_argumentos(int argc);
 void limpieza_programa(t_conexiones_cpu* conexiones, t_log* logger, t_config* config);
-void enviar_int(int socket, int numero); //Con kernel memory, Ver si queda en utils
-void enviar_string(int socket, char* texto); //Con kernel memory, Ver si queda en utils
+
+// Contexto
 void serializar_contexto(t_paquete* paquete, t_contexto_ejecucion* contexto);
 void deserializar_contexto(void* stream, t_contexto_ejecucion* contexto);
 void enviar_contexto(t_contexto_ejecucion* contexto, int socket_cliente);
 
+// Crear Proceso
 void enviar_peticion_crear_proceso(uint32_t pid, char* path, int socket);
 t_peticion_crear_proceso* deserializar_peticion_crear_proceso(void* buffer);
 void destruir_peticion_crear_proceso(t_peticion_crear_proceso* peticion);
 
+// Fetch
 void enviar_peticion_fetch_instruccion(uint32_t pid, uint32_t pc, int socket);
 t_peticion_fetch_instruccion* deserializar_peticion_fetch_instruccion(void* buffer);
 void destruir_peticion_fetch_instruccion(t_peticion_fetch_instruccion* peticion);
 
+// Lectura Memoria
 void enviar_peticion_lectura(uint32_t direccion_fisica, uint32_t tamanio, int socket);
 t_peticion_lectura* deserializar_peticion_lectura(void* buffer);
 void destruir_peticion_lectura(t_peticion_lectura* peticion);
 
+// Escritura Memoria
 void enviar_peticion_escritura(uint32_t direccion_fisica, uint32_t tamanio, void* contenido, int socket);
 t_peticion_escritura* deserializar_peticion_escritura(void* buffer);
 void destruir_peticion_escritura(t_peticion_escritura* peticion);
 
-
-#endif // UTILS_CLIENTE_H_
+#endif // DOMINIO_ESTRUCTURAS_H_

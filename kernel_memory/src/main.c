@@ -1,5 +1,6 @@
 #include "main.h"
 
+t_log* logger;
 int main(int argc, char *argv[]) {
     logger = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_DEBUG);
 
@@ -17,7 +18,7 @@ int main(int argc, char *argv[]) {
 
     char *puerto_memory = config_get_string_value(config, "PUERTO_MEMORY");
 
-    int server_fd = iniciar_servidor(puerto_memory);
+    int server_fd = iniciar_servidor(puerto_memory, logger);
     if(server_fd == -1) {
         return EXIT_FAILURE;
     }
@@ -25,7 +26,7 @@ int main(int argc, char *argv[]) {
     log_info(logger, "Kernel Memory listo para recibir clientes en el puerto %s", puerto_memory);
 
     while (1) {
-        int cliente_fd = esperar_cliente(server_fd);
+        int cliente_fd = esperar_cliente(server_fd, logger);
         if(cliente_fd == -1) continue;
 
         t_args_hilo_cliente* args = malloc(sizeof(t_args_hilo_cliente));

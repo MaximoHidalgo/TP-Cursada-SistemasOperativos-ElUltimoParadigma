@@ -1,8 +1,10 @@
 #ifndef CPU_H
 #define CPU_H
 
-#include "utils/utils_client.h"
-#include "utils/utils_server.h"
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
 #include "ciclo_instruccion.h"
 
 #define LOG_LEVEL LOG_LEVEL_INFO

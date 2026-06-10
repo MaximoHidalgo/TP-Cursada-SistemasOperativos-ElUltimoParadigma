@@ -6,8 +6,10 @@
 #include<commons/log.h>
 #include<commons/string.h>
 #include<commons/config.h>
-#include "utils/utils_client.h"
-#include "utils/utils_server.h"
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
 
 typedef struct {
     char* identificador;

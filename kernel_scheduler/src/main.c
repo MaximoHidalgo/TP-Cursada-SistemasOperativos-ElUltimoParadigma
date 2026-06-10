@@ -1,5 +1,6 @@
 #include "main.h"
 
+t_log* logger;
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         printf("Uso: ./bin/kernel_scheduler [Archivo Config] [Path Proceso Inicial]\n");
@@ -29,7 +30,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    int server_fd = iniciar_servidor(puerto_escucha);
+    int server_fd = iniciar_servidor(puerto_escucha, logger);
     if (server_fd == -1) return EXIT_FAILURE;
 
     log_info(logger, "Kernel Scheduler listo para recibir clientes en el puerto %s", puerto_escucha);
@@ -46,7 +47,7 @@ int main(int argc, char* argv[]) {
     planificador_admitir_a_ready(estratega);
 
     while (1) {
-        int cliente_fd = esperar_cliente(server_fd);
+        int cliente_fd = esperar_cliente(server_fd, logger);
         if (cliente_fd == -1) continue;
         
         t_args_hilo_scheduler* args = malloc(sizeof(t_args_hilo_scheduler));

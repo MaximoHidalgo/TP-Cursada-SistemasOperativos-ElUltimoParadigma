@@ -1,8 +1,10 @@
 #ifndef ATENDER_CPU_H_
 #define ATENDER_CPU_H_
 
-#include <utils/utils_server.h>
-#include <utils/utils_client.h>
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>

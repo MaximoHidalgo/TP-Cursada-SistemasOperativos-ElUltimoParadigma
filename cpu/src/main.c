@@ -1,5 +1,6 @@
 #include "main.h"
 
+t_log* logger;
 void manejar_ejecucion_proceso(int pid_recibido, t_conexiones_cpu* conexiones, t_log* logger) {
     log_info(logger, "## PID recibido para ejecutar: %d", pid_recibido);
 

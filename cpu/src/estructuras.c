@@ -57,13 +57,7 @@ char* fetch(t_contexto_ejecucion* contexto, int conexion_memory, t_log* logger){
     //Imprimir el Log mínimo y obligatorio de la cátedra
     log_info(logger, "## PID: %d - FETCH - Program Counter: %d", contexto->pid, contexto->registros.PC);
 
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = FETCH_INSTRUCCION;
-    
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    agregar_a_paquete(paquete, &(contexto->registros.PC), sizeof(uint32_t));
-    enviar_paquete(paquete, conexion_memory);
-    eliminar_paquete(paquete);
+    enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, conexion_memory);
 
     //Quedarnos esperando la respuesta
     int operacion = recibir_operacion(conexion_memory);

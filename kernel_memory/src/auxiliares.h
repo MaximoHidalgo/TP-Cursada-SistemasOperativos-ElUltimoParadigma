@@ -1,10 +1,17 @@
 #ifndef AUXILIARES_H
 #define AUXILIARES_H
 
-#include <utils/utils_client.h>
-#include <utils/utils_server.h>
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
 #include <pthread.h>
 #include <string.h>
+
+#include <commons/string.h>
+#include <commons/log.h>
+
+extern t_log* logger;
 
 typedef struct {
     int pid;

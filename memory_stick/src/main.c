@@ -1,5 +1,6 @@
 #include "main.h"
 
+t_log* logger;
 int main(int argc, char *argv[]) {
     // 1. Inicialización y Validación
     logger = log_create("memory_stick.log", "MEMORY_STICK", true, LOG_LEVEL_INFO);
@@ -62,7 +63,7 @@ int main(int argc, char *argv[]) {
     free(msj_handshake);
 
     // 4. Iniciar servidor para recibir a las CPUs
-    int socket_escucha = iniciar_servidor(puerto_escucha);
+    int socket_escucha = iniciar_servidor(puerto_escucha, logger);
     if (socket_escucha == -1) {
         log_error(logger, "Fallo al iniciar el servidor del Memory Stick en el puerto %s", puerto_escucha);
         close(socket_kernel_memory);
@@ -76,7 +77,7 @@ int main(int argc, char *argv[]) {
 
     // 5. Ciclo principal para atender a las CPUs concurrentemente
     while (1) {
-        int socket_cpu = esperar_cliente(socket_escucha);
+        int socket_cpu = esperar_cliente(socket_escucha, logger);
         if (socket_cpu == -1) {
             log_warning(logger, "Error al aceptar una nueva conexión de CPU");
             continue;

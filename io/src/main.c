@@ -1,5 +1,6 @@
 #include "main.h"
 
+t_log* logger;
 int main(int argc, char* argv[]) {
     if (argc != 3){
         printf("Error en parametros. Uso: ./io [path] [io]\n");
