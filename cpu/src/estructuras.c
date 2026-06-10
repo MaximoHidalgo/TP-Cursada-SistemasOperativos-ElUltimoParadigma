@@ -300,6 +300,46 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         
         desalojar = 1;
     }
+    else if (string_equals_ignore_case(instruccion->identificador, "MEM_ALLOC")) {
+        log_info(ctx->logger, "Atrapada Syscall MEM_ALLOC. Desalojando a Kernel...");
+        
+        contexto->registros.PC++;
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+        
+        t_paquete* paquete = crear_paquete();
+        paquete->codigo_operacion = SYSCALL_MEM_ALLOC;
+        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+        
+        uint32_t id_seg = atoi(instruccion->parametro1);
+        uint32_t tamanio = atoi(instruccion->parametro2);
+        
+        agregar_a_paquete(paquete, &id_seg, sizeof(uint32_t));
+        agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
+        eliminar_paquete(paquete);
+        
+        desalojar = 1;
+    }
+    else if (string_equals_ignore_case(instruccion->identificador, "MEM_FREE")) {
+        log_info(ctx->logger, "Atrapada Syscall MEM_FREE. Desalojando a Kernel...");
+        
+        contexto->registros.PC++;
+        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+        
+        t_paquete* paquete = crear_paquete();
+        paquete->codigo_operacion = SYSCALL_MEM_FREE;
+        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
+        
+        uint32_t id_seg = atoi(instruccion->parametro1);
+        
+        agregar_a_paquete(paquete, &id_seg, sizeof(uint32_t));
+
+        enviar_paquete(paquete, ctx->conexiones->scheduler);
+        eliminar_paquete(paquete);
+        
+        desalojar = 1;
+    }
     else if (string_equals_ignore_case(instruccion->identificador, "EXIT")) {
         log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
         

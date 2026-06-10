@@ -162,6 +162,68 @@ void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_s
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo_syscall) {
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t* pid_ptr = list_get(paquete, 0);
+    uint32_t pid = *pid_ptr;
+
+    // Guard Clause: Validación del proceso actual
+    if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
+        despachar_proceso_a_cpu(ctx, cliente_fd);
+        list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    if (tipo_syscall == SYSCALL_MEM_ALLOC) {
+        uint32_t* id_seg_ptr = list_get(paquete, 1);
+        uint32_t* tamanio_ptr = list_get(paquete, 2);
+        
+        t_paquete* paq_mem = crear_paquete();
+        paq_mem->codigo_operacion = CREAR_SEGMENTO;
+        agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, tamanio_ptr, sizeof(uint32_t));
+        enviar_paquete(paq_mem, ctx->socket_memoria);
+        eliminar_paquete(paq_mem);
+
+        int respuesta = recibir_operacion(ctx->socket_memoria);
+        if (respuesta == MENSAJE) {
+            int size;
+            char* msj = recibir_buffer(&size, ctx->socket_memoria);
+            if (string_equals_ignore_case(msj, "OK")) {
+                devolver_ejecucion_a_cpu(ctx, cliente_fd);
+            } else {
+                log_error(ctx->logger, "Out of memory. Finalizando proceso %d", pid);
+                ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+                planificador_liberar_exec(ctx->estratega, pid);
+                despachar_proceso_a_cpu(ctx, cliente_fd);
+            }
+            free(msj);
+        }
+    } else if (tipo_syscall == SYSCALL_MEM_FREE) {
+        uint32_t* id_seg_ptr = list_get(paquete, 1);
+
+        t_paquete* paq_mem = crear_paquete();
+        paq_mem->codigo_operacion = ELIMINAR_SEGMENTO;
+        agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
+        enviar_paquete(paq_mem, ctx->socket_memoria);
+        eliminar_paquete(paq_mem);
+
+        int respuesta = recibir_operacion(ctx->socket_memoria);
+        if (respuesta == MENSAJE) {
+            int size;
+            char* msj = recibir_buffer(&size, ctx->socket_memoria);
+            if (string_equals_ignore_case(msj, "OK")) {
+                devolver_ejecucion_a_cpu(ctx, cliente_fd);
+            }
+            free(msj);
+        }
+    }
+    
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
 void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     if (ctx->estratega->proceso_exec != NULL) {
@@ -199,6 +261,10 @@ void atender_cliente_scheduler(void* arg) {
             case SYSCALL_MUTEX_LOCK:
             case SYSCALL_MUTEX_UNLOCK:
                 procesar_syscall_mutex(cliente_fd, ctx, mensaje_cliente);
+                break;
+            case SYSCALL_MEM_ALLOC:
+            case SYSCALL_MEM_FREE:
+                procesar_syscall_memoria(cliente_fd, ctx, mensaje_cliente);
                 break;
             case FIN_DE_QUANTUM:
                 procesar_fin_quantum(cliente_fd, ctx);
