@@ -24,7 +24,7 @@ int obtener_tamanio_registro(char* nombre_registro) {
     return 0;
 }
 
-int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
+/* int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
     int num_segmento = floor((double)dir_logica / tam_max_segmento);
     int desplazamiento = dir_logica % tam_max_segmento;
 
@@ -39,13 +39,59 @@ int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, 
         }
     }
 
-    if (!seg) return -1; // SEG FAULT
+    if (!seg) {
+
+
+        
+        return -1;
+    
+    } // SEG FAULT
 
     if (desplazamiento + tam_bytes > seg->tamanio) {
         return -1; // SEG FAULT
     }
 
     *dir_fisica = seg->base + desplazamiento;
+    return 0;
+} */
+
+int mmu_traducir(t_cpu_context* ctx, t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
+    int num_segmento = floor((double)dir_logica / tam_max_segmento);
+    int desplazamiento = dir_logica % tam_max_segmento;
+
+    log_info(ctx->logger, "MMU -> DirLog=%d TamMaxSeg=%d Seg=%d Offset=%d Bytes=%d", dir_logica, tam_max_segmento, num_segmento, desplazamiento, tam_bytes);
+
+    t_segmento* seg = NULL;
+
+    if (contexto->tabla_segmentos != NULL) {
+        for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
+            t_segmento* s = list_get(contexto->tabla_segmentos, i);
+
+            log_info(ctx->logger, "MMU -> Revisando Seg ID=%d Base=%d Tam=%d", s->id, s->base, s->tamanio);
+
+            if (s->id == num_segmento) {
+                seg = s;
+                break;
+            }
+        }
+    }
+
+    if (!seg) {
+        log_error(ctx->logger, "MMU ERROR -> No existe segmento %d para DirLog=%d", num_segmento, dir_logica);
+        return -1;
+    }
+
+    log_info(ctx->logger, "MMU -> Segmento encontrado ID=%d Base=%d Tam=%d", seg->id, seg->base, seg->tamanio);
+
+    if (desplazamiento + tam_bytes > seg->tamanio) {
+        log_error(ctx->logger, "MMU ERROR -> Offset(%d) + Bytes(%d) > TamSegmento(%d)", desplazamiento, tam_bytes, seg->tamanio);
+        return -1;
+    }
+
+    *dir_fisica = seg->base + desplazamiento;
+
+    log_info(ctx->logger, "MMU -> Traduccion OK. DirFisica=%u", *dir_fisica);
+
     return 0;
 }
 
@@ -232,10 +278,19 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
     else if (string_equals_ignore_case(instruccion->identificador, "MOV_IN")) {
         char* reg_datos = instruccion->parametro1;
         int tam = obtener_tamanio_registro(reg_datos);
+
+        log_info(ctx->logger, ">>> DEBUG REGISTROS -> SI=%u DI=%u AX=%u BX=%u CX=%u DX=%u",
+         contexto->registros.SI,
+         contexto->registros.DI,
+         contexto->registros.AX,
+         contexto->registros.BX,
+         contexto->registros.CX,
+         contexto->registros.DX);
+
         uint32_t dir_logica = contexto->registros.SI;
         uint32_t dir_fisica = 0;
 
-        if (mmu_traducir(contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
+        if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
             log_error(ctx->logger, "Segmentation Fault accediendo a dir logica %d", dir_logica);
             enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
             t_paquete* paq = crear_paquete();
@@ -262,7 +317,7 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         uint32_t dir_logica = contexto->registros.DI;
         uint32_t dir_fisica = 0;
 
-        if (mmu_traducir(contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
+        if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
             log_error(ctx->logger, "Segmentation Fault escribiendo a dir logica %d", dir_logica);
             enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
             t_paquete* paq = crear_paquete();
@@ -283,8 +338,8 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         uint32_t dir_fisica_si = 0;
         uint32_t dir_fisica_di = 0;
 
-        if (mmu_traducir(contexto, dir_logica_si, tam, ctx->tam_max_segmento, &dir_fisica_si) == -1 || 
-            mmu_traducir(contexto, dir_logica_di, tam, ctx->tam_max_segmento, &dir_fisica_di) == -1) {
+        if (mmu_traducir(ctx, contexto, dir_logica_si, tam, ctx->tam_max_segmento, &dir_fisica_si) == -1 || 
+            mmu_traducir(ctx, contexto, dir_logica_di, tam, ctx->tam_max_segmento, &dir_fisica_di) == -1) {
             log_error(ctx->logger, "Segmentation Fault en COPY_MEM");
             enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
             t_paquete* paq = crear_paquete();
@@ -354,7 +409,7 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         else if (string_equals_ignore_case(reg2, "DI")) tamanio = contexto->registros.DI;
 
         uint32_t dir_fisica = 0;
-        if (mmu_traducir(contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
+        if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
             log_error(ctx->logger, "Segmentation Fault en STDOUT logica %d", dir_logica);
             t_paquete* paq = crear_paquete();
             paq->codigo_operacion = SYSCALL_SEG_FAULT;
@@ -404,7 +459,7 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
         else if (string_equals_ignore_case(reg2, "DI")) tamanio = contexto->registros.DI;
         
         uint32_t dir_fisica = 0;
-        if (mmu_traducir(contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
+        if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
             log_error(ctx->logger, "Segmentation Fault en STDIN logica %d", dir_logica);
             t_paquete* paq = crear_paquete();
             paq->codigo_operacion = SYSCALL_SEG_FAULT;
@@ -582,6 +637,10 @@ void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_regis
         contexto->registros.DX = (uint8_t)valor;
     } else if (string_equals_ignore_case(nombre_registro, "EDX")) {
         contexto->registros.EDX = valor;
+    } else if (string_equals_ignore_case(nombre_registro, "SI")) {
+        contexto->registros.SI = valor;
+    } else if (string_equals_ignore_case(nombre_registro, "DI")) {
+        contexto->registros.DI = valor;
     }
 }
 
