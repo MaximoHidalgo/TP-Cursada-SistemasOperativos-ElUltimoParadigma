@@ -177,6 +177,10 @@ void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_regis
         contexto->registros.DX = (uint8_t)valor;
     } else if (string_equals_ignore_case(nombre_registro, "EDX")) {
         contexto->registros.EDX = valor;
+    } else if (string_equals_ignore_case(nombre_registro, "SI")) {
+        contexto->registros.SI = valor;
+    } else if (string_equals_ignore_case(nombre_registro, "DI")) {
+        contexto->registros.DI = valor;
     }
 }
 
@@ -190,7 +194,11 @@ int chequear_interrupciones(t_cpu_context* ctx) {
         int operacion = recibir_operacion(ctx->conexiones->scheduler);
         
         if (operacion == INTERRUPCION_QUANTUM) { 
-            // (Acá podés recibir el buffer si el Scheduler te mandó un payload adicional)
+            // Consumimos el payload del paquete para no dejar basura en el buffer del socket
+            int size;
+            void* buffer = recibir_buffer(&size, ctx->conexiones->scheduler);
+            free(buffer);
+
             log_info(ctx->logger, "## Interrupción recibida");
             return 1;
         } else {

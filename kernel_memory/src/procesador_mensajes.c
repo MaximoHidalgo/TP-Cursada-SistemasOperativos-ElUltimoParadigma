@@ -380,6 +380,12 @@ void atender_cliente(void *arg) {
             case ACTUALIZACION_CONTEXTO:
                 procesar_actualizacion_contexto_handler(cliente_fd, ctx);
                 break;
+            case SUSPENDER_PROCESO:
+                procesar_suspender_proceso(cliente_fd, ctx);
+                break;
+            case DESUSPENDER_PROCESO:
+                procesar_desuspender_proceso(cliente_fd, ctx);
+                break;
             case FETCH_INSTRUCCION:
                 procesar_fetch_instruccion_handler(cliente_fd, ctx);
                 break;

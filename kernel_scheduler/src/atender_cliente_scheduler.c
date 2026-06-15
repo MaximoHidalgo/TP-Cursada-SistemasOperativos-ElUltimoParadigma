@@ -12,6 +12,7 @@ void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
         eliminar_paquete(paquete_pid);
         
         log_info(ctx->logger, "Se envió el PID %d a la CPU para ejecutar", proceso_a_ejecutar->pid);
+        planificador_iniciar_quantum_si_corresponde(ctx->estratega, proceso_a_ejecutar, socket_cpu);
     } else {
         log_info(ctx->logger, "No hay procesos en la cola READY para despachar a la CPU.");
     }

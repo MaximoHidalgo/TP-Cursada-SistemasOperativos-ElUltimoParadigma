@@ -363,6 +363,18 @@ int instr_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu
 }
 
 int instr_noop(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    // No-op: no hace nada, el PC se incrementa normalmente en el ciclo
+    int repeticiones = 1;
+    if (instruccion->parametro1 != NULL) {
+        repeticiones = atoi(instruccion->parametro1);
+    }
+    
+    usleep(1000 * 100); // 100ms provisorio, podés ajustarlo al RETARDO_INSTRUCCION si luego lo agregás al config
+    
+    for (int i = 1; i < repeticiones; i++) {
+        // Simulamos la ejecución reiterada
+        log_info(ctx->logger, "## PID: %d - Ejecutando: NOOP -   ", contexto->pid);
+        usleep(1000 * 100); // 100ms de retardo por cada repetición simulada
+    }
+    
     return 0;
 }
