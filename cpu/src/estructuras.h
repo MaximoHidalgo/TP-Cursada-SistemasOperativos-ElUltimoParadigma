@@ -41,4 +41,7 @@ int mmu_traducir(t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, 
 void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio);
 void escribir_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer);
 
+uint32_t leer_registro(t_contexto_ejecucion* contexto, char* nombre_registro);
+int obtener_tamanio_registro(char* nombre_registro);
+
 #endif //ESTRUCTURAS_H_
