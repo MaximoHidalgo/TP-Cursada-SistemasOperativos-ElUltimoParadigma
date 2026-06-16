@@ -1,10 +1,18 @@
 .PHONY: all run stop clean fueraLogs debug release
 
 # Argumentos definidos para la prueba
-PATH_PSEUDOCODIGO = prueba_rr.txt
+PATH_PSEUDOCODIGO = PLANI_PRE_0.prc
 ID_CPU = CPU_1
 TAM_STICK = 1024
 TIPO_IO = IO_STDIN
+
+# Archivos de configuración a utilizar (relativos a la carpeta configs/ de cada módulo)
+CONFIG_SCHEDULER = scheduler.config
+CONFIG_MEMORY = kernelMemory.config
+CONFIG_SWAP = swap.config
+CONFIG_STICK = memory_stick.config
+CONFIG_CPU = cpu.config
+CONFIG_IO = io.config
 
 # Variable con el comando para abrir una nueva terminal.
 # Usamos xterm con -hold para que la ventana NO se cierre si el módulo crashea.
@@ -23,23 +31,23 @@ all:
 # Regla para levantar todo en terminales separadas
 run:
 	@echo "1. Levantando Kernel Memory..."
-	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./kernelMemory.config" &
+	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./configs/$(CONFIG_MEMORY)" &
 	sleep 2
 
 	@echo "2. Levantando Kernel Scheduler..."
-	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./scheduler.config $(PATH_PSEUDOCODIGO)" &
+	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/$(CONFIG_SCHEDULER) $(PATH_PSEUDOCODIGO)" &
 	sleep 2
 
 	@echo "3. Levantando SWAP y Memory Stick..."
-	$(TERMINAL) "cd swap && ./bin/swap ./swap.config" &
-	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./memory_stick.config $(TAM_STICK)" &
+	$(TERMINAL) "cd swap && ./bin/swap ./configs/$(CONFIG_SWAP)" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/$(CONFIG_STICK) $(TAM_STICK)" &
 	sleep 1
 
 	@echo "4. Levantando Clientes (CPU e IO)..."
-	$(TERMINAL) "cd cpu && ./bin/cpu ./cpu.config $(ID_CPU)" &
-	$(TERMINAL) "cd io && ./bin/io ./io.config STDIN" &
-	$(TERMINAL) "cd io && ./bin/io ./io.config STDOUT" &
-	$(TERMINAL) "cd io && ./bin/io ./io.config SLEEP" &
+	$(TERMINAL) "cd cpu && ./bin/cpu ./configs/$(CONFIG_CPU) $(ID_CPU)" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/$(CONFIG_IO) STDIN" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/$(CONFIG_IO) STDOUT" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/$(CONFIG_IO) SLEEP" &
 
 	@echo "¡Se abrieron 6 terminales independientes!"
 
