@@ -74,7 +74,7 @@ test: $(TEST)
 
 .PHONY: clean
 clean:
-	-rm -rfv $(dir $(TEST) $(OBJS) $(OUT))
+	-rm -rfv $(dir $(TEST) $(OBJS) $(OUT)) obj/
 	-for dir in $(SHARED_LIBPATHS) $(STATIC_LIBPATHS); do $(MAKE) -C $$dir clean; done
 
 $(OUT): $(OBJS) | $(dir $(OUT))
