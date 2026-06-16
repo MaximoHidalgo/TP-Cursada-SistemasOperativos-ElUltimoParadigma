@@ -7,6 +7,11 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
 
         /* 1. FETCH */ 
         char* instruccion_texto = fetch(contexto, ctx);
+        
+        if (instruccion_texto == NULL) {
+            log_error(ctx->logger, "Fetch falló (probablemente Memoria se desconectó). Desalojando PID %d.", contexto->pid);
+            break;
+        }
 
         /* 2. DECODE */
         t_instruccion* instruccion_decodificada = decode(instruccion_texto);
