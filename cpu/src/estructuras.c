@@ -177,10 +177,6 @@ void asignar_valor_a_registro(t_contexto_ejecucion* contexto, char* nombre_regis
         contexto->registros.DX = (uint8_t)valor;
     } else if (string_equals_ignore_case(nombre_registro, "EDX")) {
         contexto->registros.EDX = valor;
-    } else if (string_equals_ignore_case(nombre_registro, "SI")) {
-        contexto->registros.SI = valor;
-    } else if (string_equals_ignore_case(nombre_registro, "DI")) {
-        contexto->registros.DI = valor;
     }
 }
 
