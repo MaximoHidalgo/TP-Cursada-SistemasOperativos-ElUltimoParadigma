@@ -77,6 +77,7 @@ release: $(OUT)
 .PHONY: test
 test: CFLAGS = $(CDEBUG)
 test: $(TEST)
+	./$(TEST)
 
 .PHONY: clean
 clean:
