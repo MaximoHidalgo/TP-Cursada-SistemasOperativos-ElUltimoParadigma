@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE //para evitar el warning de usleep
 #include "planificador.h"
 #include "rr.h"
 
