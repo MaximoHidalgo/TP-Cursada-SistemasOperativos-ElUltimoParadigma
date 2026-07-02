@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <assert.h>
+#include <assert.h> //assert
 #include <stdlib.h>
 #include "../src/colas.h"
 #include "../src/pcb.h"
@@ -25,8 +25,8 @@ void test_extremo_encolado_prioridades() {
     
     // 2. Act: Encolamos
     assert(encolar_en_cola_ready(colas, &p_alta) == true);
-    assert(encolar_en_cola_ready(colas, &p_baja) == true);
-    assert(encolar_en_cola_ready(colas, &p_invalida) == false);
+    assert(encolar_en_cola_ready(colas, &p_baja) == true); 
+    assert(encolar_en_cola_ready(colas, &p_invalida) == false); 
     
     // 3. Assert: Validamos que respetan su nivel
     assert(queue_size(cola_alta->procesos) == 1);

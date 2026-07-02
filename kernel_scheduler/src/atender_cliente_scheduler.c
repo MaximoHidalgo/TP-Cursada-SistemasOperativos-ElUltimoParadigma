@@ -366,7 +366,7 @@ void atender_cliente_scheduler(void* arg) {
     int cliente_fd = args->cliente_fd;
     t_scheduler_context* ctx = args->ctx;
     free(args);
-
+    //modularizar segun caso en otra funcion
     while (1) {
         int mensaje_cliente = recibir_operacion(cliente_fd);
         
