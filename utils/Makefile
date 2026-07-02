@@ -1,94 +1,78 @@
 include settings.mk
 
 ################################################################################
-
-outname = lib/lib$(1).a
-
-define compile_out
-	$(AR) $(ARFLAGS) "$@" $^
-endef
-
-define compile_objs
-	$(CC) $(CFLAGS) -fPIC -c -o "$@" $< $(IDIRS:%=-I%)
-endef
-
+# CONFIG
 ################################################################################
 
-# Project name
-NAME=$(shell pwd | xargs -I{} basename "{}")
+CC = gcc
+AR = ar
+ARFLAGS = rcs
+MAKE = make --no-print-directory
 
-# Set compiler and archiver options
-CC=gcc
-AR=ar
-ARFLAGS=rcs
-MAKE=make --no-print-directory
+NAME = utils
 
-# Set prerrequisites
-SRCS_C += $(shell find src -iname "*.c")
-SRCS_H += $(shell find src -iname "*.h")
-DEPS = $(foreach SHL,$(SHARED_LIBPATHS),$(SHL:%=%/lib/lib$(notdir $(SHL)).so)) \
-	$(foreach STL,$(STATIC_LIBPATHS),$(STL:%=%/lib/lib$(notdir $(STL)).a))
+################################################################################
+# SOURCES
+################################################################################
 
-# Set header paths to (-I)nclude
-IDIRS += $(addsuffix /src,$(SHARED_LIBPATHS) $(STATIC_LIBPATHS) .) /usr/local/include
+SRCS_C := $(shell find src -iname "*.c")
+SRCS_H := $(shell find src -iname "*.h")
 
-# Set library paths to (-L)ook
-LIBDIRS = $(addsuffix /lib,$(SHARED_LIBPATHS) $(STATIC_LIBPATHS)) /usr/local/lib
+OBJS := $(patsubst src/%.c,obj/%.o,$(SRCS_C))
 
-# Set shared library paths to be found in runtime (-rpath)
-RUNDIRS = $(SHARED_LIBPATHS:%=$(shell pwd)/%/lib)
+################################################################################
+# OUTPUT
+################################################################################
 
-# Set intermediate objects
-OBJS = $(patsubst src/%.c,obj/%.o,$(SRCS_C))
+OUT = bin/lib$(NAME).a
 
-# Set output
-OUT = $(call outname,$(NAME))
+################################################################################
+# DIRECTORIOS DE OBJETOS 
+################################################################################
 
-# Set test folder
-TESTS_DIR=tests
+OBJDIRS := $(sort $(dir $(OBJS)))
 
-# Set test prerrequisites
-TESTS_C += $(shell find $(TESTS_DIR)/ -iname "*.c" 2> /dev/null)
-TESTS_H += $(shell find $(TESTS_DIR)/ -iname "*.h" 2> /dev/null)
+################################################################################
+# FLAGS
+################################################################################
 
-# Set test intermediate objects
-TEST_OBJS = $(filter-out $(TEST_EXCLUDE), $(TESTS_C)) $(patsubst src/%.c,obj/%.o,$(filter-out $(TEST_EXCLUDE), $(SRCS_C)))
+CFLAGS ?= -g -Wall -DDEBUG
 
-# Set test binary targets
-TEST = bin/$(NAME)_tests
+################################################################################
+# TARGETS
+################################################################################
 
-.PHONY: all
-all: debug
+.PHONY: all clean
 
-.PHONY: debug
-debug: CFLAGS = $(CDEBUG)
-debug: $(OUT)
+all: $(OUT)
 
-.PHONY: release
-release: CFLAGS = $(CRELEASE)
-release: $(OUT)
+################################################################################
+# BUILD LIB
+################################################################################
 
-.PHONY: test
-test: CFLAGS = $(CDEBUG)
-test: $(TEST)
+$(OUT): $(OBJS) | bin obj $(OBJDIRS)
+	$(AR) $(ARFLAGS) $@ $^
 
-.PHONY: clean
+################################################################################
+# COMPILACIÓN DE OBJETOS 
+################################################################################
+
+obj/%.o: src/%.c | $(OBJDIRS)
+	$(CC) $(CFLAGS) -c -o $@ $< -I./src
+
+################################################################################
+# CREACIÓN DE CARPETAS 
+################################################################################
+
+bin obj:
+	mkdir -p bin obj
+
+$(OBJDIRS):
+	mkdir -p $@
+
+################################################################################
+# CLEAN
+################################################################################
+
 clean:
-	-rm -rfv $(dir $(TEST) $(OBJS) $(OUT)) obj/
-	-for dir in $(SHARED_LIBPATHS) $(STATIC_LIBPATHS); do $(MAKE) -C $$dir clean; done
-
-$(OUT): $(OBJS) | $(dir $(OUT))
-	$(call compile_out)
-
-$(TEST): $(TEST_OBJS) $(DEPS) | $(dir $(TEST))
-	$(CC) $(CFLAGS) -o "$@" $^ $(IDIRS:%=-I%) $(LIBDIRS:%=-L%) $(RUNDIRS:%=-Wl,-rpath,%) $(LIBS:%=-l%) -lcspecs
-
-obj/%.o: src/%.c $(SRCS_H) $(DEPS) | $(dir $(OBJS))
-	$(call compile_objs)
-
-.SECONDEXPANSION:
-$(DEPS): $$(shell find $$(patsubst %lib/,%src/,$$(dir $$@)) -iname "*.c" -or -iname "*.h")
-	$(MAKE) -C $(patsubst %lib/,%,$(dir $@)) 3>&1 1>&2 2>&3 | sed -E 's,(src/)[^ ]+\.(c|h)\:,$(patsubst %lib/,%,$(dir $@))&,' 3>&2 2>&1 1>&3
-
-$(sort $(dir $(OUT) $(OBJS))):
-	mkdir -pv $@
+	rm -rf bin obj
