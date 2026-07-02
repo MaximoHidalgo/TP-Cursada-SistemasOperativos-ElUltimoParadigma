@@ -4,6 +4,7 @@
 void test_atender_cliente();
 void test_pcb_traduccion_estados();
 void test_extremo_encolado_prioridades();
+void test_inicializacion_de_planificador();
 void test_extremo_logica_desalojo();
 void test_herencia_de_prioridades_mutex();
 
@@ -20,6 +21,9 @@ int main() {
     
     // Llamadas a test_colas.c
     test_extremo_encolado_prioridades();
+
+    // Llamadas a test_main.c
+    test_inicializacion_de_planificador();
     
     // Llamadas a test_planificador.c
     test_extremo_logica_desalojo();
