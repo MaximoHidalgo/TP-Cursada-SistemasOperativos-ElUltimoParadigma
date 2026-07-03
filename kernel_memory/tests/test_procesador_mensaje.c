@@ -12,5 +12,5 @@ void test_procesador_mensaje() {
     //const char* nombre_invalido = planificador_nombre_estado(999);
     //assert(strcmp(nombre_invalido, "DESCONOCIDO") == 0);
     
-    printf(";) test_procesador_de_mensajes: PASO\n");
+    printf("BRAVO test_procesador_de_mensajes: PASO\n");
 }
