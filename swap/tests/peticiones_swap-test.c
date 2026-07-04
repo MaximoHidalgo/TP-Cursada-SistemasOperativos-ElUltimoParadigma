@@ -1,4 +1,4 @@
-#include "../peticiones_swap.h"
+#include "../src/peticiones_swap.h"
 #include "assert.h"
 
 #define BLOCK_SIZE 16
@@ -31,11 +31,7 @@ void test_escribir_primer_bloque()
 
     char esperado[BLOCK_SIZE] = "Hola";
 
-    escribir_bloque_swap(
-        archivo,
-        0,
-        BLOCK_SIZE,
-        esperado);
+    escribir_bloque_swap(archivo,0,BLOCK_SIZE,esperado);
 
     char obtenido[BLOCK_SIZE];
 
@@ -58,11 +54,7 @@ void test_escribir_bloque_intermedio()
 
     char esperado[BLOCK_SIZE] = "UTNSO";
 
-    escribir_bloque_swap(
-        archivo,
-        5,
-        BLOCK_SIZE,
-        esperado);
+    escribir_bloque_swap(archivo,5,BLOCK_SIZE,esperado);
 
     char obtenido[BLOCK_SIZE];
 
@@ -86,17 +78,9 @@ void test_sobrescribir_bloque()
     char primer[BLOCK_SIZE] = "AAAA";
     char segundo[BLOCK_SIZE] = "BBBB";
 
-    escribir_bloque_swap(
-        archivo,
-        2,
-        BLOCK_SIZE,
-        primer);
+    escribir_bloque_swap(archivo, 2,BLOCK_SIZE,primer);
 
-    escribir_bloque_swap(
-        archivo,
-        2,
-        BLOCK_SIZE,
-        segundo);
+    escribir_bloque_swap(archivo,2,BLOCK_SIZE,segundo);
 
     char obtenido[BLOCK_SIZE];
 
@@ -127,11 +111,7 @@ void test_leer_bloque()
 
     char obtenido[BLOCK_SIZE];
 
-    leer_bloque_swap(
-        archivo,
-        3,
-        BLOCK_SIZE,
-        obtenido);
+    leer_bloque_swap(archivo,3,BLOCK_SIZE,obtenido);
 
     assert(memcmp(esperado, obtenido, BLOCK_SIZE) == 0);
 
