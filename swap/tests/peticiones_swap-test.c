@@ -1,6 +1,7 @@
 #include "../src/peticiones_swap.h"
 #include "assert.h"
 
+
 #define BLOCK_SIZE 16
 
 
@@ -41,7 +42,7 @@ void test_escribir_primer_bloque()
     assert(memcmp(esperado, obtenido, BLOCK_SIZE) == 0);
 
     destruir_archivo_test(archivo);
-    printf("Test de escritura en PRIMER BLOQUE pasado correctamente\n");
+    printf("test_escribir_primer_bloque PASO\n");
 }
 
 /*=====================================================
@@ -64,7 +65,7 @@ void test_escribir_bloque_intermedio()
     assert(memcmp(esperado, obtenido, BLOCK_SIZE) == 0);
 
     destruir_archivo_test(archivo);
-    printf("Test de escritura en BLOQUE INTERMEDIO pasado correctamente\n");
+    printf("test_escribir_bloque_intermedio PASO\n");
 }
 
 /*=====================================================
@@ -90,7 +91,7 @@ void test_sobrescribir_bloque()
     assert(memcmp(segundo, obtenido, BLOCK_SIZE) == 0);
 
     destruir_archivo_test(archivo);
-    printf("Test de escritura para SOBRESCRIBIR BLOQUE pasado correctamente\n");
+    printf("test_sobrescribir_bloque PASO\n");
 }
 
 /*=====================================================
@@ -103,11 +104,7 @@ void test_leer_bloque()
 
     char esperado[BLOCK_SIZE] = "Memoria";
 
-    escribir_bloque_swap(
-        archivo,
-        3,
-        BLOCK_SIZE,
-        esperado);
+    escribir_bloque_swap(archivo,3,BLOCK_SIZE,esperado);
 
     char obtenido[BLOCK_SIZE];
 
@@ -116,7 +113,7 @@ void test_leer_bloque()
     assert(memcmp(esperado, obtenido, BLOCK_SIZE) == 0);
 
     destruir_archivo_test(archivo);
-    printf("Test de lectura de BLOQUE UNICO pasado correctamente\n");
+    printf("test_leer_bloque PASO\n");
 }
 
 /*=====================================================
@@ -147,16 +144,5 @@ void test_leer_varios_bloques()
     assert(memcmp(bloque2, lectura, BLOCK_SIZE) == 0);
 
     destruir_archivo_test(archivo);
-    printf("Test de lectura de VARIOS BLOQUES pasado correctamente\n");
-}
-int main() {
-
-    test_escribir_primer_bloque();
-    test_escribir_bloque_intermedio();
-    test_sobrescribir_bloque();
-    test_leer_bloque();
-    test_leer_varios_bloques();
-    
-    printf("Tests de peticiones_swap pasados correctamente\n");
-    return 0;
+    printf("test_leer_varios_bloques PASO\n");
 }
