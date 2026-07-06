@@ -26,6 +26,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
         nuevo_hueco->base = ctx->memoria_total;
         nuevo_hueco->limite = ctx->memoria_total + stick_size;
         list_add(ctx->huecos_libres, nuevo_hueco);
+        combinar_huecos_libres(ctx->huecos_libres);
         
         ctx->memoria_total += stick_size;
         log_info(ctx->logger, "## Memory Stick de %d bytes Conectada en %s:%d. Memoria total: %d", stick_size, stick_ip, stick_puerto, ctx->memoria_total);
@@ -40,7 +41,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
         log_info(ctx->logger, "## CPU %s Conectada", mensaje);
         
-        // Enviar tabla de memory sticks a la CPU
+        // Enviar lista de memory sticks a la CPU
         pthread_mutex_lock(&ctx->mutex_memoria);
         t_paquete* paq = crear_paquete();
         paq->codigo_operacion = ENVIO_TABLA_STICKS; // Requiere opcode nuevo, o enviarlo como mensaje. Mejor opcode

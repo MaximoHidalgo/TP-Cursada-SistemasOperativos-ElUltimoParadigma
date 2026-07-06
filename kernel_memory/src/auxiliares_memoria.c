@@ -26,6 +26,27 @@ t_hueco_libre* buscar_hueco_libre(t_memory_context* ctx, uint32_t tamanio) {
     return hueco_elegido;
 }
 
+void combinar_huecos_libres(t_list* huecos_libres){
+    if(list_size(huecos_libres)>1){
+        for (int i = 0; i < list_size(huecos_libres); i++)
+        {
+            t_hueco_libre* hueco = list_get(huecos_libres, i);
+            for (int j = 0; j < list_size(huecos_libres); j++)
+            {
+                if(j!=i){
+                    t_hueco_libre* hueco2 = list_get(huecos_libres, j);
+                    if(hueco->limite == hueco2->base){
+                        t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
+                        nuevo_hueco->base = hueco->base;
+                        nuevo_hueco->limite = hueco2->limite;
+                        list_add(huecos_libres, nuevo_hueco);
+                    }
+                }
+            }
+        }
+    }
+}
+
 t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio, int* needs_compaction) {
     if (tamanio > ctx->segment_max_size) {
         log_error(ctx->logger, "Tamanio solicitado %d mayor a SEGMENT_MAX_SIZE %d", tamanio, ctx->segment_max_size);
