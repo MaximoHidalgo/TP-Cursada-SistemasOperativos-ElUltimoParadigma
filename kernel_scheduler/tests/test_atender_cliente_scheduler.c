@@ -1,61 +1,41 @@
 #include <stdio.h>
-#include <assert.h> //assert
+#include <assert.h>
 #include <stdlib.h>
-#include "../src/colas.h"
-#include "../src/pcb.h"
 #include "../src/atender_cliente_scheduler.h"
 
+static t_scheduler_context* crear_contexto_test(void)
+{
+    t_scheduler_context* ctx = calloc(1, sizeof(*ctx));
+    assert(ctx != NULL);
+    ctx->logger = log_create("/tmp/kernel_scheduler_test.log","TEST",false,LOG_LEVEL_INFO);
+    assert(ctx->logger != NULL);
+    return ctx;
+}
+
+static void destruir_contexto_test(t_scheduler_context* ctx)
+{
+    log_destroy(ctx->logger);
+    free(ctx);
+}
+
+static void verificar(const char* nombre, int resultado, int esperado)
+{
+    printf("[TEST] %s... ", nombre);
+    assert(resultado == esperado);
+    printf("OK\n");
+}
+
 void test_atender_cliente() {
-    t_args_hilo_scheduler arg;
-    arg.cliente_fd = 42;
+    t_scheduler_context* ctx = crear_contexto_test();
+    assert(ctx != NULL);
 
-    arg.ctx = calloc(1, sizeof(t_scheduler_context));
-    assert(arg.ctx != NULL);
+    // La nueva lógica centraliza el despacho en atenderRespuesta.
+    // Para un cliente desconectado o un opcode inválido, debe terminar el procesamiento.
+    verificar("Cliente desconectado", atenderRespuesta(-1, ctx, -1),-1);
+    verificar("Opcode fuera de rango (256)", atenderRespuesta(-1, ctx, 256),-1);
+    verificar("Opcode muy fuera de rango (999)", atenderRespuesta(-1, ctx, 999), -1);
+    verificar("Opcode no mapeado (254)", atenderRespuesta(-1, ctx, 254), -1);
 
-    arg.ctx->logger = log_create("/tmp/kernel_scheduler_test.log", "TEST", false, LOG_LEVEL_INFO);
-    assert(arg.ctx->logger != NULL);
-
-    arg.ctx->config = config_create("configs/scheduler.config");
-    assert(arg.ctx->config != NULL);
-
-    arg.ctx->estratega = calloc(1, sizeof(t_estratega_planificacion));
-    assert(arg.ctx->estratega != NULL);
-
-    arg.ctx->estratega->logger = arg.ctx->logger;
-    arg.ctx->estratega->cola_new = queue_create();
-    arg.ctx->estratega->colas = list_create();
-    arg.ctx->estratega->quantum_rr = 3;
-    arg.ctx->estratega->socket_cpu = -1;
-    arg.ctx->estratega->socket_memoria = -1;
-    pthread_mutex_init(&arg.ctx->estratega->mutex_colas, NULL);
-
-    t_cola_planificacion* cola_alta = calloc(1, sizeof(t_cola_planificacion));
-    cola_alta->nivel = 0;
-    cola_alta->algoritmo = ALGORITMO_COLA_FIFO;
-    cola_alta->procesos = queue_create();
-    list_add(arg.ctx->estratega->colas, cola_alta);
-
-    t_cola_planificacion* cola_baja = calloc(1, sizeof(t_cola_planificacion));
-    cola_baja->nivel = 1;
-    cola_baja->algoritmo = ALGORITMO_COLA_RR;
-    cola_baja->quantum = 3;
-    cola_baja->procesos = queue_create();
-    list_add(arg.ctx->estratega->colas, cola_baja);
-
-    assert(arg.cliente_fd == 42);
-    assert(arg.ctx->estratega->quantum_rr == 3);
-
-    queue_destroy(cola_alta->procesos);
-    free(cola_alta);
-    queue_destroy(cola_baja->procesos);
-    free(cola_baja);
-    list_destroy(arg.ctx->estratega->colas);
-    queue_destroy(arg.ctx->estratega->cola_new);
-    pthread_mutex_destroy(&arg.ctx->estratega->mutex_colas);
-    free(arg.ctx->estratega);
-    config_destroy(arg.ctx->config);
-    log_destroy(arg.ctx->logger);
-    free(arg.ctx);
-
+    destruir_contexto_test(ctx);
     printf("✅ test_atender_cliente: PASO\n");
 }

@@ -1,0 +1,221 @@
+--------
+nombre archivo: io/src/main.c
+codigo:
+#include "main.h"
+
+t_io_context* iniciar_contexto(int argc, char* argv[]) {
+    if (argc != 3){
+        printf("Error en parametros. Uso: ./io <path_config> <nombre_io>\n");
+        return NULL;
+    }
+
+    t_io_context* ctx = malloc(sizeof(t_io_context));
+    if (ctx == NULL) return NULL;
+
+    ctx->io_name = strdup(argv[2]);
+    ctx->config = config_create(argv[1]);
+    
+    if (ctx->config == NULL){
+        printf("No se pudo leer el archivo de config del modulo IO (%s)\n", argv[1]);
+        free(ctx->io_name);
+        free(ctx);
+        return NULL;
+    }
+
+    char* ipKernel = config_get_string_value(ctx->config, "IP_SCHEDULER");
+    char* puertoKernel = config_get_string_value(ctx->config, "PUERTO_SCHEDULER");
+    char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
+    
+    t_log_level nivelLog = log_level_from_string(log_level_str);
+    ctx->logger = log_create("io.log", ctx->io_name, true, nivelLog);
+
+    if (ctx->logger == NULL){
+        printf("No se pudo crear el logger en modulo IO\n");
+        config_destroy(ctx->config);
+        free(ctx->io_name);
+        free(ctx);
+        return NULL;
+    }
+
+    ctx->socket_scheduler = crear_conexion(ipKernel, puertoKernel);
+
+    if(ctx->socket_scheduler == -1){
+        log_error(ctx->logger, "No se pudo establecer conexion con el Kernel Scheduler\n");
+        log_destroy(ctx->logger);
+        config_destroy(ctx->config);
+        free(ctx->io_name);
+        free(ctx);
+        return NULL;
+    }
+
+    log_info(ctx->logger, "## Conectado a Kernel Scheduler");
+    enviar_mensaje(ctx->io_name, ctx->socket_scheduler);
+    log_info(ctx->logger, "Interfaz %s lista.", ctx->io_name);
+    
+    return ctx;
+}
+
+void limpiar_contexto(t_io_context* ctx) {
+    if (ctx == NULL) return;
+    
+    if (ctx->socket_scheduler != -1) {
+        liberar_conexion(ctx->socket_scheduler);
+    }
+    if (ctx->logger) log_destroy(ctx->logger);
+    if (ctx->config) config_destroy(ctx->config);
+    if (ctx->io_name) free(ctx->io_name);
+    
+    free(ctx);
+}
+
+int main(int argc, char* argv[]) {
+    t_io_context* ctx = iniciar_contexto(argc, argv);
+    if (ctx == NULL) {
+        return EXIT_FAILURE;
+    }
+
+    while (1) {
+        int cod_op = recibir_operacion(ctx->socket_scheduler);
+        
+        switch(cod_op) {
+            case PETICION_IO:
+                procesar_peticion_io(ctx);
+                break;
+            case -1:
+                log_error(ctx->logger, "Se desconectó el Kernel Scheduler.");
+                limpiar_contexto(ctx);
+                return EXIT_FAILURE;
+            default:
+                log_warning(ctx->logger, "Operación desconocida: %d", cod_op);
+                break;
+        }
+    }
+
+    limpiar_contexto(ctx);
+    return 0;
+}
+
+
+--------
+nombre archivo: io/src/peticiones_io.c
+codigo:
+#include "peticiones_io.h"
+
+void ejecutar_stdin(t_io_context* ctx, int pid) {
+    int cantidad_a_leer = recibir_int(ctx->socket_scheduler);
+    
+    log_info(ctx->logger, "## PID: %d - Ingrese %d caracteres:", pid, cantidad_a_leer);
+    
+    char* leido = readline("> ");
+    char* texto_final = malloc(cantidad_a_leer + 1);
+
+    int len_leido = strlen(leido);
+    for (int i = 0; i < cantidad_a_leer; i++) {
+        if (i < len_leido) {
+            texto_final[i] = leido[i];
+        } else {
+            texto_final[i] = '\0';
+        }
+    }
+    texto_final[cantidad_a_leer] = '\0';
+
+    log_info(ctx->logger, "## Texto leido: %s", texto_final);
+
+    // Enviar el texto leido al Kernel Scheduler
+    enviar_mensaje(texto_final, ctx->socket_scheduler);
+
+    free(leido);
+    free(texto_final);
+}
+
+void ejecutar_stdout(t_io_context* ctx, int pid) {
+    char* texto = recibir_string(ctx->socket_scheduler);
+    
+    log_info(ctx->logger, "## PID: %d - %s", pid, texto);
+    
+    free(texto);
+}
+
+void ejecutar_sleep(t_io_context* ctx, int pid) {
+    int milisegundos = recibir_int(ctx->socket_scheduler); 
+
+    log_info(ctx->logger, "## PID: %d - Haciendo sleep por %d milisegundos.", pid, milisegundos);
+    
+    usleep(milisegundos * 1000);
+}
+
+void procesar_peticion_io(t_io_context* ctx) {
+    int pid = recibir_int(ctx->socket_scheduler); 
+    
+    log_info(ctx->logger, "## PID: %d - Inicio de IO", pid);
+
+    if (string_equals_ignore_case(ctx->io_name, "SLEEP")) {
+        ejecutar_sleep(ctx, pid);
+        enviar_mensaje(MSG_OK, ctx->socket_scheduler);
+    } 
+    else if (string_equals_ignore_case(ctx->io_name, "STDOUT")) {
+        ejecutar_stdout(ctx, pid);
+        enviar_mensaje(MSG_OK, ctx->socket_scheduler);
+    } 
+    else if (string_equals_ignore_case(ctx->io_name, "STDIN")) {
+        ejecutar_stdin(ctx, pid);
+        // STDIN ya envía el texto leido en su funcion
+    }
+
+    log_info(ctx->logger, "## PID: %d - Fin de IO", pid);
+}
+
+--------
+nombre archivo: io/src/estructuras_io.h
+codigo:
+#ifndef ESTRUCTURAS_IO_H
+#define ESTRUCTURAS_IO_H
+
+#include <commons/log.h>
+#include <commons/config.h>
+
+typedef struct {
+    char* io_name;
+    t_config* config;
+    t_log* logger;
+    int socket_scheduler;
+} t_io_context;
+
+#endif // ESTRUCTURAS_IO_H
+
+
+--------
+nombre archivo: io/src/main.h
+codigo:
+#ifndef IO_H
+#define IO_H
+
+#include "peticiones_io.h"
+
+t_io_context* iniciar_contexto(int argc, char* argv[]);
+void limpiar_contexto(t_io_context* ctx);
+
+#endif //IO_H
+
+--------
+nombre archivo: io/src/peticiones_io.h
+codigo:
+#ifndef PETICIONES_IO_H
+#define PETICIONES_IO_H
+
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
+#include <utils/dominio/estructuras.h>
+#include <utils/dominio/opcodes.h>
+#include <commons/string.h>
+#include <readline/readline.h>
+
+#include "estructuras_io.h"
+
+void ejecutar_stdin(t_io_context* ctx, int pid);
+void ejecutar_stdout(t_io_context* ctx, int pid);
+void ejecutar_sleep(t_io_context* ctx, int pid);
+void procesar_peticion_io(t_io_context* ctx);
+
+#endif
+
