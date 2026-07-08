@@ -71,7 +71,8 @@ release: $(OUT)
 .PHONY: test
 test: CFLAGS = $(CDEBUG)
 test: $(TEST)
-
+	./$(TEST)
+	
 .PHONY: clean
 clean:
 	-rm -rfv $(dir $(TEST) $(OBJS) $(OUT))

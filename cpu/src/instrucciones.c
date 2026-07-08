@@ -348,6 +348,9 @@ int instr_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, 
 int instr_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
     
+    // 0. Incrementamos PC (syscall)
+    contexto->registros.PC++;
+    
     // 1. Actualizamos contexto en memoria
     enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
     
