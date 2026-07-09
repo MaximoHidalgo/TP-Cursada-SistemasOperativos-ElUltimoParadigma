@@ -33,24 +33,42 @@ static void procesar_tabla_de_sticks(t_cpu_context* ctx, void* buffer, int size)
     int cant = buffer_read_int(reader);
 
     for (int i = 0; i < cant; i++) {
-        t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
-        
         int size_id = buffer_read_int(reader); (void)size_id;
-        stick->id = buffer_read_int(reader);
+        int stick_id = buffer_read_int(reader);
+        
+        bool ya_existe = false;
+        for (int j = 0; j < list_size(ctx->memory_sticks); j++) {
+            t_memory_stick_info* s = list_get(ctx->memory_sticks, j);
+            if (s->id == stick_id) {
+                ya_existe = true;
+                break;
+            }
+        }
 
         int size_tamanio = buffer_read_int(reader); (void)size_tamanio;
-        stick->tamanio = buffer_read_uint32(reader);
+        uint32_t stick_tamanio = buffer_read_uint32(reader);
 
         int size_base_address = buffer_read_int(reader); (void)size_base_address;
-        stick->base_address = buffer_read_uint32(reader);
+        uint32_t stick_base_address = buffer_read_uint32(reader);
 
         int size_puerto = buffer_read_int(reader); (void)size_puerto;
-        stick->puerto = buffer_read_int(reader);
+        int stick_puerto = buffer_read_int(reader);
 
         int size_ip_len = buffer_read_int(reader); (void)size_ip_len;
         int ip_len = buffer_read_int(reader); (void)ip_len;
+        char* stick_ip = buffer_read_string(reader);
 
-        stick->ip = buffer_read_string(reader);
+        if (ya_existe) {
+            free(stick_ip);
+            continue;
+        }
+
+        t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
+        stick->id = stick_id;
+        stick->tamanio = stick_tamanio;
+        stick->base_address = stick_base_address;
+        stick->puerto = stick_puerto;
+        stick->ip = stick_ip;
 
         char* str_puerto = string_itoa(stick->puerto);
         stick->socket_fd = crear_conexion(stick->ip, str_puerto); 
@@ -62,9 +80,30 @@ static void procesar_tabla_de_sticks(t_cpu_context* ctx, void* buffer, int size)
             log_info(ctx->logger, "Conectado a Memory Stick ID %d en %s:%d", stick->id, stick->ip, stick->puerto);
         } else {
             log_error(ctx->logger, "Error al conectar con Memory Stick ID %d", stick->id);
+            free(stick->ip);
+            free(stick);
         }
     }
     buffer_reader_destroy(reader);
+}
+
+void actualizar_tabla_sticks(t_cpu_context* ctx) {
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = SOLICITUD_TABLA_STICKS;
+    enviar_paquete(paq, ctx->conexiones->memoria);
+    eliminar_paquete(paq);
+
+    log_info(ctx->logger, "Solicitando actualización de tabla de Memory Sticks al Kernel Memory...");
+
+    int resp = recibir_operacion(ctx->conexiones->memoria);
+    if (resp == ENVIO_TABLA_STICKS) {
+        int size;
+        void* buf = recibir_buffer(&size, ctx->conexiones->memoria);
+        procesar_tabla_de_sticks(ctx, buf, size);
+        free(buf);
+    } else {
+        log_error(ctx->logger, "Error al solicitar actualización de sticks. Operación recibida: %d", resp);
+    }
 }
 
 static void conectar_con_memoria(t_cpu_context* ctx, char* ip, char* puerto) {

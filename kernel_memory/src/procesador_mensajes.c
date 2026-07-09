@@ -541,6 +541,28 @@ void atender_cliente(void *arg) {
                 enviar_mensaje(MSG_OK, cliente_fd);
                 break;
             }
+            case SOLICITUD_TABLA_STICKS:
+            {
+                pthread_mutex_lock(&ctx->mutex_memoria);
+                t_paquete* paq = crear_paquete();
+                paq->codigo_operacion = ENVIO_TABLA_STICKS;
+                int cant = list_size(ctx->memory_sticks);
+                agregar_a_paquete(paq, &cant, sizeof(int));
+                for (int i = 0; i < cant; i++) {
+                    t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+                    agregar_a_paquete(paq, &(stick->id), sizeof(int));
+                    agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
+                    agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
+                    agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
+                    int ip_len = strlen(stick->ip) + 1;
+                    agregar_a_paquete(paq, &ip_len, sizeof(int));
+                    agregar_a_paquete(paq, stick->ip, ip_len);
+                }
+                enviar_paquete(paq, cliente_fd);
+                eliminar_paquete(paq);
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+                break;
+            }
             case CONSULTAR_ESPACIO_LIBRE:
             {
                 int espacio_fijo_mock = 999999; 

@@ -1,6 +1,7 @@
 #include "mmu.h"
 #include <stdlib.h>
 #include <string.h>
+#include "cpu_utils.h"
 
 int mmu_traducir(t_cpu_context* ctx, t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
     int num_segmento = floor((double)dir_logica / tam_max_segmento);
@@ -44,8 +45,18 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
         }
         
         if (stick_target == NULL) {
-            log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
-            break;
+            actualizar_tabla_sticks(ctx);
+            for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+                t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+                if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
+                    stick_target = stick;
+                    break;
+                }
+            }
+            if (stick_target == NULL) {
+                log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
+                break;
+            }
         }
         
         uint32_t offset_en_stick = dir_actual - stick_target->base_address;
@@ -87,8 +98,18 @@ void escribir_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, u
         }
         
         if (stick_target == NULL) {
-            log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
-            break;
+            actualizar_tabla_sticks(ctx);
+            for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+                t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+                if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
+                    stick_target = stick;
+                    break;
+                }
+            }
+            if (stick_target == NULL) {
+                log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
+                break;
+            }
         }
         
         uint32_t offset_en_stick = dir_actual - stick_target->base_address;
