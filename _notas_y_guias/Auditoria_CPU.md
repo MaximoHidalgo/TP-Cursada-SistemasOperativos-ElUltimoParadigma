@@ -71,3 +71,67 @@ Para evitar que el *Kernel Memory* esté *spameando* asincrónicamente a la CPU 
 8. Si tras la actualización el stick sigue sin existir, se levanta el error formal de *Segmentation Fault* por violación de límites del hardware.
 
 Esta estrategia asegura que la CPU siempre pueda acceder a los Memory Sticks necesarios *"cuando sea necesario"*, optimizando los mensajes de red.
+
+---
+
+## 2. Ejecución y Memoria
+
+### Espera de PID y Petición de Contexto
+> *Una vez establecidas todas las conexiones, la CPU se quedará a la espera de recibir un PID de parte del Kernel Scheduler. Una vez recibido, la CPU deberá solicitarle al Kernel Memory el contexto de ejecución y comenzar el primer ciclo de instrucción.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+El hilo principal del programa delega su control a la función `atender_kernel_scheduler` (en `cpu_utils.c`), la cual se bloquea iterativamente esperando un mensaje en el socket del *Kernel Scheduler*:
+```c
+while (1) {
+    log_info(ctx->logger, "Esperando un nuevo PID del Kernel Scheduler...");
+    int process_ID = recibir_operacion(ctx->conexiones->scheduler);
+    // ...
+```
+Cuando llega un `PID_A_EJECUTAR`, se desencadena la función `manejar_ejecucion_proceso`, que inmediatamente pide a la Memoria el contexto y, si llega correctamente, arranca el ciclo:
+```c
+t_contexto_ejecucion* contexto = pedir_contexto_a_memoria(pid_recibido, ctx);
+if (contexto != NULL) {
+    ejecutar_ciclo_de_instruccion(contexto, ctx);
+    free(contexto);
+}
+```
+
+### Simulación de MMU y Traducción de Direcciones
+> *A la hora de ejecutar instrucciones que requieran interactuar directamente con la Memoria, tendrá que traducir las direcciones lógicas (propias del proceso) a direcciones físicas (propias de la memoria). Para ello simulará la existencia de una MMU.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+La CPU cuenta con su propio módulo interno en `cpu/src/mmu.c`. Al ejecutar instrucciones de memoria (como `MOV_IN`, `MOV_OUT`, o `COPY_MEM` en `instrucciones.c`), se utiliza la dirección lógica (proveniente de un registro como `DI` o `SI`) y se invoca a la función `mmu_traducir`:
+```c
+if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
+    // Manejo de Error: Segmentation Fault
+} else {
+    // Acceso mediante la dirección física
+}
+```
+Internamente, `mmu_traducir` busca a qué segmento pertenece la dirección haciendo una división por el `tam_max_segmento`, revisa la tabla de segmentos del contexto actual e incluye validaciones estrictas de tamaño y existencia del segmento antes de arrojar la base física sumada al desplazamiento. Todo se comporta exactamente igual a un componente de hardware MMU estándar.
+
+---
+
+## 3. Arquitectura Interna de CPU
+
+### Registros de CPU
+> *En la implementación de nuestra CPU, se utilizará una serie de registros para poder modelar la operatoria de una CPU real simplificada [...]. En la siguiente tabla está el detalle de los registros que deberá tener nuestra CPU, en la cual estará detallado el tamaño del mismo y qué tipo de dato se recomienda para su implementación.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+El archivo `utils/src/utils/dominio/estructuras.h` contiene la definición estricta de la estructura `t_registros`, coincidiendo exactamente en nombres, tipos de dato y tamaños con la tabla de la consigna:
+- `PC` (Program Counter): `uint32_t` (4 bytes)
+- `AX`, `BX`, `CX`, `DX`: `uint8_t` (1 byte c/u)
+- `EAX`, `EBX`, `ECX`, `EDX`: `uint32_t` (4 bytes c/u)
+- `SI`, `DI`: `uint32_t` (4 bytes c/u)
+
+Además, las funciones de acceso dinámico ubicadas en `cpu/src/registros.c` (`leer_registro`, `asignar_valor_a_registro`, y `obtener_tamanio_registro`) se encargan de enrutar las lecturas y castear las asignaciones a `(uint8_t)` en los casos correspondientes de 1 byte (truncando automáticamente los excesos).
+Se verificó y se **agregó la compatibilidad explícita del registro `PC`** dentro del despachador dinámico por si alguna instrucción en la tabla de ejecución (como un hipotético `SET PC 5`) intenta modificarlo directamente a través del motor genérico de registros, previniendo así un bug oculto.
+
+> [!NOTE] 
+> Todo el flujo fue re-validado ejecutando la suite de testing unitario (`make test`) y probando la ejecución de interconexión full-stack (`make all && make run && make stop`), sin detectarse regresiones ni memory leaks.
