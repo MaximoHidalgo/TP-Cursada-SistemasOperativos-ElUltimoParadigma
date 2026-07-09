@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <commons/log.h>
 #include <commons/string.h>
-#include "estructuras.h"
+#include "estructuras_cpu.h"
 
 // 1. Definimos el tipo de puntero a función con la firma de este TP:
 typedef int (*t_instr_handler)(t_instruccion*, t_contexto_ejecucion*, t_cpu_context*);

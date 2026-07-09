@@ -1,4 +1,7 @@
 #include "ciclo_instruccion.h"
+#include "instrucciones.h"
+#include <stdlib.h>
+#include <errno.h>
 
 void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     int desalojar = 0;
@@ -47,17 +50,11 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
 }
 
 void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, t_cpu_context* ctx) {
-    // 1. Creamos un paquete. Usamos el 'motivo_desalojo' directamente como el op_code
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = motivo_desalojo; 
     
-    // 2. Agregamos únicamente el PID al paquete
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
-    
-    // 3. Enviamos el paquete por el socket conectado al Scheduler
     enviar_paquete(paquete, ctx->conexiones->scheduler);
-    
-    // 4. Liberamos el paquete para evitar memory leaks
     eliminar_paquete(paquete);
 
     log_info(ctx->logger, "PID %d devuelto al Scheduler. Motivo (op_code): %d", pid, motivo_desalojo);
@@ -68,8 +65,96 @@ void notificar_syscall_sleep_a_scheduler(uint32_t pid, uint32_t tiempo_sleep, t_
     paquete->codigo_operacion = SYSCALL_SLEEP; 
     
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tiempo_sleep, sizeof(uint32_t)); // ¡Dato extra!
+    agregar_a_paquete(paquete, &tiempo_sleep, sizeof(uint32_t));
     
     enviar_paquete(paquete, ctx->conexiones->scheduler);
     eliminar_paquete(paquete);
+}
+
+char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+    t_paquete* paquete_solicitud = crear_paquete();
+    paquete_solicitud->codigo_operacion = FETCH_INSTRUCCION; 
+    
+    enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, ctx->conexiones->memoria);
+
+    int op_code = recibir_operacion(ctx->conexiones->memoria);
+    
+    if (op_code == ENVIO_INSTRUCCION) {
+        t_list* lista = recibir_paquete(ctx->conexiones->memoria);
+        char* instruccion_texto = string_duplicate(list_get(lista, 0));
+        list_destroy_and_destroy_elements(lista, free);
+        return instruccion_texto;
+    } else {
+        log_error(ctx->logger, "Error: Se esperaba una instrucción, pero llegó la operación: %d", op_code);
+        return NULL;
+    }
+}
+
+t_instruccion* decode(char* instruccion_texto) {
+    t_instruccion* instruccion = malloc(sizeof(t_instruccion));
+    instruccion->parametro1 = NULL;
+    instruccion->parametro2 = NULL;
+    instruccion->parametro3 = NULL;
+
+    char** instruccion_separada = string_split(instruccion_texto, " ");
+
+    instruccion->identificador = string_duplicate(instruccion_separada[0]);
+
+    if (instruccion_separada[1] != NULL) {
+        instruccion->parametro1 = string_duplicate(instruccion_separada[1]);
+        if (instruccion_separada[2] != NULL) {
+            instruccion->parametro2 = string_duplicate(instruccion_separada[2]);
+            if (instruccion_separada[3] != NULL) {
+                instruccion->parametro3 = string_duplicate(instruccion_separada[3]);
+            }
+        }
+    }
+
+    string_array_destroy(instruccion_separada);
+    return instruccion;
+}
+
+int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+    log_info(ctx->logger, "## PID: %d - Ejecutando: %s - %s %s %s", 
+             contexto->pid, 
+             instruccion->identificador, 
+             instruccion->parametro1 ? instruccion->parametro1 : "", 
+             instruccion->parametro2 ? instruccion->parametro2 : "", 
+             instruccion->parametro3 ? instruccion->parametro3 : "");
+
+    t_instruction *inst = instruction_get_by_name(instruccion->identificador);
+    
+    if (inst != NULL) {
+        return inst->instr(instruccion, contexto, ctx);
+    } else {
+        log_error(ctx->logger, "Instrucción desconocida: %s", instruccion->identificador);
+        return 1; // Desalojar
+    }
+}
+
+int chequear_interrupciones(t_cpu_context* ctx) {
+    int op_code_espiado;
+    
+    ssize_t bytes_recibidos = recv(ctx->conexiones->scheduler, &op_code_espiado, sizeof(int), MSG_PEEK | MSG_DONTWAIT);
+
+    if (bytes_recibidos > 0) {
+        int operacion = recibir_operacion(ctx->conexiones->scheduler);
+        
+        if (operacion == INTERRUPCION_QUANTUM) { 
+            int size;
+            void* buffer = recibir_buffer(&size, ctx->conexiones->scheduler);
+            free(buffer);
+
+            log_info(ctx->logger, "## Interrupción recibida");
+            return 1;
+        } else {
+            log_warning(ctx->logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
+        }
+    } else if (bytes_recibidos == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        return 0;
+    } else if (bytes_recibidos == 0) {
+        log_error(ctx->logger, "El Kernel Scheduler se ha desconectado inesperadamente.");
+        return 1;
+    }
+    return 0;
 }

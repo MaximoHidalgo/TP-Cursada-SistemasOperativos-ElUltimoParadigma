@@ -121,4 +121,41 @@ context(test_cpu_ciclo_instruccion) {
             should_int(ctx->registros.PC) be equal to(1);
         } end
     } end
+    describe("Probando decode") {
+        it("Decodificar instruccion sin parametros") {
+            t_instruccion* instr = decode("EXIT");
+            should_string(instr->identificador) be equal to("EXIT");
+            should_ptr(instr->parametro1) be null;
+            should_ptr(instr->parametro2) be null;
+            should_ptr(instr->parametro3) be null;
+            
+            free(instr->identificador);
+            free(instr);
+        } end
+
+        it("Decodificar instruccion con un parametro") {
+            t_instruccion* instr = decode("SLEEP 100");
+            should_string(instr->identificador) be equal to("SLEEP");
+            should_string(instr->parametro1) be equal to("100");
+            should_ptr(instr->parametro2) be null;
+            should_ptr(instr->parametro3) be null;
+
+            free(instr->identificador);
+            free(instr->parametro1);
+            free(instr);
+        } end
+
+        it("Decodificar instruccion con dos parametros") {
+            t_instruccion* instr = decode("SET AX 5");
+            should_string(instr->identificador) be equal to("SET");
+            should_string(instr->parametro1) be equal to("AX");
+            should_string(instr->parametro2) be equal to("5");
+            should_ptr(instr->parametro3) be null;
+
+            free(instr->identificador);
+            free(instr->parametro1);
+            free(instr->parametro2);
+            free(instr);
+        } end
+    } end
 }

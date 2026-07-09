@@ -93,5 +93,69 @@ context(test_cpu_utils) {
             // Validamos que se pueda limpiar sin leaks/crashes
             limpiar_contexto(ctx);
         } end
+
+        it("inicializar_entorno configura logger y config correctamente") {
+            t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
+            ctx->id_cpu = strdup("TEST_ENTORNO");
+            ctx->conexiones = NULL; // para limpieza
+            
+            bool ok = inicializar_entorno(ctx, "configs/cpu.config");
+            
+            should_bool(ok) be equal to(true);
+            should_ptr(ctx->config) not be null;
+            should_ptr(ctx->logger) not be null;
+            
+            limpiar_contexto(ctx);
+        } end
+
+        it("procesar_tabla_de_sticks deserializa correctamente los memory sticks") {
+            t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
+            ctx->id_cpu = strdup("TEST_STICKS");
+            ctx->logger = log_create("test_sticks.log", "TEST", false, LOG_LEVEL_INFO);
+            ctx->memory_sticks = list_create();
+            ctx->conexiones = NULL; // para evitar crash en limpiar
+            
+            // Construimos un buffer serializado manualmente tal como lo envía el Kernel Memory
+            t_paquete* paq = crear_paquete();
+            
+            int cant = 1;
+            agregar_a_paquete(paq, &cant, sizeof(int));
+            
+            int id = 42;
+            agregar_a_paquete(paq, &id, sizeof(int));
+            uint32_t tamanio = 2048;
+            agregar_a_paquete(paq, &tamanio, sizeof(uint32_t));
+            uint32_t base = 100;
+            agregar_a_paquete(paq, &base, sizeof(uint32_t));
+            int puerto = 8080;
+            agregar_a_paquete(paq, &puerto, sizeof(int));
+            
+            char* ip = "127.0.0.1";
+            int ip_len = strlen(ip) + 1;
+            agregar_a_paquete(paq, &ip_len, sizeof(int)); // Envía la longitud de la IP primero
+            agregar_a_paquete(paq, ip, ip_len);           // Envía la IP
+            
+            // Ejecutamos la función a testear
+            procesar_tabla_de_sticks(ctx, paq->buffer->stream, paq->buffer->size);
+            
+            // Validamos la correcta deserialización
+            should_int(list_size(ctx->memory_sticks)) be equal to(1);
+            
+            t_memory_stick_info* stick = list_get(ctx->memory_sticks, 0);
+            should_int(stick->id) be equal to(42);
+            should_int(stick->tamanio) be equal to(2048);
+            should_int(stick->base_address) be equal to(100);
+            should_int(stick->puerto) be equal to(8080);
+            should_string(stick->ip) be equal to("127.0.0.1");
+            
+            // Cleanup
+            eliminar_paquete(paq);
+            remove("test_sticks.log"); // borrar log file temporal
+            
+            list_destroy_and_destroy_elements(ctx->memory_sticks, free);
+            log_destroy(ctx->logger);
+            free(ctx->id_cpu);
+            free(ctx);
+        } end
     } end
 }
