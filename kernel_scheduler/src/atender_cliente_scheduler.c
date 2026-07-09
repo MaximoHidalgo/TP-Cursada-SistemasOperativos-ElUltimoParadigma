@@ -472,6 +472,24 @@ int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
     return 1; // Retornamos 1 para indicar que el hilo debe continuar escuchando
 }
 
+/*int handler_mem_expandida(int cliente_fd, t_scheduler_context* ctx){
+    //recorrer todos procesos supendidos
+    //    recorrer por orden de prioridad
+    //    ir desuspendiendo
+    //    proprocesos suspendidos con misma prioridad: se evalua primero el que mas tiempo lleve suspendido
+    if (ctx->estratega == NULL) {
+        return NULL;
+    }
+    while()
+}*/
+
+int handler_mem_corrupta(int cliente_fd, t_scheduler_context* ctx){
+    planificador_finalizar_todo_por_bsod(ctx->estratega);
+    limpiar_contexto(ctx);
+    exit(EXIT_FAILURE);
+}
+
+
 // --- WRAPPERS PARA CADA OPERACIÓN ---
 // Retornan 1 para indicar éxito continuo.
 
@@ -494,6 +512,9 @@ int handler_mutex_unlock(int fd, t_scheduler_context* ctx) { procesar_syscall_mu
 int handler_mem_alloc(int fd, t_scheduler_context* ctx) { procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_ALLOC); return 1; }
 int handler_mem_free(int fd, t_scheduler_context* ctx) { procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_FREE); return 1; }
 
+//int handler_mem_expandida(int fd, t_scheduler_context* ctx) { procesar_memoria_expandida(fd, ctx, SYSCALL_MEM_ALLOC); return 1; }
+//int handler_mem_corrupta(int fd, t_scheduler_context* ctx) { procesar_corrupcion_memoria(fd, ctx, SYSCALL_MEM_FREE); return 1; }
+
 
 // Creamos un array estático de tamaño 256 (suficiente para cubrir todos los opcodes).
 // Los índices que no declaremos se inicializarán automáticamente en NULL.
@@ -510,7 +531,9 @@ static const handler_t tabla_despacho[256] = {
     [SYSCALL_MEM_ALLOC]    = handler_mem_alloc,
     [SYSCALL_MEM_FREE]     = handler_mem_free,
     [SYSCALL_INIT_PROC]    = handler_init_proc,
-    [FIN_DE_QUANTUM]       = handler_fin_quantum
+    [FIN_DE_QUANTUM]       = handler_fin_quantum,
+    //[MEMORIA_EXPANDIDA]    = handler_mem_expandida, 
+	[CORRUPCION_MEMORIA]   = handler_mem_corrupta
 };
 
 
@@ -621,3 +644,15 @@ void atender_cliente_scheduler(void* arg) {
 //         }
 //     }
 // }
+
+
+void limpiar_contexto(t_scheduler_context* ctx) {
+    if (ctx->socket_escucha != -1) close(ctx->socket_escucha);
+    if (ctx->socket_memoria != -1) close(ctx->socket_memoria);
+
+    if (ctx->estratega != NULL) destruir_estratega_planificacion(ctx->estratega);
+    if (ctx->config != NULL) config_destroy(ctx->config);
+    if (ctx->logger != NULL) log_destroy(ctx->logger);
+
+    free(ctx);
+}

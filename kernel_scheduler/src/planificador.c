@@ -615,3 +615,5 @@ void planificador_finalizar_todo_por_bsod(t_estratega_planificacion* estratega) 
     // (Nota: Si tuvieras procesos en las colas de BLOQUEADOS de I/O o Mutex, 
     // podrías iterar los diccionarios aquí de la misma forma para ser 100% exhaustivo).
 }
+
+

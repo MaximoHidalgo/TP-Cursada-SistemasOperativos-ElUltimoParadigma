@@ -54,63 +54,18 @@ t_scheduler_context* iniciar_contexto(int argc, char* argv[]) {
     return ctx;
 }
 
-void* atender_mensajes_memoria(void* arg) {
-    t_scheduler_context* ctx = (t_scheduler_context*)arg;
-
-    while (1) {
-        // recibir_operacion se queda esperando (bloqueado en este hilo) 
-        // hasta que Kernel Memory mande algo
-        int op_code = recibir_operacion(ctx->socket_memoria);
-
-        switch (op_code) {
-            case SCREEN_OF_DEATH: // Tu enum para la memoria corrupta
-                log_error(ctx->logger, "## Blue Screen of Death: Memoria corrupta");
-                
-                //Aquí deberías recorrer todas tus colas y pasar todos los procesos a ESTADO_PROCESO_EXIT
-                // 1. Recorremos todas las colas y finalizamos los procesos con el log obligatorio
-                planificador_finalizar_todo_por_bsod(ctx->estratega);
-                
-                // 2. Limpiamos las estructuras, cerramos sockets y matamos el Kernel Scheduler | Finalizamos el Scheduler por el BSOD
-                limpiar_contexto(ctx);
-                exit(EXIT_FAILURE); // Apagado de emergencia
-                break;
-            case -1:
-                log_error(ctx->logger, "Kernel Memory se desconectó inesperadamente.");
-                limpiar_contexto(ctx);
-                exit(EXIT_FAILURE);
-                break;
-                
-            default:
-                // Por si en el futuro la memoria te manda otros mensajes
-                log_warning(ctx->logger, "Operacion desconocida de Kernel Memory: %d", op_code);
-                break;
-        }
-    }
-    return NULL;
-}
-
-
 void conectar_kernel_memory(t_scheduler_context* ctx) {
     ctx->socket_memoria = crear_conexion(ctx->ip_memory, ctx->puerto_memory);
     if(ctx->socket_memoria != -1) {
         log_info(ctx->logger, "## Conectado a Kernel Memory");
         enviar_mensaje(HANDSHAKE_SCHEDULER, ctx->socket_memoria);
         ctx->estratega->socket_memoria = ctx->socket_memoria;
-
-        // --- LO NUEVO --- lo que estoy agregando para atender BLUE SCREEN OF DEATH (BSOD)
-        // Lanzamos un hilo dedicado exclusivamente a escuchar a la memoria
-        pthread_t hilo_memoria;
-        pthread_create(&hilo_memoria, NULL, atender_mensajes_memoria, (void*)ctx);
-        pthread_detach(hilo_memoria); // Detach para que el sistema libere sus recursos al terminar
-        // ----------------
-
     } else {
         log_error(ctx->logger, "Error al conectar con Kernel Memory en %s:%s", ctx->ip_memory, ctx->puerto_memory);
         limpiar_contexto(ctx);
         exit(EXIT_FAILURE);
     }
 }
-
 
 void iniciar_planificacion(t_scheduler_context* ctx) {
     log_info(ctx->logger, "Se debe iniciar el proceso con script: %s", ctx->path_script_inicial);
@@ -155,13 +110,3 @@ void iniciar_servidor_clientes(t_scheduler_context* ctx) {
     }
 }
 
-void limpiar_contexto(t_scheduler_context* ctx) {
-    if (ctx->socket_escucha != -1) close(ctx->socket_escucha);
-    if (ctx->socket_memoria != -1) close(ctx->socket_memoria);
-
-    if (ctx->estratega != NULL) destruir_estratega_planificacion(ctx->estratega);
-    if (ctx->config != NULL) config_destroy(ctx->config);
-    if (ctx->logger != NULL) log_destroy(ctx->logger);
-
-    free(ctx);
-}

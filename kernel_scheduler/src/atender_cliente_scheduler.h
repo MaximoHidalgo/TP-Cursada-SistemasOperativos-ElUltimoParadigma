@@ -15,7 +15,7 @@ typedef struct {
 
 // Typedef para punteros a funciones manejadoras
 typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);
-
+void limpiar_contexto(t_scheduler_context* ctx);
 void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu);
 void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx);
 void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx);
@@ -27,6 +27,7 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx);
 int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) ;
 int atenderRespuesta(int cliente_fd, t_scheduler_context* ctx, int mensaje_cliente);
 void atender_cliente_scheduler(void* arg);
+
 
 
 #endif //ATENDER_CLIENTE_SCHEDULER_H
