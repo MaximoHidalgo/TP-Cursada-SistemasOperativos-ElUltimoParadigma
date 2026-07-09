@@ -359,6 +359,58 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
     log_info(ctx->logger, "Proceso %d desuspendido y traído a Memoria Principal", pid);
 }
 
+void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
+    
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t pid = *(uint32_t*)list_get(paquete, 0);
+    uint32_t id_seg = *(uint32_t*)list_get(paquete, 1);
+    uint32_t tamanio_seg = *(uint32_t*)list_get(paquete, 2);
+    list_destroy_and_destroy_elements(paquete, free);
+
+    int needs_compaction = 0;
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    t_segmento* nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
+                
+    if (needs_compaction) {
+        t_paquete* paq = crear_paquete();
+        paq->codigo_operacion = SOLICITUD_COMPACTACION;
+        enviar_paquete(paq, cliente_fd);
+        eliminar_paquete(paq);
+                    
+        int res = recibir_operacion(cliente_fd);
+        if (res == RESPUESTA_COMPACTACION) {
+            compactar_memoria(ctx);
+            nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
+        }
+    }
+
+    if (nuevo_seg != NULL) {
+        t_programa* prog = buscar_programa(ctx, pid);
+        if (prog != NULL) {
+            pthread_mutex_lock(&ctx->mutex_programas);
+
+            if (prog->contexto->tabla_segmentos == NULL) {
+                prog->contexto->tabla_segmentos = list_create();
+            }
+
+            list_add(prog->contexto->tabla_segmentos, nuevo_seg);
+            log_info(ctx->logger, "DEBUG: Added segment to PID %d. Total segments now: %d", pid, list_size(prog->contexto->tabla_segmentos));
+            pthread_mutex_unlock(&ctx->mutex_programas);
+
+        } else {
+
+            log_error(ctx->logger, "DEBUG: prog was NULL for PID %d in CREAR_SEGMENTO!", pid);
+        }
+            enviar_mensaje(MSG_OK, cliente_fd);
+
+    } else {
+
+        enviar_mensaje("OUT_OF_MEMORY", cliente_fd);
+
+    }
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+}
+
 void atender_cliente(void *arg) {
     t_args_hilo_cliente* args = (t_args_hilo_cliente*)arg;
     int cliente_fd = args->cliente_fd;
@@ -391,50 +443,8 @@ void atender_cliente(void *arg) {
                 procesar_fetch_instruccion_handler(cliente_fd, ctx);
                 break;
             case CREAR_SEGMENTO:
-            {
-                t_list* paquete = recibir_paquete(cliente_fd);
-                uint32_t pid = *(uint32_t*)list_get(paquete, 0);
-                uint32_t id_seg = *(uint32_t*)list_get(paquete, 1);
-                uint32_t tamanio_seg = *(uint32_t*)list_get(paquete, 2);
-                list_destroy_and_destroy_elements(paquete, free);
-
-                int needs_compaction = 0;
-                pthread_mutex_lock(&ctx->mutex_memoria);
-                t_segmento* nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
-                
-                if (needs_compaction) {
-                    t_paquete* paq = crear_paquete();
-                    paq->codigo_operacion = SOLICITUD_COMPACTACION;
-                    enviar_paquete(paq, cliente_fd);
-                    eliminar_paquete(paq);
-                    
-                    int res = recibir_operacion(cliente_fd);
-                    if (res == RESPUESTA_COMPACTACION) {
-                        compactar_memoria(ctx);
-                        nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
-                    }
-                }
-
-                if (nuevo_seg != NULL) {
-                    t_programa* prog = buscar_programa(ctx, pid);
-                    if (prog != NULL) {
-                        pthread_mutex_lock(&ctx->mutex_programas);
-                        if (prog->contexto->tabla_segmentos == NULL) {
-                            prog->contexto->tabla_segmentos = list_create();
-                        }
-                        list_add(prog->contexto->tabla_segmentos, nuevo_seg);
-                        log_info(ctx->logger, "DEBUG: Added segment to PID %d. Total segments now: %d", pid, list_size(prog->contexto->tabla_segmentos));
-                        pthread_mutex_unlock(&ctx->mutex_programas);
-                    } else {
-                        log_error(ctx->logger, "DEBUG: prog was NULL for PID %d in CREAR_SEGMENTO!", pid);
-                    }
-                    enviar_mensaje(MSG_OK, cliente_fd);
-                } else {
-                    enviar_mensaje("OUT_OF_MEMORY", cliente_fd);
-                }
-                pthread_mutex_unlock(&ctx->mutex_memoria);
+                procesar_crear_segmento_handler(cliente_fd, ctx);
                 break;
-            }
             case LIBERAR_PROCESO:
             {
                 t_list* paquete = recibir_paquete(cliente_fd);
