@@ -1,4 +1,4 @@
-.PHONY: all run stop clean fueraLogs debug release
+.PHONY: all run stop clean fueraLogs debug release test
 
 # Argumentos definidos para la prueba
 PATH_PSEUDOCODIGO = PLANI_PRE_0.prc
@@ -17,6 +17,7 @@ CONFIG_IO = io.config
 # Variable con el comando para abrir una nueva terminal.
 # Usamos xterm con -hold para que la ventana NO se cierre si el módulo crashea.
 TERMINAL = xterm -hold -e bash -c
+
 
 # Regla para compilar todos los módulos a la vez
 all:
@@ -93,3 +94,13 @@ fueraLogs:
 	@echo "Limpiando solo los archivos de log..."
 	-rm -f *.log */*.log
 	@echo "¡Logs eliminados!"
+
+# Regla para probar todos los modulos
+test:
+	@echo "Corriendo tests de todos los modulos..."
+	$(MAKE) -C kernel_memory test
+	$(MAKE) -C kernel_scheduler test
+	$(MAKE) -C swap test
+	$(MAKE) -C memory_stick test
+	$(MAKE) -C cpu test
+	$(MAKE) -C io test
