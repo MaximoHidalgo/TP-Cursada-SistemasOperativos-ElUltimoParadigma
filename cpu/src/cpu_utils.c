@@ -15,7 +15,7 @@ void manejar_ejecucion_proceso(int pid_recibido, t_cpu_context* ctx) {
 
 static bool inicializar_entorno(t_cpu_context* ctx, char* path_config) {
     char* nombre_log = string_from_format("%s.log", ctx->id_cpu);
-    ctx->logger = log_create(nombre_log, "CPU", true, LOG_LEVEL_INFO);
+    ctx->logger = log_create(nombre_log, ctx->id_cpu, true, LOG_LEVEL_INFO);
     free(nombre_log);
 
     ctx->config = config_create(path_config);

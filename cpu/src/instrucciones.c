@@ -64,8 +64,6 @@ int instr_jnz(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_
 
     if (registro_val != 0) {
         contexto->registros.PC = atoi(instruccion->parametro2);
-    } else {
-        contexto->registros.PC++;
     }
     return 0;
 }

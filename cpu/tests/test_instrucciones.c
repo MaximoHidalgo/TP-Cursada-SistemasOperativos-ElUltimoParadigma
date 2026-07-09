@@ -127,7 +127,7 @@ context(test_cpu_instrucciones) {
 
             int desalojar = instr_jnz(instr, ctx, cpu_ctx);
             should_int(desalojar) be equal to(0);
-            should_int(ctx->registros.PC) be equal to(11); // Suma 1 como dice la consigna
+            should_int(ctx->registros.PC) be equal to(10); // El incremento se realiza en el ciclo de instruccion general
         } end
 
         it("Instruccion EXIT (Syscall)") {

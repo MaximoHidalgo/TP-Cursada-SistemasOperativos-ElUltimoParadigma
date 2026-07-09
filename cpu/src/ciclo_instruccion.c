@@ -20,10 +20,11 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
         t_instruccion* instruccion_decodificada = decode(instruccion_texto);
         
         /* 3. EXECUTE */
+        uint32_t pc_previo = contexto->registros.PC;
         desalojar = execute(instruccion_decodificada, contexto, ctx);
         
-        // Incrementamos el PC solo si no hubo desalojo y la instrucción NO fue un JNZ
-        if (!desalojar && !string_equals_ignore_case(instruccion_decodificada->identificador, "JNZ")) {
+        // Incrementamos el PC solo si no hubo desalojo y la instrucción NO modificó el PC
+        if (!desalojar && contexto->registros.PC == pc_previo) {
             contexto->registros.PC++;
         }
 
@@ -74,6 +75,8 @@ void notificar_syscall_sleep_a_scheduler(uint32_t pid, uint32_t tiempo_sleep, t_
 char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     t_paquete* paquete_solicitud = crear_paquete();
     paquete_solicitud->codigo_operacion = FETCH_INSTRUCCION; 
+    
+    log_info(ctx->logger, "## PID: %d - FETCH - Program Counter: %d", contexto->pid, contexto->registros.PC);
     
     enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, ctx->conexiones->memoria);
 
