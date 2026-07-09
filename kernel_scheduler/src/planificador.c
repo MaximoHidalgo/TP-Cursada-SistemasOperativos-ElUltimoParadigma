@@ -525,3 +525,93 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
     pthread_mutex_unlock(&estratega->mutex_colas);
 }
 
+void planificador_finalizar_todo_por_bsod(t_estratega_planificacion* estratega) {
+    
+    // ✅ 1. Finalizar el proceso que se está ejecutando actualmente en la CPU
+    if (estratega->proceso_exec != NULL) {
+        estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+        log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", estratega->proceso_exec->pid);
+    }
+
+    // ✅ 2. Vaciar y finalizar todos los procesos en estado NEW
+    while (!queue_is_empty(estratega->cola_new)) {
+        t_proceso_planificable* proceso = queue_pop(estratega->cola_new);
+        proceso->estado = ESTADO_PROCESO_EXIT;
+        log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+        free(proceso);
+    }
+
+    // ✅ 3. Vaciar y finalizar todos los procesos en estado READY (Colas Multinivel)
+    for (int i = 0; i < list_size(estratega->colas); i++) {
+        t_cola_planificacion* cola = list_get(estratega->colas, i);
+        while (!queue_is_empty(cola->procesos)) {
+            t_proceso_planificable* proceso = queue_pop(cola->procesos);
+            proceso->estado = ESTADO_PROCESO_EXIT;
+            log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+            free(proceso);
+        }
+    }
+    
+    // ✅ 4. Vaciar procesos BLOCKED por I/O
+    t_list* interfaces_io = dictionary_elements(estratega->colas_io);
+    for (int i = 0; i < list_size(interfaces_io); i++) {
+        t_interfaz_io* interfaz = list_get(interfaces_io, i);
+        
+        // A. Matar la solicitud que está ejecutando actualmente
+        if (interfaz->solicitud_actual != NULL) {
+            t_proceso_planificable* proceso = interfaz->solicitud_actual->proceso;
+            proceso->estado = ESTADO_PROCESO_EXIT;
+            log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+            free(interfaz->solicitud_actual);
+            interfaz->solicitud_actual = NULL;
+        }
+
+        // B. Vaciar la cola de bloqueados esperando por esta interfaz
+        while (!queue_is_empty(interfaz->cola_bloqueados)) {
+            // Cuidado: Esta cola guarda wrappers t_solicitud_io*, no procesos directos
+            t_solicitud_io* solicitud = queue_pop(interfaz->cola_bloqueados);
+            t_proceso_planificable* proceso = solicitud->proceso;
+            
+            proceso->estado = ESTADO_PROCESO_EXIT;
+            log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+            
+            free(solicitud); // Liberamos el wrapper
+            free(proceso);   // Liberamos el PCB local
+        }
+
+        // ✅ 5. Vaciar procesos BLOCKED por Mutex
+        t_list* lista_mutex = dictionary_elements(estratega->mutex_creados);
+        for (int i = 0; i < list_size(lista_mutex); i++) {
+            t_mutex* mutex = list_get(lista_mutex, i);
+            
+            while (!queue_is_empty(mutex->cola_bloqueados)) {
+                t_proceso_planificable* proceso = queue_pop(mutex->cola_bloqueados);
+                proceso->estado = ESTADO_PROCESO_EXIT;
+                log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+                free(proceso);
+            }
+        }
+        list_destroy(lista_mutex);
+        // ⚠️ 6. Vaciar SUSP_READY y SUSP_BLOCKED
+        // TODO: Descomentar esto cuando agregues las colas estratega->cola_susp_ready 
+        // y estratega->cola_susp_blocked a la estructura 't_estratega_planificacion' en planificador.h
+        /*
+        while (!queue_is_empty(estratega->cola_susp_ready)) {
+            t_proceso_planificable* proceso = queue_pop(estratega->cola_susp_ready);
+            proceso->estado = ESTADO_PROCESO_EXIT;
+            log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+            free(proceso);
+        }
+
+        while (!queue_is_empty(estratega->cola_susp_blocked)) {
+            t_proceso_planificable* proceso = queue_pop(estratega->cola_susp_blocked);
+            proceso->estado = ESTADO_PROCESO_EXIT;
+            log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+            free(proceso);
+        }
+        */
+    }
+    list_destroy(interfaces_io); // Limpiamos la lista auxiliar generada por el diccionario
+    // (Nota: Si tuvieras procesos en las colas de BLOQUEADOS de I/O o Mutex, 
+    // podrías iterar los diccionarios aquí de la misma forma para ser 100% exhaustivo).
+}

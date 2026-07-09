@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include "colas.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <commons/string.h>
@@ -87,5 +88,5 @@ void planificador_liberar_exec(t_estratega_planificacion* estratega, int pid);
 bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estratega, t_proceso_planificable* proceso, int socket_cpu);
 
 const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo);
-
+void planificador_finalizar_todo_por_bsod(t_estratega_planificacion*);
 #endif

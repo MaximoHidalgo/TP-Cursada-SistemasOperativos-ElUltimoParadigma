@@ -29,7 +29,7 @@ void test_atender_cliente() {
     t_scheduler_context* ctx = crear_contexto_test();
     assert(ctx != NULL);
 
-    printf("=====================================================================================================\n");
+
     // La nueva lógica centraliza el despacho en atenderRespuesta.
     // Para un cliente desconectado o un opcode inválido, debe terminar el procesamiento.
     verificar("Cliente desconectado", atenderRespuesta(-1, ctx, -1),-1);
@@ -39,5 +39,5 @@ void test_atender_cliente() {
 
     destruir_contexto_test(ctx);
     printf("✅ test_atender_cliente: PASO\n");
-    printf("=====================================================================================================\n");
+
 }

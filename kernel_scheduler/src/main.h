@@ -6,6 +6,7 @@
 
 // Inicialización y Orquestación
 t_scheduler_context* iniciar_contexto(int argc, char* argv[]);
+void* atender_mensajes_memoria(void* arg);
 void conectar_kernel_memory(t_scheduler_context* ctx);
 void iniciar_planificacion(t_scheduler_context* ctx);
 void iniciar_servidor_clientes(t_scheduler_context* ctx);

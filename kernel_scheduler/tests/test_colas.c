@@ -50,7 +50,7 @@ void test_extremo_encolado_prioridades()
     t_proceso_planificable* p_media = crear_proceso_test(101, 1);
     t_proceso_planificable* p_alta  = crear_proceso_test(102, 0);
     
-    printf("=====================================================================================================\n");
+
     verificar("Encolar prioridad baja", encolar_en_cola_ready(colas, p_baja));
     verificar("Encolar prioridad media",encolar_en_cola_ready(colas, p_media));
     verificar("Encolar prioridad alta",encolar_en_cola_ready(colas, p_alta));
@@ -65,7 +65,7 @@ void test_extremo_encolado_prioridades()
     destruir_colas_ready_test(colas);
 
     printf("✅ test_extremo_encolado_prioridades: PASO\n");
-    printf("=====================================================================================================\n");
+
 }
 
 void test_encolar_prioridad_invalida()
@@ -75,7 +75,7 @@ void test_encolar_prioridad_invalida()
     t_proceso_planificable* proceso =
         crear_proceso_test(10, 99);
 
-    printf("=====================================================================================================\n");
+
     verificar("No permite prioridad inexistente",encolar_en_cola_ready(colas, proceso) == false);
     verificar("La cola 0 permanece vacia",queue_size(((t_cola_planificacion*)list_get(colas,0))->procesos) == 0);
     verificar("La cola 1 permanece vacia",queue_size(((t_cola_planificacion*)list_get(colas,1))->procesos) == 0);
@@ -84,5 +84,5 @@ void test_encolar_prioridad_invalida()
     destruir_colas_ready_test(colas);
 
     printf("✅ test_encolar_prioridad_invalida: PASO\n");
-    printf("=====================================================================================================\n");
+
 }
