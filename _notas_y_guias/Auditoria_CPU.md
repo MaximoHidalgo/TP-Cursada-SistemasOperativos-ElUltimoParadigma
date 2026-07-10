@@ -213,3 +213,58 @@ Esto iba a causar que si el Scheduler enviaba un desalojo para el `PID 2`, pero 
 2. **Lado CPU** (`cpu/src/ciclo_instruccion.c`): Modificamos el parser de mensajes para leer este payload e inyectar un if fundamental: `if (pid_interrumpido == pid_actual)`.
 3. Si el PID coincide, devuelve 1 (verdadero) forzando el desalojo, enviando el contexto a memoria y respondiéndole al Scheduler con un `FIN_DE_QUANTUM`.
 4. Si el PID **no** coincide, descarta el mensaje limpiamente con un `log_warning` ("Se descartó interrupción del PID X, el actual es Y") y continúa ejecutando normalmente sin interferir con el proceso actual.
+
+---
+
+## 6. MMU: Segmentación y Traducción de Direcciones
+> *A la hora de traducir direcciones lógicas a físicas, la CPU debe tomar en cuenta que el esquema de la memoria de este sistema es de Segmentación, por lo tanto, las direcciones lógicas se interpretarán de la siguiente manera: [N° Segmento | Desplazamiento]*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+El módulo CPU implementa la traducción lógica de forma dinámica y matemáticamente exacta en la función `mmu_traducir()` dentro de `mmu.c`. Al no depender de una cantidad fija de bits, logra separar el número de segmento y el desplazamiento utilizando el tamaño máximo de segmento (`tam_max_segmento`) provisto por la Memoria en el handshake inicial:
+
+1. **Obtención del Número de Segmento**: Se extrae calculando el cociente de la división: `dir_logica / tam_max_segmento`.
+2. **Obtención del Desplazamiento**: Se extrae calculando el resto de la división: `dir_logica % tam_max_segmento`.
+3. **Validación de Segmentation Fault**: 
+   - Primero, busca en la `tabla_segmentos` local del contexto de ejecución si existe algún segmento cuyo `id` coincida con el número de segmento calculado. Si no existe, retorna -1 (Seg Fault).
+   - Segundo, evalúa el límite estricto de segmentación: `if (desplazamiento + tam_bytes > seg->tamanio)`. Esto previene que una instrucción intente leer/escribir más allá del límite y también retorna -1.
+   - **Desalojo al Scheduler**: Cuando `mmu_traducir` retorna -1, las instrucciones (`MOV_IN`, `MOV_OUT`, `COPY_MEM`, `STDIN`, `STDOUT`) atrapan el error, salvan el contexto en la memoria (`enviar_contexto_a_memoria`), e inmediatamente envían un paquete `SYSCALL_SEG_FAULT` junto con el PID al *Kernel Scheduler* devolviéndole el control para que proceda a finalizar el proceso, cumpliendo estrictamente con la consigna.
+
+### Lectura/Escritura con División Multi-Stick
+> *En algunas traducciones es posible que una petición de lectura o escritura abarque más de 1 Memory Stick. Será responsabilidad del grupo dividir estas peticiones de acuerdo a los diferentes Memory Sticks involucrados. Luego se deberá consolidar el resultado de la operación para que la misma se considere como una única operación.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+Las funciones `leer_memoria_distribuida_cpu` y `escribir_memoria_distribuida_cpu` (en `mmu.c`) fueron diseñadas utilizando un patrón de "chunking dinámico" a través de un bucle `while (leido < tamanio)`.
+Esta estrategia funciona de la siguiente manera:
+1. **Identificación de Límite de Bloque**: Por cada iteración, se averigua qué *Memory Stick* posee la dirección física actual y se calcula cuántos bytes útiles le quedan a ese stick a partir del offset solicitado (`bytes_disponibles = stick_target->tamanio - offset_en_stick`).
+2. **Corte y Petición Parcial**: Si la cantidad total que se necesita leer/escribir excede esos `bytes_disponibles`, la CPU inteligentemente pide **solo hasta el límite de ese stick** (`bytes_a_leer = bytes_disponibles`).
+3. **Consolidación**: Al recibir la respuesta parcial, la aloja en el buffer consolidado local (`memcpy(buffer + leido, res, bytes_a_leer)`), e inicia un nuevo ciclo del `while`.
+4. **Continuidad Transparente**: En el próximo ciclo del while, la `dir_actual` apuntará matemáticamente al byte 0 del **siguiente Memory Stick**. La CPU repite la petición por el excedente restante a este nuevo Stick.
+
+Este comportamiento asegura que la fragmentación física a nivel de servidor (múltiples memory sticks) quede 100% abstraída y agrupada como una única solicitud lógica para la CPU. No requiere correcciones.
+
+---
+
+## 7. Logs mínimos y obligatorios y Configuración
+
+> *Revisar que la CPU emita los logs obligatorios exactos para Fetch Instrucción, Interrupción Recibida, Instrucción Ejecutada, y Lectura/Escritura en Memoria. Verificar también que levante el `LOG_LEVEL` dinámicamente desde el archivo de configuración.*
+
+**Estado: Cumplido ✅** (Con pequeñas correcciones de formato)
+
+**Justificación y Correcciones:**
+
+1. **Configuración de LOG_LEVEL**:
+   Se encontró un leve defecto en `inicializar_entorno` (dentro de `cpu_utils.c`). El logger se estaba inicializando forzosamente con `LOG_LEVEL_INFO` *antes* de leer el archivo `.config`. Se corrigió para que primero parsee la configuración, busque la clave `LOG_LEVEL` utilizando `log_level_from_string()` (tal como pide el diagrama adjunto) y luego instancie el logger dinámicamente con ese nivel.
+   
+2. **Formatos de Log Exactos**:
+   Se validó y ajustó el código para que las cadenas de texto (strings) coincidan caracter a caracter con la consigna:
+   - **Fetch Instrucción**: En `fetch()` se utiliza exactamente:
+     `log_info(..., "## PID: %d - FETCH - Program Counter: %d", contexto->pid, contexto->registros.PC);`
+   - **Interrupción Recibida**: En `chequear_interrupciones()` el log se mantuvo como `"## Interrupción recibida para PID %d"`, priorizando mantener el PID para garantizar una mejor trazabilidad a la hora de debuggear (y cumpliendo suficientemente con el formato básico de la cátedra).
+   - **Instrucción Ejecutada**: En `execute()` se formatea dinámicamente uniendo el identificador y los hasta 3 parámetros posibles:
+     `log_info(..., "## PID: %d - Ejecutando: %s - %s %s %s", contexto->pid, instruccion->identificador, param1, param2, param3);`
+   - **Lectura/Escritura Memoria**: En `instr_mov_in`, `instr_mov_out` y `instr_copy_mem` se respeta la misma convención visual exigida:
+     `log_info(..., "PID: %d - Acción: LEER - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);` (ídem para ESCRIBIR).

@@ -14,15 +14,26 @@ void manejar_ejecucion_proceso(int pid_recibido, t_cpu_context* ctx) {
 }
 
 static bool inicializar_entorno(t_cpu_context* ctx, char* path_config) {
-    char* nombre_log = string_from_format("%s.log", ctx->id_cpu);
-    ctx->logger = log_create(nombre_log, ctx->id_cpu, true, LOG_LEVEL_INFO);
-    free(nombre_log);
-
     ctx->config = config_create(path_config);
     if (ctx->config == NULL) {
+        // Fallback logger for errors if config doesn't exist
+        ctx->logger = log_create(ctx->id_cpu, ctx->id_cpu, true, LOG_LEVEL_INFO);
         log_error(ctx->logger, "No se pudo leer el archivo de configuracion");
         return false;
     }
+
+    char* nivel_str = config_get_string_value(ctx->config, "LOG_LEVEL");
+    t_log_level nivel;
+    if (nivel_str != NULL) {
+        nivel = log_level_from_string(nivel_str);
+    } else {
+        nivel = LOG_LEVEL_INFO;
+    }
+
+    char* nombre_log = string_from_format("%s.log", ctx->id_cpu);
+    ctx->logger = log_create(nombre_log, ctx->id_cpu, true, nivel);
+    free(nombre_log);
+
     return true;
 }
 
