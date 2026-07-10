@@ -3,29 +3,53 @@
 #include <string.h>
 #include "cpu_utils.h"
 
-int mmu_traducir(t_cpu_context* ctx, t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
-    int num_segmento = floor((double)dir_logica / tam_max_segmento);
-    int desplazamiento = dir_logica % tam_max_segmento;
-
-    t_segmento* seg = NULL;
-    if (contexto->tabla_segmentos != NULL) {
-        for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
-            t_segmento* s = list_get(contexto->tabla_segmentos, i);
-            if (s->id == num_segmento) {
-                seg = s;
-                break;
-            }
+static t_segmento* buscar_segmento_por_id(t_contexto_ejecucion* contexto, int num_segmento) {
+    if (contexto->tabla_segmentos == NULL) return NULL;
+    
+    for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
+        t_segmento* s = list_get(contexto->tabla_segmentos, i);
+        if (s->id == num_segmento) {
+            return s;
         }
     }
+    return NULL;
+}
+
+static t_memory_stick_info* buscar_memory_stick_por_direccion(t_cpu_context* ctx, uint32_t dir_actual) {
+    // Intento 1: Buscar en la tabla actual
+    for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+        t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+        if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
+            return stick;
+        }
+    }
+    // Intento 2: Actualizar la tabla y buscar de nuevo (por si hubo cambios en memoria distribuida)
+    actualizar_tabla_sticks(ctx);
+    for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+        t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+        if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
+            return stick;
+        }
+    }
+    
+    log_error(ctx->logger, "Error: Direccion fisica %u fuera de los limites de la memoria distribuida (CPU)", dir_actual);
+    return NULL;
+}
+
+int mmu_traducir(t_cpu_context* ctx, t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
+    int num_segmento = dir_logica / tam_max_segmento;
+    int desplazamiento = dir_logica % tam_max_segmento;
+
+    t_segmento* seg = buscar_segmento_por_id(contexto, num_segmento);
 
     if (!seg) return -1; // SEG FAULT
-
+    
     if (desplazamiento + tam_bytes > seg->tamanio) {
         return -1; // SEG FAULT
     }
 
     *dir_fisica = seg->base + desplazamiento;
-    return 0; // OK
+    return 0;
 }
 
 void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio) {
@@ -34,29 +58,10 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
     
     while (leido < tamanio) {
         uint32_t dir_actual = dir_fisica + leido;
-        t_memory_stick_info* stick_target = NULL;
-        
-        for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
-            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-            if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
-                stick_target = stick;
-                break;
-            }
-        }
+        t_memory_stick_info* stick_target = buscar_memory_stick_por_direccion(ctx, dir_actual);
         
         if (stick_target == NULL) {
-            actualizar_tabla_sticks(ctx);
-            for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
-                t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-                if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
-                    stick_target = stick;
-                    break;
-                }
-            }
-            if (stick_target == NULL) {
-                log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
-                break;
-            }
+            break;
         }
         
         uint32_t offset_en_stick = dir_actual - stick_target->base_address;
@@ -87,29 +92,10 @@ void escribir_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, u
     
     while (escrito < tamanio) {
         uint32_t dir_actual = dir_fisica + escrito;
-        t_memory_stick_info* stick_target = NULL;
-        
-        for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
-            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-            if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
-                stick_target = stick;
-                break;
-            }
-        }
+        t_memory_stick_info* stick_target = buscar_memory_stick_por_direccion(ctx, dir_actual);
         
         if (stick_target == NULL) {
-            actualizar_tabla_sticks(ctx);
-            for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
-                t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-                if (dir_actual >= stick->base_address && dir_actual < stick->base_address + stick->tamanio) {
-                    stick_target = stick;
-                    break;
-                }
-            }
-            if (stick_target == NULL) {
-                log_error(ctx->logger, "Error: Direccion fisica fuera de los limites de la memoria distribuida (CPU)");
-                break;
-            }
+            break;
         }
         
         uint32_t offset_en_stick = dir_actual - stick_target->base_address;
