@@ -192,3 +192,24 @@ La CPU separa inteligentemente la lógica de autoincremento para instrucciones s
    }
    ```
    Esto garantiza que si se usó una instrucción como `JNZ` (la cual altera el PC internamente), el ciclo **no lo incremente accidentalmente +1**, respetando la regla técnica al pie de la letra.
+
+---
+
+## 5. Check Interrupt
+
+### Desalojo por Interrupciones
+> *En este momento, se deberá chequear si el Kernel Scheduler nos envió una interrupción al PID que se está ejecutando. En caso afirmativo, se actualiza el contexto de ejecución en el Kernel Memory y se le devuelve el PID al Kernel Scheduler con el motivo de la interrupción. Caso contrario, se descarta la interrupción.*
+
+**Estado: Cumplido ✅** (Con corrección)
+
+**Justificación y Bugfix:**
+Durante la revisión estricta de esta etapa (implementada en `chequear_interrupciones()` de `ciclo_instruccion.c`), se halló un **problema crítico de concurrencia**.
+Originalmente, el *Kernel Scheduler* le enviaba a la CPU un opcode de `INTERRUPCION_QUANTUM` **sin payload** (es decir, sin especificar a qué PID iba dirigida). A raíz de esto, la CPU simplemente validaba que había llegado un aviso y **desalojaba incondicionalmente** a quien estuviera corriendo.
+
+Esto iba a causar que si el Scheduler enviaba un desalojo para el `PID 2`, pero la CPU por latencia de red ya había sacado al `PID 2` (ej. por syscall de SLEEP) y metido al `PID 3`, ¡terminaba desalojando al `PID 3` injustamente!
+
+**Corrección implementada:**
+1. **Lado Scheduler** (`kernel_scheduler/src/rr.c`): Modificamos el hilo que controla el quantum para que empaquete y envíe explícitamente el `PID` junto con la señal de `INTERRUPCION_QUANTUM`.
+2. **Lado CPU** (`cpu/src/ciclo_instruccion.c`): Modificamos el parser de mensajes para leer este payload e inyectar un if fundamental: `if (pid_interrumpido == pid_actual)`.
+3. Si el PID coincide, devuelve 1 (verdadero) forzando el desalojo, enviando el contexto a memoria y respondiéndole al Scheduler con un `FIN_DE_QUANTUM`.
+4. Si el PID **no** coincide, descarta el mensaje limpiamente con un `log_warning` ("Se descartó interrupción del PID X, el actual es Y") y continúa ejecutando normalmente sin interferir con el proceso actual.

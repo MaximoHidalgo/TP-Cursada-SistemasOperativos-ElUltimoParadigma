@@ -30,7 +30,7 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
 
         /* 4. CHECK INTERRUPT */
         if (!desalojar) {
-            int hubo_interrupcion = chequear_interrupciones(ctx);
+            int hubo_interrupcion = chequear_interrupciones(ctx, contexto->pid);
             if (hubo_interrupcion) {
                 log_info(ctx->logger, "## Interrupción por Fin de Quantum recibida para PID %d", contexto->pid);
                 desalojar = 1; // Obligamos a romper el ciclo de instrucción
@@ -135,7 +135,7 @@ int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_co
     }
 }
 
-int chequear_interrupciones(t_cpu_context* ctx) {
+int chequear_interrupciones(t_cpu_context* ctx, uint32_t pid_actual) {
     int op_code_espiado;
     
     ssize_t bytes_recibidos = recv(ctx->conexiones->scheduler, &op_code_espiado, sizeof(int), MSG_PEEK | MSG_DONTWAIT);
@@ -144,12 +144,17 @@ int chequear_interrupciones(t_cpu_context* ctx) {
         int operacion = recibir_operacion(ctx->conexiones->scheduler);
         
         if (operacion == INTERRUPCION_QUANTUM) { 
-            int size;
-            void* buffer = recibir_buffer(&size, ctx->conexiones->scheduler);
-            free(buffer);
+            t_list* paquete = recibir_paquete(ctx->conexiones->scheduler);
+            uint32_t pid_interrumpido = *(uint32_t*)list_get(paquete, 0);
+            list_destroy_and_destroy_elements(paquete, free);
 
-            log_info(ctx->logger, "## Interrupción recibida");
-            return 1;
+            if (pid_interrumpido == pid_actual) {
+                log_info(ctx->logger, "## Interrupción recibida para PID %d", pid_interrumpido);
+                return 1;
+            } else {
+                log_warning(ctx->logger, "Se descartó interrupción del PID %d (el actual es %d)", pid_interrumpido, pid_actual);
+                return 0;
+            }
         } else {
             log_warning(ctx->logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
         }

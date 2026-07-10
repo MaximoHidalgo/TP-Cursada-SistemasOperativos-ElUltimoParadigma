@@ -104,7 +104,7 @@ context(test_cpu_ciclo_instruccion) {
             // Simulamos una interrupcion enviada por el scheduler
             t_paquete* paq_int = crear_paquete();
             paq_int->codigo_operacion = INTERRUPCION_QUANTUM;
-            uint32_t payload = 0; // Payload dummy (consumido por check_interrupciones)
+            uint32_t payload = 1; // Debe coincidir con ctx->pid
             agregar_a_paquete(paq_int, &payload, sizeof(uint32_t));
             enviar_paquete(paq_int, sv_sched[1]);
             eliminar_paquete(paq_int);

@@ -16,6 +16,6 @@ void notificar_syscall_sleep_a_scheduler(uint32_t pid, uint32_t tiempo_sleep, t_
 char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 t_instruccion* decode(char* instruccion_texto);
 int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx);
-int chequear_interrupciones(t_cpu_context* ctx);
+int chequear_interrupciones(t_cpu_context* ctx, uint32_t pid_actual);
 
 #endif //CICLO_INSTRUCCION_H_
