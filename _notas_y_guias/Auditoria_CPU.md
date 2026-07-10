@@ -135,3 +135,60 @@ Se verificó y se **agregó la compatibilidad explícita del registro `PC`** den
 
 > [!NOTE] 
 > Todo el flujo fue re-validado ejecutando la suite de testing unitario (`make test`) y probando la ejecución de interconexión full-stack (`make all && make run && make stop`), sin detectarse regresiones ni memory leaks.
+
+---
+
+## 4. Ciclo de Instrucción
+
+### Fetch de la Próxima Instrucción
+> *La primera etapa del ciclo consiste en buscar la próxima instrucción a ejecutar. En este trabajo práctico cada instrucción deberá ser pedida al módulo Kernel Memory utilizando el Program Counter (también llamado Instruction Pointer) que representa el número de instrucción a buscar relativo al Proceso en ejecución.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+En el archivo `cpu/src/ciclo_instruccion.c`, el flujo de `ejecutar_ciclo_de_instruccion()` respeta rigurosamente el diseño de la máquina de estados. El primer paso explícito en el bucle es invocar a `fetch(contexto, ctx)`. 
+
+Dentro de esta función, la CPU lee dinámicamente el valor actual de `contexto->registros.PC` y empaqueta la petición de red (`FETCH_INSTRUCCION`) dirigida al *Kernel Memory*. 
+```c
+enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, ctx->conexiones->memoria);
+```
+Del lado de la Memoria (en `kernel_memory/src/auxiliares.c`, función `obtener_instruccion()`), el valor recibido como PC se utiliza directamente como un índice (`[pc]`) sobre el arreglo interno en memoria de las líneas del script del proceso:
+```c
+char* instruccion = strdup(prog->instrucciones[pc]);
+```
+Esto confirma matemáticamente que el PC funciona, por definición de la cátedra, como un índice (o número de instrucción) relativo a la lista de sentencias del proceso, y no como una dirección real de byte en RAM. Adicionalmente, todo este flujo de red cuenta con los logs obligatorios solicitados para la etapa de Fetch (`## PID: <PID> - FETCH - Program Counter: <PC>`).
+
+### Decode y Execute de Instrucciones
+> *Esta etapa consiste en interpretar qué instrucción es la que se va a ejecutar y si la misma requiere de una traducción de dirección lógica a dirección física. Ejemplos de instrucciones a interpretar: NOOP, SET, SUM, SUB, JNZ, COPY_MEM, MOV_IN, MOV_OUT, MUTEX_CREATE, MUTEX_LOCK, MUTEX_UNLOCK, MEM_ALLOC, MEM_FREE, SLEEP, STDOUT, STDIN, INIT_PROC, EXIT.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+1. **Decode Dinámico**: La función `decode()` en `ciclo_instruccion.c` utiliza `string_split` con separadores de espacio para aislar el identificador (ej. `MOV_IN`) de sus hasta 3 posibles parámetros (ej. `EDX`). Este *parser* dinámico permite a la CPU asimilar cualquier instrucción sin *hardcodear* la lógica de parseo por cada instrucción de forma aislada, evitando errores sintácticos.
+2. **Execute (Tabla de Despacho)**: En `instrucciones.c`, se cuenta con un arreglo estático `INSTRUCTION_SET` que funciona como una tabla de despacho (patrón *Command* encubierto). Hemos validado que todas las 18 instrucciones ejemplificadas en la consigna están listadas y vinculadas a sus respectivos handlers de ejecución (`instr_noop`, `instr_set`, `instr_mov_in`, etc.).
+3. **Traducción Física**: Como comprobamos en la auditoría de la MMU, las funciones que interactúan con memoria (`MOV_IN`, `MOV_OUT`, `COPY_MEM`) se encargan explícitamente de llamar a `mmu_traducir()` dentro de su *handler*, aislando esta validación de instrucciones abstractas como `SET` o `SUM` que operan puramente sobre los registros de CPU.
+4. **Bugfix (COPY_MEM)**: Durante la validación estricta de la instrucción `COPY_MEM (Registro Tamaño)` se detectó un pequeño bug. El código estaba haciendo un `atoi(parametro1)` en vez de consultar el valor dinámico del registro vía `leer_registro(contexto, parametro1)`. Esto hubiera provocado que se copie un tamaño de 0 bytes siempre (ya que un string como "AX" convertido por `atoi` da 0). Se corrigió en el momento para asegurar la adherencia total al requerimiento.
+
+### Ejecución de Syscalls y Autoincremento de PC
+> *Las syscalls, al depender del Kernel Scheduler, deberán liberar la CPU. Una vez incrementado el Program Counter (PC) en 1, deberá actualizar el contexto de ejecución en el Kernel Memory y devolverle el PID al KS para que este realice las tareas necesarias. [...] Es importante tener en cuenta que, al finalizar el ciclo de instrucción, el Program Counter (PC) deberá ser actualizado sumándole 1, siempre y cuando este no haya sido modificado por la instrucción ejecutada anteriormente.*
+
+**Estado: Cumplido ✅**
+
+**Justificación:**
+La CPU separa inteligentemente la lógica de autoincremento para instrucciones síncronas (operaciones normales) y asíncronas (Syscalls):
+
+1. **Syscalls (Desalojo)**: Cualquier handler asociado a una syscall (ej. `instr_sleep`, `instr_mutex_lock`, `instr_stdout`, `instr_exit`) realiza los 3 pasos estrictamente obligatorios en el mismo orden:
+   - Incrementa el PC localmente (`contexto->registros.PC++`).
+   - Envía sincrónicamente el contexto completo al Memory (`enviar_contexto_a_memoria`).
+   - Envía la operación requerida incluyendo el PID al Scheduler (`notificar_syscall...`).
+   - Retorna `1` (verdadero) para avisar al bucle principal de que debe desalojar y frenar la ejecución de ese proceso.
+2. **Instrucciones normales (Autoincremento)**: Para las operaciones matemáticas o lógicas que no desalojan (retornan `0`), el motor general (en `ciclo_instruccion.c`) tiene implementada una validación de estado previo vs. estado posterior del PC:
+   ```c
+   uint32_t pc_previo = contexto->registros.PC;
+   desalojar = execute(instruccion_decodificada, contexto, ctx);
+        
+   if (!desalojar && contexto->registros.PC == pc_previo) {
+       contexto->registros.PC++;
+   }
+   ```
+   Esto garantiza que si se usó una instrucción como `JNZ` (la cual altera el PC internamente), el ciclo **no lo incremente accidentalmente +1**, respetando la regla técnica al pie de la letra.

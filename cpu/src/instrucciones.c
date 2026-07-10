@@ -120,7 +120,7 @@ int instr_mov_out(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_
 }
 
 int instr_copy_mem(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    uint32_t tam = atoi(instruccion->parametro1);
+    uint32_t tam = leer_registro(contexto, instruccion->parametro1);
     uint32_t dir_logica_si = contexto->registros.SI;
     uint32_t dir_logica_di = contexto->registros.DI;
     uint32_t dir_fisica_si = 0;
