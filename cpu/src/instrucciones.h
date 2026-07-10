@@ -13,7 +13,7 @@
 #include "cpu_utils.h"
 #include <math.h>
 
-// 1. Definimos el tipo de puntero a función con la firma de este TP:
+// 1. Definimos el tipo de puntero a función:
 typedef int (*t_instr_handler)(t_instruccion*, t_contexto_ejecucion*, t_cpu_context*);
 
 // 2. Definimos el struct

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <sys/socket.h>
 #include "../src/instrucciones.h"
+#include "../src/syscalls.h"
 #include <commons/collections/list.h>
 
 // IMPORTANTE: cspec.h DEBE ser siempre el último include
@@ -134,7 +135,7 @@ context(test_cpu_instrucciones) {
             ctx->registros.PC = 5;
             instr->identificador = strdup("EXIT");
 
-            int desalojar = instr_exit(instr, ctx, cpu_ctx);
+            int desalojar = syscall_exit(instr, ctx, cpu_ctx);
             
             should_int(desalojar) be equal to(1); // Todas las syscalls deben desalojar
             should_int(ctx->registros.PC) be equal to(6); // La syscall incrementa PC antes de enviar contexto
@@ -145,7 +146,7 @@ context(test_cpu_instrucciones) {
             instr->identificador = strdup("SLEEP");
             instr->parametro1 = strdup("1000");
 
-            int desalojar = instr_sleep(instr, ctx, cpu_ctx);
+            int desalojar = syscall_sleep(instr, ctx, cpu_ctx);
             
             should_int(desalojar) be equal to(1);
             should_int(ctx->registros.PC) be equal to(6); // Deberia haber sumado 1

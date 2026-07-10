@@ -5,7 +5,7 @@ void preparar_syscall(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
 }
 
-int instr_mutex_create(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_mutex_create(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MUTEX_CREATE. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -13,7 +13,7 @@ int instr_mutex_create(t_instruccion* instruccion, t_contexto_ejecucion* context
     return 1;
 }
 
-int instr_mutex_lock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_mutex_lock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MUTEX_LOCK. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -21,7 +21,7 @@ int instr_mutex_lock(t_instruccion* instruccion, t_contexto_ejecucion* contexto,
     return 1;
 }
 
-int instr_mutex_unlock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_mutex_unlock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MUTEX_UNLOCK. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -29,7 +29,7 @@ int instr_mutex_unlock(t_instruccion* instruccion, t_contexto_ejecucion* context
     return 1;
 }
 
-int instr_mem_alloc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_mem_alloc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MEM_ALLOC. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -40,7 +40,7 @@ int instr_mem_alloc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, 
     return 1;
 }
 
-int instr_mem_free(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_mem_free(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MEM_FREE. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -50,7 +50,7 @@ int instr_mem_free(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
     return 1;
 }
 
-int instr_sleep(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_sleep(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
     
     preparar_syscall(contexto, ctx);
@@ -61,7 +61,7 @@ int instr_sleep(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cp
     return 1; // Desalojar
 }
 
-int instr_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall STDOUT. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -78,7 +78,7 @@ int instr_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_c
     }
 }
 
-int instr_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall STDIN. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -95,7 +95,7 @@ int instr_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cp
     }
 }
 
-int instr_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall INIT_PROC. Desalojando a Kernel...");
     preparar_syscall(contexto, ctx);
     
@@ -106,7 +106,7 @@ int instr_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, 
     return 1;
 }
 
-int instr_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+int syscall_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
     contexto->registros.PC++;
     return desalojar_proceso(contexto, ctx, SYSCALL_EXIT);
