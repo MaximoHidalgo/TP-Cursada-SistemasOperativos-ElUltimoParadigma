@@ -24,7 +24,8 @@ typedef enum {
 typedef struct {
     t_algoritmo_planificacion algoritmo;
     t_queue* cola_new;
-    t_list* cola_susp_ready;//atributo agregado para tratar a los suspendidos
+    t_list* cola_susp_ready;//atributo agregado para tratar a los suspendidos ready
+    t_list* cola_susp_blocked; // atributo agregado para tratar a los suspendidos bloqueados
     t_list* colas;
     t_proceso_planificable* proceso_exec;
     bool desalojo_entre_colas;

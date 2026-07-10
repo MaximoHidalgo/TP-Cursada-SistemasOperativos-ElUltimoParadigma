@@ -594,24 +594,28 @@ void planificador_finalizar_todo_por_bsod(t_estratega_planificacion* estratega) 
             }
         }
         list_destroy(lista_mutex);
-        // ⚠️ 6. Vaciar SUSP_READY y SUSP_BLOCKED
-        // TODO: Descomentar esto cuando agregues las colas estratega->cola_susp_ready 
-        // y estratega->cola_susp_blocked a la estructura 't_estratega_planificacion' en planificador.h
-        /*
-        while (!queue_is_empty(estratega->cola_susp_ready)) {
-            t_proceso_planificable* proceso = queue_pop(estratega->cola_susp_ready);
-            proceso->estado = ESTADO_PROCESO_EXIT;
-            log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
-            free(proceso);
+        
+        // ✅ 6. Vaciar SUSP_READY y SUSP_BLOCKED
+        // Como usamos t_list para poder ordenarlas por prioridad, vaciamos usando list_size y list_remove
+
+        if (estratega->cola_susp_ready != NULL) {
+            while (list_size(estratega->cola_susp_ready) > 0) {
+                // list_remove en el índice 0 funciona igual que un queue_pop
+                t_proceso_planificable* proceso = list_remove(estratega->cola_susp_ready, 0);
+                proceso->estado = ESTADO_PROCESO_EXIT;
+                log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+                free(proceso);
+            }
         }
 
-        while (!queue_is_empty(estratega->cola_susp_blocked)) {
-            t_proceso_planificable* proceso = queue_pop(estratega->cola_susp_blocked);
-            proceso->estado = ESTADO_PROCESO_EXIT;
-            log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
-            free(proceso);
+        if (estratega->cola_susp_blocked != NULL) {
+            while (list_size(estratega->cola_susp_blocked) > 0) {
+                t_proceso_planificable* proceso = list_remove(estratega->cola_susp_blocked, 0);
+                proceso->estado = ESTADO_PROCESO_EXIT;
+                log_info(estratega->logger, "## (%d) finalizó su ejecución con motivo de BSOD", proceso->pid);
+                free(proceso);
+            }
         }
-        */
     }
     list_destroy(interfaces_io); // Limpiamos la lista auxiliar generada por el diccionario
     // (Nota: Si tuvieras procesos en las colas de BLOQUEADOS de I/O o Mutex, 
