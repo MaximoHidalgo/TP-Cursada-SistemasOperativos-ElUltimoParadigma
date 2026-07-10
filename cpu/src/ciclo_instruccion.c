@@ -1,7 +1,7 @@
 #include "ciclo_instruccion.h"
 
 // -------------------------------------------------------------
-// HELPER FUNCTIONS
+// PRIVATE FUNCTIONS
 // -------------------------------------------------------------
 
 static void destruir_instruccion(t_instruccion* inst) {
@@ -18,10 +18,6 @@ static char* extraer_instruccion_del_paquete(int socket_memoria) {
     list_destroy_and_destroy_elements(lista, free);
     return instruccion_texto;
 }
-
-// -------------------------------------------------------------
-// FUNCIONES PRIVADAS DE CHEQUEAR INTERRUPCIONES
-// -------------------------------------------------------------
 
 static int manejar_interrupcion_quantum(t_cpu_context* ctx, uint32_t pid_actual) {
     t_list* paquete = recibir_paquete(ctx->conexiones->scheduler);

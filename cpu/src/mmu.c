@@ -1,7 +1,8 @@
 #include "mmu.h"
-#include <stdlib.h>
-#include <string.h>
-#include "cpu_utils.h"
+
+// -------------------------------------------------------------
+// PRIVATE FUNCTIONS
+// -------------------------------------------------------------
 
 static t_segmento* buscar_segmento_por_id(t_contexto_ejecucion* contexto, int num_segmento) {
     if (contexto->tabla_segmentos == NULL) return NULL;
@@ -35,6 +36,10 @@ static t_memory_stick_info* buscar_memory_stick_por_direccion(t_cpu_context* ctx
     log_error(ctx->logger, "Error: Direccion fisica %u fuera de los limites de la memoria distribuida (CPU)", dir_actual);
     return NULL;
 }
+
+// -------------------------------------------------------------
+// PUBLIC FUNCTIONS
+// -------------------------------------------------------------
 
 int mmu_traducir(t_cpu_context* ctx, t_contexto_ejecucion* contexto, int dir_logica, int tam_bytes, int tam_max_segmento, uint32_t* dir_fisica) {
     int num_segmento = dir_logica / tam_max_segmento;

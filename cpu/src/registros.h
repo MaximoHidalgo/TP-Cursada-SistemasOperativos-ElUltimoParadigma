@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <commons/string.h>
 #include <utils/dominio/estructuras.h>
+#include <stddef.h>
 
 uint32_t leer_registro(t_contexto_ejecucion* contexto, char* nombre_registro);
 int obtener_tamanio_registro(char* nombre_registro);

@@ -1,5 +1,4 @@
 #include "registros.h"
-#include <stddef.h>
 
 typedef struct {
     char* nombre;
@@ -21,6 +20,10 @@ static const t_registro_info tabla_registros[] = {
     {"PC", offsetof(t_registros, PC), 4},
 };
 
+// -------------------------------------------------------------
+// PRIVATE FUNCTIONS
+// -------------------------------------------------------------
+
 static const int NUM_REGISTROS = sizeof(tabla_registros) / sizeof(tabla_registros[0]);
 
 static const t_registro_info* buscar_registro(char* nombre_registro) {
@@ -41,6 +44,10 @@ static void* obtener_puntero_registro(t_contexto_ejecucion* contexto, const t_re
     
     return direccion_registro_exacto;
 }
+
+// -------------------------------------------------------------
+// PUBLIC FUNCTIONS
+// -------------------------------------------------------------
 
 uint32_t leer_registro(t_contexto_ejecucion* contexto, char* nombre_registro) {
     const t_registro_info* info = buscar_registro(nombre_registro);

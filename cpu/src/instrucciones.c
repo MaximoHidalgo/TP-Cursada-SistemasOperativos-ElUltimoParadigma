@@ -1,9 +1,4 @@
 #include "instrucciones.h"
-#include "registros.h"
-#include "mmu.h"
-#include "ciclo_instruccion.h"
-#include "cpu_utils.h"
-#include <math.h>
 
 // Tabla de despacho
 t_instruction INSTRUCTION_SET[] = {
@@ -40,6 +35,7 @@ t_instruction *instruction_get_by_name(char *name) {
 // -------------------------------------------------------------
 // HELPER FUNCTIONS
 // -------------------------------------------------------------
+
 static void preparar_syscall(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     contexto->registros.PC++;
     enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
