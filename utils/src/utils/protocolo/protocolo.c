@@ -87,8 +87,45 @@ void enviar_operacion_con_pid(op_code codigo, uint32_t pid, int socket_cliente) 
 void enviar_operacion_con_pid_y_parametro(op_code codigo, uint32_t pid, uint32_t parametro, int socket_cliente) {
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = codigo;
+    
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
     agregar_a_paquete(paquete, &parametro, sizeof(uint32_t));
+    
+    enviar_paquete(paquete, socket_cliente);
+    eliminar_paquete(paquete);
+}
+
+void enviar_operacion_con_pid_y_string(op_code codigo, uint32_t pid, char* texto, int socket_cliente) {
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = codigo;
+    
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    agregar_a_paquete(paquete, texto, strlen(texto) + 1);
+    
+    enviar_paquete(paquete, socket_cliente);
+    eliminar_paquete(paquete);
+}
+
+void enviar_operacion_con_pid_y_dos_parametros(op_code codigo, uint32_t pid, uint32_t param1, uint32_t param2, int socket_cliente) {
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = codigo;
+    
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &param1, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &param2, sizeof(uint32_t));
+    
+    enviar_paquete(paquete, socket_cliente);
+    eliminar_paquete(paquete);
+}
+
+void enviar_operacion_con_pid_string_y_parametro(op_code codigo, uint32_t pid, char* texto, uint32_t parametro, int socket_cliente) {
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = codigo;
+    
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    agregar_a_paquete(paquete, texto, strlen(texto) + 1);
+    agregar_a_paquete(paquete, &parametro, sizeof(uint32_t));
+    
     enviar_paquete(paquete, socket_cliente);
     eliminar_paquete(paquete);
 }

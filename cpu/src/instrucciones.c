@@ -33,17 +33,25 @@ t_instruction *instruction_get_by_name(char *name) {
 }
 
 // -------------------------------------------------------------
-// HELPER FUNCTIONS
+// IMPLEMENTACIONES DE HANDLERS DE INSTRUCCIONES
 // -------------------------------------------------------------
 
-static void preparar_syscall(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+int instr_noop(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+    int repeticiones = 1;
+    if (instruccion->parametro1 != NULL) {
+        repeticiones = atoi(instruccion->parametro1);
+    }
+    
+    usleep(1000 * 100); // 100ms provisorio, podés ajustarlo al RETARDO_INSTRUCCION si luego lo agregás al config
+    
+    for (int i = 1; i < repeticiones; i++) {
+        // Simulamos la ejecución reiterada
+        log_info(ctx->logger, "## PID: %d - Ejecutando: NOOP -   ", contexto->pid);
+        usleep(1000 * 100); // 100ms de retardo por cada repetición simulada
+    }
+    
+    return 0;
 }
-
-// -------------------------------------------------------------
-// IMPLEMENTACIONES DE HANDLERS
-// -------------------------------------------------------------
 
 int instr_set(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     uint32_t valor = atoi(instruccion->parametro2);
@@ -133,201 +141,4 @@ int instr_copy_mem(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
         }
         return 0;
     }
-}
-
-// --- SYSCALLS ---
-
-int instr_sleep(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
-    
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete_sleep = crear_paquete();
-    paquete_sleep->codigo_operacion = SYSCALL_SLEEP;
-    uint32_t tiempo_sleep = atoi(instruccion->parametro1);
-    
-    agregar_a_paquete(paquete_sleep, &(contexto->pid), sizeof(uint32_t));
-    agregar_a_paquete(paquete_sleep, &tiempo_sleep, sizeof(uint32_t));
-    enviar_paquete(paquete_sleep, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete_sleep);
-    
-    return 1; // Desalojar
-}
-
-int instr_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall STDOUT. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    uint32_t dir_logica = leer_registro(contexto, instruccion->parametro1);
-    uint32_t tamanio = leer_registro(contexto, instruccion->parametro2);
-
-    uint32_t dir_fisica = 0;
-    if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
-        log_error(ctx->logger, "Segmentation Fault en STDOUT logica %d", dir_logica);
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
-    } else {
-        t_paquete* paquete = crear_paquete();
-        paquete->codigo_operacion = SYSCALL_STDOUT;
-        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-        agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-        agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
-        enviar_paquete(paquete, ctx->conexiones->scheduler);
-        eliminar_paquete(paquete);
-        return 1;
-    }
-}
-
-int instr_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall STDIN. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    uint32_t dir_logica = leer_registro(contexto, instruccion->parametro1);
-    uint32_t tamanio = leer_registro(contexto, instruccion->parametro2);
-    
-    uint32_t dir_fisica = 0;
-    if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
-        log_error(ctx->logger, "Segmentation Fault en STDIN logica %d", dir_logica);
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
-    } else {
-        t_paquete* paquete = crear_paquete();
-        paquete->codigo_operacion = SYSCALL_STDIN;
-        agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-        agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-        agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
-        enviar_paquete(paquete, ctx->conexiones->scheduler);
-        eliminar_paquete(paquete);
-        return 1;
-    }
-}
-
-int instr_mutex_create(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall MUTEX_CREATE. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_MUTEX_CREATE;
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    
-    char* recurso = instruccion->parametro1;
-    agregar_a_paquete(paquete, recurso, strlen(recurso) + 1);
-
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-    
-    return 1;
-}
-
-int instr_mutex_lock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall MUTEX_LOCK. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_MUTEX_LOCK;
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    
-    char* recurso = instruccion->parametro1;
-    agregar_a_paquete(paquete, recurso, strlen(recurso) + 1);
-
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-    
-    return 1;
-}
-
-int instr_mutex_unlock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall MUTEX_UNLOCK. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_MUTEX_UNLOCK;
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    
-    char* recurso = instruccion->parametro1;
-    agregar_a_paquete(paquete, recurso, strlen(recurso) + 1);
-
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-    
-    return 1;
-}
-
-int instr_mem_alloc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall MEM_ALLOC. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_MEM_ALLOC;
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    
-    uint32_t id_seg = atoi(instruccion->parametro1);
-    uint32_t tamanio = atoi(instruccion->parametro2);
-    
-    agregar_a_paquete(paquete, &id_seg, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
-
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-    
-    return 1;
-}
-
-int instr_mem_free(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall MEM_FREE. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_MEM_FREE;
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    
-    uint32_t id_seg = atoi(instruccion->parametro1);
-    
-    agregar_a_paquete(paquete, &id_seg, sizeof(uint32_t));
-
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-    
-    return 1;
-}
-
-int instr_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall INIT_PROC. Desalojando a Kernel...");
-    preparar_syscall(contexto, ctx);
-    
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_INIT_PROC;
-    agregar_a_paquete(paquete, &(contexto->pid), sizeof(uint32_t));
-    
-    char* script_path = instruccion->parametro1;
-    uint32_t prioridad = atoi(instruccion->parametro2);
-    
-    agregar_a_paquete(paquete, script_path, strlen(script_path) + 1);
-    agregar_a_paquete(paquete, &prioridad, sizeof(uint32_t));
-
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-    
-    return 1;
-}
-
-int instr_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
-    contexto->registros.PC++;
-    return desalojar_proceso(contexto, ctx, SYSCALL_EXIT);
-}
-
-int instr_noop(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    int repeticiones = 1;
-    if (instruccion->parametro1 != NULL) {
-        repeticiones = atoi(instruccion->parametro1);
-    }
-    
-    usleep(1000 * 100); // 100ms provisorio, podés ajustarlo al RETARDO_INSTRUCCION si luego lo agregás al config
-    
-    for (int i = 1; i < repeticiones; i++) {
-        // Simulamos la ejecución reiterada
-        log_info(ctx->logger, "## PID: %d - Ejecutando: NOOP -   ", contexto->pid);
-        usleep(1000 * 100); // 100ms de retardo por cada repetición simulada
-    }
-    
-    return 0;
 }

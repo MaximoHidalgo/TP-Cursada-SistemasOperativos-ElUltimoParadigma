@@ -13,7 +13,6 @@
 #include <errno.h>
 #include "cpu_utils.h"
 
-
 void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx);
 t_instruccion* decode(char* instruccion_texto);
