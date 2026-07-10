@@ -18,6 +18,7 @@ typedef struct {
     int cola_prioridad;
     t_estado_proceso estado;
     uint64_t instante_ready;
+    uint64_t instante_suspension; //atributo nuevo agregado 
     uint32_t io_dir_fisica;
     uint32_t io_tamanio;
     int bloqueo_id;

@@ -32,6 +32,7 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
 
     estratega->algoritmo = algoritmo_planificacion_desde_string(config_get_string_value(config, "PLANIFICATION_ALGORITHM"));
     estratega->cola_new = queue_create();
+    estratega->cola_susp_ready = list_create(); //agregado para la lista_suspendidos
     estratega->colas_io = dictionary_create();
     estratega->mutex_creados = dictionary_create();
     estratega->quantum_rr = config_get_int_value(config, "RR_QUANTUM");
@@ -84,6 +85,7 @@ void destruir_estratega_planificacion(t_estratega_planificacion* estratega) {
     if (estratega == NULL) return;
 
     queue_destroy(estratega->cola_new);
+    list_destroy(estratega->cola_susp_ready); //elimina atributo creado para los suspendidos
 
     if (estratega->colas != NULL) {
         list_destroy_and_destroy_elements(estratega->colas, destruir_cola_planificacion);
@@ -617,3 +619,64 @@ void planificador_finalizar_todo_por_bsod(t_estratega_planificacion* estratega) 
 }
 
 
+bool comparador_procesos_suspendidos(void* a, void* b) {
+    t_proceso_planificable* p1 = (t_proceso_planificable*)a;
+    t_proceso_planificable* p2 = (t_proceso_planificable*)b;
+
+    // Si tienen distinta prioridad, priorizamos el de menor número (Prioridad 0 es máxima)
+    if (p1->cola_prioridad != p2->cola_prioridad) {
+        return p1->cola_prioridad < p2->cola_prioridad;
+    }
+    
+    // Si tienen la misma prioridad, el que tenga el instante de suspensión más antiguo
+    return p1->instante_suspension < p2->instante_suspension;
+}
+
+void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
+    list_sort(estratega->cola_susp_ready, comparador_procesos_suspendidos);
+
+    int i = 0;
+    while (i < list_size(estratega->cola_susp_ready)) {
+        t_proceso_planificable* proceso = list_get(estratega->cola_susp_ready, i);
+
+        // A. Consultamos a memoria
+        t_paquete* paq = crear_paquete();
+        paq->codigo_operacion = CONSULTAR_ESPACIO_LIBRE;
+        agregar_a_paquete(paq, &(proceso->pid), sizeof(uint32_t));
+        enviar_paquete(paq, estratega->socket_memoria); // Usamos el socket del estratega
+        eliminar_paquete(paq);
+
+        // B. Esperamos respuesta
+        int codigo_rta = recibir_operacion(estratega->socket_memoria);
+        int hay_espacio = 0;
+        if (codigo_rta == MENSAJE) { // Ajustá al opcode real que te mande la Memoria
+            hay_espacio = recibir_int(estratega->socket_memoria); 
+        }
+
+        // C. Evaluamos
+        if (hay_espacio) {
+            list_remove(estratega->cola_susp_ready, i);
+            
+            // Avisamos a memoria para des-suspender
+            t_paquete* paq_desusp = crear_paquete();
+            paq_desusp->codigo_operacion = DESUSPENDER_PROCESO;
+            agregar_a_paquete(paq_desusp, &(proceso->pid), sizeof(uint32_t));
+            enviar_paquete(paq_desusp, estratega->socket_memoria);
+            eliminar_paquete(paq_desusp);
+            
+            // Esperamos el OK de memoria
+            int confirmacion = recibir_operacion(estratega->socket_memoria);
+            if (confirmacion == -1) {
+                log_error(estratega->logger, "Error: Kernel Memory se desconectó");
+                return;
+            }
+
+            // Lo pasamos a READY
+            proceso->estado = ESTADO_PROCESO_READY;
+            log_info(estratega->logger, "## (%d) Pasa del estado SUSP_READY al estado READY", proceso->pid);
+            encolar_en_cola_ready(estratega->colas, proceso);
+        } else {
+            i++;
+        }
+    }
+}

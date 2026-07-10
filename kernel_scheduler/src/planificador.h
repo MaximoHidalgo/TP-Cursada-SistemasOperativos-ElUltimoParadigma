@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include "colas.h"
-
+//#include "estructuras_scheduler.h" //agregado para implemencion de ciertas funciones
 #include <stdlib.h>
 #include <string.h>
 #include <commons/string.h>
@@ -24,6 +24,7 @@ typedef enum {
 typedef struct {
     t_algoritmo_planificacion algoritmo;
     t_queue* cola_new;
+    t_list* cola_susp_ready;//atributo agregado para tratar a los suspendidos
     t_list* colas;
     t_proceso_planificable* proceso_exec;
     bool desalojo_entre_colas;
@@ -59,6 +60,8 @@ typedef struct {
     pthread_mutex_t mutex_interfaz;
 } t_interfaz_io;
 
+bool comparador_procesos_suspendidos(void* a, void* b); //funcion agregada para evaluar cual desuspender
+
 t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log* logger);
 void destruir_estratega_planificacion(t_estratega_planificacion* estratega);
 void destruir_mutex(void* element);
@@ -89,5 +92,5 @@ bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estr
 
 const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo);
 void planificador_finalizar_todo_por_bsod(t_estratega_planificacion*);
-
+void planificador_intentar_desuspender(t_estratega_planificacion* estratega);
 #endif

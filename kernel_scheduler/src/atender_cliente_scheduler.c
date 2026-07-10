@@ -472,16 +472,32 @@ int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
     return 1; // Retornamos 1 para indicar que el hilo debe continuar escuchando
 }
 
-/*int handler_mem_expandida(int cliente_fd, t_scheduler_context* ctx){
+int handler_respuesta_compactacion(int fd, t_scheduler_context* ctx) {
+    log_info(ctx->logger, "## Fin de compactación");
+    
+    // Primero intentamos des-suspender procesos (ahora que la memoria está contigua)
+    planificador_intentar_desuspender(ctx->estratega);
+    
+    // Luego, volvemos a enviar procesos a CPU que estaban detenidos
+    if (ctx->estratega->socket_cpu != -1) {
+        despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+    }
+    return 1;
+}
+
+int handler_mem_expandida(int cliente_fd, t_scheduler_context* ctx){
     //recorrer todos procesos supendidos
     //    recorrer por orden de prioridad
     //    ir desuspendiendo
     //    proprocesos suspendidos con misma prioridad: se evalua primero el que mas tiempo lleve suspendido
-    if (ctx->estratega == NULL) {
-        return NULL;
-    }
-    while()
-}*/
+    
+    // Registramos que memoria tiene más espacio y luego:
+    // 1. Simplemente logeamos el evento para cumplir y dejar rastro
+    log_info(ctx->logger, "Memoria expandida: Se detectó un nuevo Memory Stick.");
+    // 2. Disparamos la planificación de mediano plazo
+    planificador_intentar_desuspender(ctx->estratega);
+    return 1;
+}
 
 int handler_mem_corrupta(int cliente_fd, t_scheduler_context* ctx){
     planificador_finalizar_todo_por_bsod(ctx->estratega);
@@ -510,7 +526,11 @@ int handler_mutex_unlock(int fd, t_scheduler_context* ctx) { procesar_syscall_mu
 
 // Memoria
 int handler_mem_alloc(int fd, t_scheduler_context* ctx) { procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_ALLOC); return 1; }
-int handler_mem_free(int fd, t_scheduler_context* ctx) { procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_FREE); return 1; }
+int handler_mem_free(int fd, t_scheduler_context* ctx) { 
+    procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_FREE); 
+    // Luego de que se procesó el free y memoria liberó espacio, intentamos des-suspender
+    planificador_intentar_desuspender(ctx->estratega);
+    return 1; }
 
 //int handler_mem_expandida(int fd, t_scheduler_context* ctx) { procesar_memoria_expandida(fd, ctx, SYSCALL_MEM_ALLOC); return 1; }
 //int handler_mem_corrupta(int fd, t_scheduler_context* ctx) { procesar_corrupcion_memoria(fd, ctx, SYSCALL_MEM_FREE); return 1; }
@@ -519,21 +539,23 @@ int handler_mem_free(int fd, t_scheduler_context* ctx) { procesar_syscall_memori
 // Creamos un array estático de tamaño 256 (suficiente para cubrir todos los opcodes).
 // Los índices que no declaremos se inicializarán automáticamente en NULL.
 static const handler_t tabla_despacho[256] = {
-    [MENSAJE]              = handler_mensaje,
-    [SYSCALL_EXIT]         = handler_exit,
-    [SYSCALL_SLEEP]        = handler_sleep,
-    [SYSCALL_STDOUT]       = handler_stdout,
-    [SYSCALL_STDIN]        = handler_stdin,
-    [SYSCALL_MUTEX_CREATE] = handler_mutex_create,
-    [SYSCALL_MUTEX_LOCK]   = handler_mutex_lock,
-    [SYSCALL_MUTEX_UNLOCK] = handler_mutex_unlock,
-    [SYSCALL_SEG_FAULT]    = handler_seg_fault,
-    [SYSCALL_MEM_ALLOC]    = handler_mem_alloc,
-    [SYSCALL_MEM_FREE]     = handler_mem_free,
-    [SYSCALL_INIT_PROC]    = handler_init_proc,
-    [FIN_DE_QUANTUM]       = handler_fin_quantum,
-    //[MEMORIA_EXPANDIDA]    = handler_mem_expandida, 
-	[CORRUPCION_MEMORIA]   = handler_mem_corrupta
+    [MENSAJE]                    = handler_mensaje,
+    [SYSCALL_EXIT]               = handler_exit,
+    [SYSCALL_SLEEP]              = handler_sleep,
+    [SYSCALL_STDOUT]             = handler_stdout,
+    [SYSCALL_STDIN]              = handler_stdin,
+    [SYSCALL_MUTEX_CREATE]       = handler_mutex_create,
+    [SYSCALL_MUTEX_LOCK]         = handler_mutex_lock,
+    [SYSCALL_MUTEX_UNLOCK]       = handler_mutex_unlock,
+    [SYSCALL_SEG_FAULT]          = handler_seg_fault,
+    [SYSCALL_MEM_ALLOC]          = handler_mem_alloc,
+    [SYSCALL_MEM_FREE]           = handler_mem_free,
+    [SYSCALL_INIT_PROC]          = handler_init_proc,
+    [FIN_DE_QUANTUM]             = handler_fin_quantum,
+    [MEMORIA_EXPANDIDA]          = handler_mem_expandida, 
+	[CORRUPCION_MEMORIA]         = handler_mem_corrupta,
+    [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion
+
 };
 
 
