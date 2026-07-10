@@ -19,6 +19,19 @@ int desalojar_proceso(t_contexto_ejecucion* contexto, t_cpu_context* ctx, op_cod
     return 1;
 }
 
+// -------------------------------------------------------------
+// NOTIFICACIONES AL SCHEDULER
+// -------------------------------------------------------------
+
+void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, t_cpu_context* ctx) {
+    enviar_operacion_con_pid(motivo_desalojo, pid, ctx->conexiones->scheduler);
+    log_info(ctx->logger, "PID %d devuelto al Scheduler. Motivo (op_code): %d", pid, motivo_desalojo);
+}
+
+void notificar_syscall_sleep_a_scheduler(uint32_t pid, uint32_t tiempo_sleep, t_cpu_context* ctx) {
+    enviar_operacion_con_pid_y_parametro(SYSCALL_SLEEP, pid, tiempo_sleep, ctx->conexiones->scheduler);
+}
+
 static bool inicializar_entorno(t_cpu_context* ctx, char* path_config) {
     ctx->config = config_create(path_config);
     if (ctx->config == NULL) {

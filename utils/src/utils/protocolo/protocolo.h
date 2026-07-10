@@ -35,6 +35,7 @@ void enviar_mensaje(char* mensaje, int socket_cliente);
 void enviar_int(int socket, int numero);
 void enviar_string(int socket, char* texto);
 void enviar_operacion_con_pid(op_code codigo, uint32_t pid, int socket_cliente);
+void enviar_operacion_con_pid_y_parametro(op_code codigo, uint32_t pid, uint32_t parametro, int socket_cliente);
 
 // Abstracción de Stream (Clean Code: Evitar aritmética de punteros en los callers)
 void buffer_write(t_buffer* buffer, void* data, int size);

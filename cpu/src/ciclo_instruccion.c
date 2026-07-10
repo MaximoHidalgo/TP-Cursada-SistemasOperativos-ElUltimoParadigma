@@ -1,7 +1,56 @@
 #include "ciclo_instruccion.h"
-#include "instrucciones.h"
-#include <stdlib.h>
-#include <errno.h>
+
+// -------------------------------------------------------------
+// HELPER FUNCTIONS
+// -------------------------------------------------------------
+
+static void destruir_instruccion(t_instruccion* inst) {
+    if (inst->identificador) free(inst->identificador);
+    if (inst->parametro1) free(inst->parametro1);
+    if (inst->parametro2) free(inst->parametro2);
+    if (inst->parametro3) free(inst->parametro3);
+    free(inst);
+}
+
+static char* extraer_instruccion_del_paquete(int socket_memoria) {
+    t_list* lista = recibir_paquete(socket_memoria);
+    char* instruccion_texto = string_duplicate(list_get(lista, 0));
+    list_destroy_and_destroy_elements(lista, free);
+    return instruccion_texto;
+}
+
+// -------------------------------------------------------------
+// FUNCIONES PRIVADAS DE CHEQUEAR INTERRUPCIONES
+// -------------------------------------------------------------
+
+static int manejar_interrupcion_quantum(t_cpu_context* ctx, uint32_t pid_actual) {
+    t_list* paquete = recibir_paquete(ctx->conexiones->scheduler);
+    uint32_t pid_interrumpido = *(uint32_t*)list_get(paquete, 0);
+    list_destroy_and_destroy_elements(paquete, free);
+
+    if (pid_interrumpido == pid_actual) {
+        log_info(ctx->logger, "## Interrupción recibida para PID %d", pid_interrumpido);
+        return 1;
+    } else {
+        log_warning(ctx->logger, "Se descartó interrupción del PID %d (el actual es %d)", pid_interrumpido, pid_actual);
+        return 0;
+    }
+}
+
+static int procesar_interrupcion(t_cpu_context* ctx, uint32_t pid_actual) {
+    int operacion = recibir_operacion(ctx->conexiones->scheduler);
+    
+    if (operacion == INTERRUPCION_QUANTUM) { 
+        return manejar_interrupcion_quantum(ctx, pid_actual);
+    } 
+    
+    log_warning(ctx->logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
+    return 0;
+}
+
+// -------------------------------------------------------------
+// CICLO DE INSTRUCCION
+// -------------------------------------------------------------
 
 void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     int desalojar = 0;
@@ -10,7 +59,6 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
 
         /* 1. FETCH */ 
         char* instruccion_texto = fetch(contexto, ctx);
-        
         if (instruccion_texto == NULL) {
             log_error(ctx->logger, "Fetch falló (probablemente Memoria se desconectó). Desalojando PID %d.", contexto->pid);
             break;
@@ -40,47 +88,21 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
             }
         }
 
-        // Limpiamos memoria (y también liberar la instrucción y sus parámetros)
+        // Limpiamos memoria
         free(instruccion_texto);
-        if (instruccion_decodificada->identificador) free(instruccion_decodificada->identificador);
-        if (instruccion_decodificada->parametro1) free(instruccion_decodificada->parametro1);
-        if (instruccion_decodificada->parametro2) free(instruccion_decodificada->parametro2);
-        if (instruccion_decodificada->parametro3) free(instruccion_decodificada->parametro3);
-        free(instruccion_decodificada);
+        destruir_instruccion(instruccion_decodificada);
     }
 }
 
-void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, t_cpu_context* ctx) {
-    enviar_operacion_con_pid(motivo_desalojo, pid, ctx->conexiones->scheduler);
-    log_info(ctx->logger, "PID %d devuelto al Scheduler. Motivo (op_code): %d", pid, motivo_desalojo);
-}
-
-void notificar_syscall_sleep_a_scheduler(uint32_t pid, uint32_t tiempo_sleep, t_cpu_context* ctx) {
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = SYSCALL_SLEEP; 
-    
-    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tiempo_sleep, sizeof(uint32_t));
-    
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-}
-
 char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
-    t_paquete* paquete_solicitud = crear_paquete();
-    paquete_solicitud->codigo_operacion = FETCH_INSTRUCCION; 
-    
     log_info(ctx->logger, "## PID: %d - FETCH - Program Counter: %d", contexto->pid, contexto->registros.PC);
     
     enviar_peticion_fetch_instruccion(contexto->pid, contexto->registros.PC, ctx->conexiones->memoria);
-
+    
     int op_code = recibir_operacion(ctx->conexiones->memoria);
     
     if (op_code == ENVIO_INSTRUCCION) {
-        t_list* lista = recibir_paquete(ctx->conexiones->memoria);
-        char* instruccion_texto = string_duplicate(list_get(lista, 0));
-        list_destroy_and_destroy_elements(lista, free);
-        return instruccion_texto;
+        return extraer_instruccion_del_paquete(ctx->conexiones->memoria);
     } else {
         log_error(ctx->logger, "Error: Se esperaba una instrucción, pero llegó la operación: %d", op_code);
         return NULL;
@@ -89,25 +111,16 @@ char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
 
 t_instruccion* decode(char* instruccion_texto) {
     t_instruccion* instruccion = malloc(sizeof(t_instruccion));
-    instruccion->parametro1 = NULL;
-    instruccion->parametro2 = NULL;
-    instruccion->parametro3 = NULL;
+    
+    char** inst_separada = string_split(instruccion_texto, " ");
+    int arg_count = string_array_size(inst_separada);
+    
+    instruccion->identificador = arg_count > 0 ? string_duplicate(inst_separada[0]) : NULL;
+    instruccion->parametro1 = arg_count > 1 ? string_duplicate(inst_separada[1]) : NULL;
+    instruccion->parametro2 = arg_count > 2 ? string_duplicate(inst_separada[2]) : NULL;
+    instruccion->parametro3 = arg_count > 3 ? string_duplicate(inst_separada[3]) : NULL;
 
-    char** instruccion_separada = string_split(instruccion_texto, " ");
-
-    instruccion->identificador = string_duplicate(instruccion_separada[0]);
-
-    if (instruccion_separada[1] != NULL) {
-        instruccion->parametro1 = string_duplicate(instruccion_separada[1]);
-        if (instruccion_separada[2] != NULL) {
-            instruccion->parametro2 = string_duplicate(instruccion_separada[2]);
-            if (instruccion_separada[3] != NULL) {
-                instruccion->parametro3 = string_duplicate(instruccion_separada[3]);
-            }
-        }
-    }
-
-    string_array_destroy(instruccion_separada);
+    string_array_destroy(inst_separada);
     return instruccion;
 }
 
@@ -134,29 +147,19 @@ int chequear_interrupciones(t_cpu_context* ctx, uint32_t pid_actual) {
     
     ssize_t bytes_recibidos = recv(ctx->conexiones->scheduler, &op_code_espiado, sizeof(int), MSG_PEEK | MSG_DONTWAIT);
 
-    if (bytes_recibidos > 0) {
-        int operacion = recibir_operacion(ctx->conexiones->scheduler);
-        
-        if (operacion == INTERRUPCION_QUANTUM) { 
-            t_list* paquete = recibir_paquete(ctx->conexiones->scheduler);
-            uint32_t pid_interrumpido = *(uint32_t*)list_get(paquete, 0);
-            list_destroy_and_destroy_elements(paquete, free);
-
-            if (pid_interrumpido == pid_actual) {
-                log_info(ctx->logger, "## Interrupción recibida para PID %d", pid_interrumpido);
-                return 1;
-            } else {
-                log_warning(ctx->logger, "Se descartó interrupción del PID %d (el actual es %d)", pid_interrumpido, pid_actual);
-                return 0;
-            }
-        } else {
-            log_warning(ctx->logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
-        }
-    } else if (bytes_recibidos == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        return 0;
-    } else if (bytes_recibidos == 0) {
+    if (bytes_recibidos == 0) {
         log_error(ctx->logger, "El Kernel Scheduler se ha desconectado inesperadamente.");
         return 1;
     }
-    return 0;
+    
+    if (bytes_recibidos < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0; //el socket está vacío, no hay interrupciones.
+        } else {
+            log_error(ctx->logger, "Error real en el socket de interrupciones.");
+            return 1; // Hubo un error de red, forzamos el desalojo.
+        }
+    }
+
+    return procesar_interrupcion(ctx, pid_actual);
 }
