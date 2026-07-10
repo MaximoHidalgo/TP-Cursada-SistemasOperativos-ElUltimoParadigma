@@ -2,6 +2,7 @@
 #include "registros.h"
 #include "mmu.h"
 #include "ciclo_instruccion.h"
+#include "cpu_utils.h"
 #include <math.h>
 // Tabla de despacho
 t_instruction INSTRUCTION_SET[] = {
