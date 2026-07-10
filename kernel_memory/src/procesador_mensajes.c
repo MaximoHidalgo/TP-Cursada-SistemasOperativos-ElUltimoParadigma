@@ -1,6 +1,13 @@
 #include "procesador_mensajes.h"
 #include "auxiliares_memoria.h"
 
+void notificar_memoria_expandida(int scheduler_socket){
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = MEMORIA_EXPANDIDA;
+    enviar_paquete(paq, scheduler_socket);
+    eliminar_paquete(paq);
+}
+
 void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     char *mensaje = recibir_handshake(cliente_fd);
     
@@ -26,16 +33,20 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
         nuevo_hueco->base = ctx->memoria_total;
         nuevo_hueco->limite = ctx->memoria_total + stick_size;
         list_add(ctx->huecos_libres, nuevo_hueco);
-        combinar_huecos_libres(ctx->huecos_libres);
+        fusionar_huecos_libres(ctx->huecos_libres);
         
         ctx->memoria_total += stick_size;
         log_info(ctx->logger, "## Memory Stick de %d bytes Conectada en %s:%d. Memoria total: %d", stick_size, stick_ip, stick_puerto, ctx->memoria_total);
         
         pthread_mutex_unlock(&ctx->mutex_memoria);
+
+        notificar_memoria_expandida(ctx->scheduler_socket);
         
         string_array_destroy(partes);
     }
     else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
+        ctx->scheduler_socket = cliente_fd;
+
         log_info(ctx->logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
     }
     else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
@@ -411,6 +422,13 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
     pthread_mutex_unlock(&ctx->mutex_memoria);
 }
 
+void notificar_memoria_corrupta(int scheduler_socket){
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = CORRUPCION_MEMORIA;
+    enviar_paquete(paq, scheduler_socket);
+    eliminar_paquete(paq);
+}
+
 void atender_cliente(void *arg) {
     t_args_hilo_cliente* args = (t_args_hilo_cliente*)arg;
     int cliente_fd = args->cliente_fd;
@@ -560,6 +578,18 @@ void atender_cliente(void *arg) {
             }
             case -1:
                 log_warning(ctx->logger, "Cliente desconectado");
+                for (int i = 0; i < list_size(ctx->memory_sticks); i++)
+                {
+                    t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+
+                    if (cliente_fd == stick->socket_fd)
+                    {
+
+                    notificar_memoria_corrupta(ctx->scheduler_socket);
+
+                    }
+                }
+                
                 close(cliente_fd);
                 return;
             default:

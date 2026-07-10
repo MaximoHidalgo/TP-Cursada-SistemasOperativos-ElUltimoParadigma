@@ -39,6 +39,8 @@ typedef struct {
     t_list* huecos_libres;
     t_list* segmentos_globales;
     pthread_mutex_t mutex_memoria;
+
+    int scheduler_socket;
     
     t_list* memory_sticks;
     
