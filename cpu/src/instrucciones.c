@@ -36,6 +36,14 @@ t_instruction *instruction_get_by_name(char *name) {
 }
 
 // -------------------------------------------------------------
+// HELPER FUNCTIONS (CLEAN CODE)
+// -------------------------------------------------------------
+static void preparar_syscall(t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
+    contexto->registros.PC++;
+    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+}
+
+// -------------------------------------------------------------
 // IMPLEMENTACIONES DE HANDLERS
 // -------------------------------------------------------------
 
@@ -76,13 +84,7 @@ int instr_mov_in(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_c
 
     if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault accediendo a dir logica %d", dir_logica);
-        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SYSCALL_SEG_FAULT;
-        agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paq, ctx->conexiones->scheduler);
-        eliminar_paquete(paq);
-        return 1; // Desalojar
+        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
     } else {
         void* buf = leer_memoria_distribuida_cpu(ctx, dir_fisica, tam);
         if (buf != NULL) {
@@ -105,13 +107,7 @@ int instr_mov_out(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_
 
     if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault escribiendo a dir logica %d", dir_logica);
-        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SYSCALL_SEG_FAULT;
-        agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paq, ctx->conexiones->scheduler);
-        eliminar_paquete(paq);
-        return 1; // Desalojar
+        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
     } else {
         escribir_memoria_distribuida_cpu(ctx, dir_fisica, tam, &valor);
         log_info(ctx->logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);
@@ -129,13 +125,7 @@ int instr_copy_mem(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
     if (mmu_traducir(ctx, contexto, dir_logica_si, tam, ctx->tam_max_segmento, &dir_fisica_si) == -1 || 
         mmu_traducir(ctx, contexto, dir_logica_di, tam, ctx->tam_max_segmento, &dir_fisica_di) == -1) {
         log_error(ctx->logger, "Segmentation Fault en COPY_MEM");
-        enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SYSCALL_SEG_FAULT;
-        agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paq, ctx->conexiones->scheduler);
-        eliminar_paquete(paq);
-        return 1;
+        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
     } else {
         void* buf = leer_memoria_distribuida_cpu(ctx, dir_fisica_si, tam);
         if (buf != NULL) {
@@ -152,8 +142,7 @@ int instr_copy_mem(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
 int instr_sleep(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall SLEEP. Desalojando a Kernel...");
     
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete_sleep = crear_paquete();
     paquete_sleep->codigo_operacion = SYSCALL_SLEEP;
@@ -169,8 +158,7 @@ int instr_sleep(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cp
 
 int instr_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall STDOUT. Desalojando a Kernel...");
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     uint32_t dir_logica = leer_registro(contexto, instruccion->parametro1);
     uint32_t tamanio = leer_registro(contexto, instruccion->parametro2);
@@ -178,12 +166,7 @@ int instr_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_c
     uint32_t dir_fisica = 0;
     if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault en STDOUT logica %d", dir_logica);
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SYSCALL_SEG_FAULT;
-        agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paq, ctx->conexiones->scheduler);
-        eliminar_paquete(paq);
-        return 1;
+        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
     } else {
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_STDOUT;
@@ -198,8 +181,7 @@ int instr_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_c
 
 int instr_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall STDIN. Desalojando a Kernel...");
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     uint32_t dir_logica = leer_registro(contexto, instruccion->parametro1);
     uint32_t tamanio = leer_registro(contexto, instruccion->parametro2);
@@ -207,12 +189,7 @@ int instr_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cp
     uint32_t dir_fisica = 0;
     if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault en STDIN logica %d", dir_logica);
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SYSCALL_SEG_FAULT;
-        agregar_a_paquete(paq, &(contexto->pid), sizeof(uint32_t));
-        enviar_paquete(paq, ctx->conexiones->scheduler);
-        eliminar_paquete(paq);
-        return 1;
+        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
     } else {
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = SYSCALL_STDIN;
@@ -227,9 +204,7 @@ int instr_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cp
 
 int instr_mutex_create(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MUTEX_CREATE. Desalojando a Kernel...");
-    
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = SYSCALL_MUTEX_CREATE;
@@ -246,9 +221,7 @@ int instr_mutex_create(t_instruccion* instruccion, t_contexto_ejecucion* context
 
 int instr_mutex_lock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MUTEX_LOCK. Desalojando a Kernel...");
-    
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = SYSCALL_MUTEX_LOCK;
@@ -265,9 +238,7 @@ int instr_mutex_lock(t_instruccion* instruccion, t_contexto_ejecucion* contexto,
 
 int instr_mutex_unlock(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MUTEX_UNLOCK. Desalojando a Kernel...");
-    
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = SYSCALL_MUTEX_UNLOCK;
@@ -284,9 +255,7 @@ int instr_mutex_unlock(t_instruccion* instruccion, t_contexto_ejecucion* context
 
 int instr_mem_alloc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MEM_ALLOC. Desalojando a Kernel...");
-    
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = SYSCALL_MEM_ALLOC;
@@ -306,9 +275,7 @@ int instr_mem_alloc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, 
 
 int instr_mem_free(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall MEM_FREE. Desalojando a Kernel...");
-    
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = SYSCALL_MEM_FREE;
@@ -326,9 +293,7 @@ int instr_mem_free(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
 
 int instr_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall INIT_PROC. Desalojando a Kernel...");
-    
-    contexto->registros.PC++;
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    preparar_syscall(contexto, ctx);
     
     t_paquete* paquete = crear_paquete();
     paquete->codigo_operacion = SYSCALL_INIT_PROC;
@@ -348,22 +313,8 @@ int instr_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto, 
 
 int instr_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
-    
-    // 0. Incrementamos PC (syscall)
     contexto->registros.PC++;
-    
-    // 1. Actualizamos contexto en memoria
-    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
-    
-    // 2. Le avisamos al Scheduler que el proceso terminó
-    t_paquete* paquete_exit = crear_paquete();
-    paquete_exit->codigo_operacion = SYSCALL_EXIT;
-    
-    agregar_a_paquete(paquete_exit, &(contexto->pid), sizeof(uint32_t));
-    enviar_paquete(paquete_exit, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete_exit);
-    
-    return 1;
+    return desalojar_proceso(contexto, ctx, SYSCALL_EXIT);
 }
 
 int instr_noop(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {

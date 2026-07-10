@@ -13,6 +13,12 @@ void manejar_ejecucion_proceso(int pid_recibido, t_cpu_context* ctx) {
     }
 }
 
+int desalojar_proceso(t_contexto_ejecucion* contexto, t_cpu_context* ctx, op_code motivo) {
+    enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
+    enviar_operacion_con_pid(motivo, contexto->pid, ctx->conexiones->scheduler);
+    return 1;
+}
+
 static bool inicializar_entorno(t_cpu_context* ctx, char* path_config) {
     ctx->config = config_create(path_config);
     if (ctx->config == NULL) {

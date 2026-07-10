@@ -51,13 +51,7 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
 }
 
 void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, t_cpu_context* ctx) {
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = motivo_desalojo; 
-    
-    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
-    enviar_paquete(paquete, ctx->conexiones->scheduler);
-    eliminar_paquete(paquete);
-
+    enviar_operacion_con_pid(motivo_desalojo, pid, ctx->conexiones->scheduler);
     log_info(ctx->logger, "PID %d devuelto al Scheduler. Motivo (op_code): %d", pid, motivo_desalojo);
 }
 

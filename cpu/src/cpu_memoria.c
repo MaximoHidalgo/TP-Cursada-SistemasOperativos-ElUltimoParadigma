@@ -1,13 +1,8 @@
 #include "cpu_memoria.h"
 
 t_contexto_ejecucion* pedir_contexto_a_memoria(int pid_recibido, t_cpu_context* ctx) {
-    t_paquete* paquete_solicitud = crear_paquete();
-    paquete_solicitud->codigo_operacion = SOLICITUD_CONTEXTO; 
-    
-    //Agregamos el PID al paquete y lo enviamos
-    agregar_a_paquete(paquete_solicitud, &pid_recibido, sizeof(int));
-    enviar_paquete(paquete_solicitud, ctx->conexiones->memoria);
-    eliminar_paquete(paquete_solicitud);
+    // Enviamos el PID mediante el helper limpio de utils
+    enviar_operacion_con_pid(SOLICITUD_CONTEXTO, pid_recibido, ctx->conexiones->memoria);
 
     log_info(ctx->logger, "Solicitando contexto del PID %d a Kernel Memory...", pid_recibido);
 
