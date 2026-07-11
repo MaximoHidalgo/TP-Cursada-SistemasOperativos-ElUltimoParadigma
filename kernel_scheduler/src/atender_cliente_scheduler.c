@@ -259,6 +259,8 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
 
         int respuesta = recibir_operacion(ctx->socket_memoria);
         
+        /*
+        //se comenta este bloque de codigo porque...
         if (respuesta == SOLICITUD_COMPACTACION) {
             log_info(ctx->logger, "Compactación requerida. Avisando a Memoria que puede proceder...");
             t_paquete* paq_resp = crear_paquete();
@@ -268,8 +270,21 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             
             // Esperamos la respuesta final de la creación del segmento post-compactación
             respuesta = recibir_operacion(ctx->socket_memoria);
+        }*/
+        //cambio el bloque de arriba con este, porque asi puedo avisarle a la cpu que se inicio la compactacion 
+        //y el mismo guarde el contexto de ejecucion y pueda asi luego sacar de la ejecucion al proceso con el
+        //proximo llamado que me haga la cpu en atender cliente (hare un handler para responder como se debe a esa respuesta) 
+        if (respuesta == SOLICITUD_COMPACTACION) {
+            log_info(ctx->logger, "## Inicio de compactación"); // Log obligatorio del TP
+            
+            // Le mandamos un "tiro" a la CPU para que frene
+            // NOTA: Deberás agregar INTERRUPCION_COMPACTACION en tu opcodes.h
+            int op_interrupcion = INTERRUPCION_COMPACTACION;
+            send(ctx->estratega->socket_cpu, &op_interrupcion, sizeof(int), 0);
+            
+            // SALIMOS de la función. No esperamos nada. El hilo vuelve a escuchar el socket.
+            return; 
         }
-
         if (respuesta == MENSAJE) {
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);
@@ -450,6 +465,36 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
 //typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);
 
 // 2. Aislamos la lógica compleja del SEG_FAULT en su propio handler
+int handler_desalojo_compactacion(int fd, t_scheduler_context* ctx) {
+    t_list* paquete = recibir_paquete(fd);
+    
+    if (ctx->estratega->proceso_exec != NULL) {
+        t_proceso_planificable* desalojado = ctx->estratega->proceso_exec;
+        desalojado->estado = ESTADO_PROCESO_READY;
+        
+        // El TP exige ponerlo al PRINCIPIO de la cola
+        t_cola_planificacion* cola = obtener_cola_planificacion(ctx->estratega->colas, desalojado->cola_prioridad);
+        
+        // Como usamos t_queue de commons (que mete al final), accedemos a su lista interna 'elements'
+        // y lo insertamos a la fuerza en el índice 0.
+        //el tipo de procesos es: t_queue* procesos;, pero t_queue contiene una lista, lo que hago es aprovechar eso y romper el
+        //encapsulamiento de la cola y manipulando su lista interna, para meter al proceso al principio de la cola ready
+        //por que hago esto de esta forma?: porque la biblioteca de t_queue no me proporciona ninguna funcion de colocarlo al 
+        //principo de la cola, solo el 	queue_push que lo agrega al final, pero no es algo que el enunciado diga ante este evento
+        list_add_in_index(cola->procesos->elements, 0, desalojado);
+        
+        ctx->estratega->proceso_exec = NULL;
+    }
+    
+    // Ahora que la CPU está libre, LE DAMOS EL OK A MEMORIA para que compacte
+    t_paquete* paq_resp = crear_paquete();
+    paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
+    enviar_paquete(paq_resp, ctx->socket_memoria);
+    eliminar_paquete(paq_resp);
+    
+    list_destroy_and_destroy_elements(paquete, free);
+    return 1;
+}
 
 int handler_interrupcion_desalojo(int fd, t_scheduler_context* ctx) {
     // Recibimos el paquete que nos mandó la CPU
@@ -590,7 +635,8 @@ static const handler_t tabla_despacho[256] = {
     [MEMORIA_EXPANDIDA]          = handler_mem_expandida, 
 	[CORRUPCION_MEMORIA]         = handler_mem_corrupta,
     [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion,
-    [INTERRUPCION_DESALOJO]      = handler_interrupcion_desalojo
+    [INTERRUPCION_DESALOJO]      = handler_interrupcion_desalojo,
+    [DESALOJO_COMPACTACION]      = handler_desalojo_compactacion
 
 };
 
