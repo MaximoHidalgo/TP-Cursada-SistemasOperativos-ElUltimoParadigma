@@ -450,6 +450,41 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
 //typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);
 
 // 2. Aislamos la lógica compleja del SEG_FAULT en su propio handler
+
+int handler_interrupcion_desalojo(int fd, t_scheduler_context* ctx) {
+    // Recibimos el paquete que nos mandó la CPU
+    t_list* paquete = recibir_paquete(fd);
+    
+    if (ctx->estratega->proceso_exec != NULL) {
+        t_proceso_planificable* desalojado = ctx->estratega->proceso_exec;
+        
+        // 1. Lo pasamos a estado READY
+        desalojado->estado = ESTADO_PROCESO_READY;
+        
+        // 2. Lo reencolamos en la cola multinivel que le corresponde
+        encolar_en_cola_ready(ctx->estratega->colas, desalojado);
+        
+        // 3. Liberamos el puntero EXEC para que la CPU quede libre para el Scheduler
+        ctx->estratega->proceso_exec = NULL;
+        
+        // 4. Espiamos quién es el nuevo proceso más prioritario (el culpable) para el log
+        t_proceso_planificable* culpable = planificador_obtener_siguiente(ctx->estratega);
+        
+        if (culpable != NULL) {
+            // LOG MÍNIMO Y OBLIGATORIO EXACTO
+            log_info(ctx->logger, "## (%d) Prioridad: %d - Desalojado por cola más prioritaria por el proceso %d con prioridad %d", 
+                     desalojado->pid, desalojado->cola_prioridad, 
+                     culpable->pid, culpable->cola_prioridad);
+        }
+    }
+    
+    // 5. Mandamos a ejecutar a ese nuevo proceso que lidera la cola
+    despachar_proceso_a_cpu(ctx, fd);
+    
+    list_destroy_and_destroy_elements(paquete, free);
+    return 1;
+}
+
 int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     
@@ -554,7 +589,8 @@ static const handler_t tabla_despacho[256] = {
     [FIN_DE_QUANTUM]             = handler_fin_quantum,
     [MEMORIA_EXPANDIDA]          = handler_mem_expandida, 
 	[CORRUPCION_MEMORIA]         = handler_mem_corrupta,
-    [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion
+    [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion,
+    [INTERRUPCION_DESALOJO]      = handler_interrupcion_desalojo
 
 };
 
