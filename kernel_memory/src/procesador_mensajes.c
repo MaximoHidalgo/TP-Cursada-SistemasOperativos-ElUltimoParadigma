@@ -1,13 +1,6 @@
 #include "procesador_mensajes.h"
 #include "auxiliares_memoria.h"
 
-void notificar_memoria_expandida(int scheduler_socket){
-    t_paquete* paq = crear_paquete();
-    paq->codigo_operacion = MEMORIA_EXPANDIDA;
-    enviar_paquete(paq, scheduler_socket);
-    eliminar_paquete(paq);
-}
-
 void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     char *mensaje = recibir_handshake(cliente_fd);
     
@@ -255,15 +248,13 @@ void procesar_suspender_proceso(int cliente_fd, t_memory_context* ctx) {
                 hueco->base = seg->base;
                 hueco->limite = seg->base + seg->tamanio;
                 list_add(ctx->huecos_libres, hueco);
+                fusionar_huecos_libres(ctx->huecos_libres);
                 
                 list_remove_and_destroy_element(ctx->segmentos_globales, h, free);
                 break;
             }
         }
     }
-    
-    // Consolidar huecos si es posible
-    // (Omitido para brevedad o se puede llamar a una funcion de consolidar)
     
     pthread_mutex_unlock(&ctx->mutex_memoria);
     
@@ -281,90 +272,52 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
         return;
     }
     t_contexto_ejecucion* proc = prog->contexto;
+
+    uint32_t memoria_necesaria = 0;
+
+    for (int k = 0; k < list_size(proc->tabla_segmentos); k++) {
+        t_segmento* seg = list_get(proc->tabla_segmentos, k);
+
+        if(seg->id == 0 || seg->tamanio == 0) continue;
+
+        memoria_necesaria += seg->tamanio;
+    }
     
     pthread_mutex_lock(&ctx->mutex_memoria);
-    
-    bool hay_espacio = true;
-    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
-        t_segmento* seg = list_get(proc->tabla_segmentos, i);
-        if (seg->id == 0 || seg->tamanio == 0) continue;
-        
-        // Buscar hueco en memoria principal (First Fit para simplificar)
-        t_hueco_libre* best_hueco = NULL;
-        for (int j = 0; j < list_size(ctx->huecos_libres); j++) {
-            t_hueco_libre* h = list_get(ctx->huecos_libres, j);
-            if ((h->limite - h->base) >= seg->tamanio) {
-                best_hueco = h;
-                break;
-            }
-        }
-        if (!best_hueco) {
-            hay_espacio = false;
-            break;
-        }
-    }
+
+    bool hay_espacio = hay_espacio_para_restaurar_segmentos(ctx, proc);
     
     if (!hay_espacio) {
+
+        if (requiere_compactacion(ctx, memoria_necesaria))
+        {
+            t_paquete* paq = crear_paquete();
+            paq->codigo_operacion = SOLICITUD_COMPACTACION;
+            enviar_paquete(paq, cliente_fd);
+            eliminar_paquete(paq);
+                    
+            int res = recibir_operacion(cliente_fd);
+            if (res == RESPUESTA_COMPACTACION) {
+                compactar_memoria(ctx);
+                if (!hay_espacio_para_restaurar_segmentos(ctx, proc)) {
+                    pthread_mutex_unlock(&ctx->mutex_memoria);
+                    enviar_mensaje("ERROR", cliente_fd);
+                    log_error(ctx->logger, "No hay espacio en Memoria Principal para desuspender PID %d, incluso con la compactación", pid);
+                    return;
+                }
+            }
+        }else{
+            pthread_mutex_unlock(&ctx->mutex_memoria);
+            enviar_mensaje("ERROR", cliente_fd);
+            log_error(ctx->logger, "No hay espacio en Memoria Principal para desuspender PID %d", pid);
+            return;
+        }
+    }
+
+    if(!restaurar_segmentos(proc, ctx, cliente_fd)){
         pthread_mutex_unlock(&ctx->mutex_memoria);
-        enviar_mensaje("ERROR", cliente_fd);
-        log_error(ctx->logger, "No hay espacio en Memoria Principal para desuspender PID %d", pid);
         return;
     }
-    
-    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
-        t_segmento* seg = list_get(proc->tabla_segmentos, i);
-        if (seg->id == 0 || seg->tamanio == 0) continue;
-        
-        t_hueco_libre* best_hueco = NULL;
-        for (int j = 0; j < list_size(ctx->huecos_libres); j++) {
-            t_hueco_libre* h = list_get(ctx->huecos_libres, j);
-            if ((h->limite - h->base) >= seg->tamanio) {
-                best_hueco = h;
-                break;
-            }
-        }
-        
-        // Asignar base
-        seg->base = best_hueco->base;
-        best_hueco->base += seg->tamanio;
-        if (best_hueco->base == best_hueco->limite) {
-            list_remove_element(ctx->huecos_libres, best_hueco);
-            free(best_hueco);
-        }
-        
-        t_segmento* nuevo_seg = malloc(sizeof(t_segmento));
-        nuevo_seg->id = seg->id;
-        nuevo_seg->tamanio = seg->tamanio;
-        nuevo_seg->base = seg->base;
-        nuevo_seg->bloque_swap = -1;
-        list_add(ctx->segmentos_globales, nuevo_seg);
-        
-        // Leer de SWAP y escribir en Memoria Principal
-        int cant_bloques = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
-        int offset = 0;
-        void* buffer_seg = malloc(seg->tamanio);
-        
-        for (int j = 0; j < cant_bloques; j++) {
-            enviar_int(ctx->swap_socket, LECTURA);
-            enviar_int(ctx->swap_socket, seg->bloque_swap + j);
-            
-            int opcode = recibir_operacion(ctx->swap_socket);
-            if (opcode == LECTURA) {
-                int size_buf;
-                void* res = recibir_buffer(&size_buf, ctx->swap_socket);
-                int copy_size = (offset + ctx->swap_block_size <= seg->tamanio) ? ctx->swap_block_size : (seg->tamanio - offset);
-                memcpy(buffer_seg + offset, res, copy_size);
-                free(res);
-            }
-            offset += ctx->swap_block_size;
-            bitarray_clean_bit(ctx->swap_bitmap, seg->bloque_swap + j);
-        }
-        
-        escribir_memoria_distribuida(ctx, seg->base, seg->tamanio, buffer_seg);
-        free(buffer_seg);
-        seg->bloque_swap = -1;
-    }
-    
     pthread_mutex_unlock(&ctx->mutex_memoria);
     enviar_mensaje("OK", cliente_fd);
     log_info(ctx->logger, "Proceso %d desuspendido y traído a Memoria Principal", pid);
@@ -429,6 +382,40 @@ void notificar_memoria_corrupta(int scheduler_socket){
     eliminar_paquete(paq);
 }
 
+void procesar_eliminar_segmento_handler(int cliente_fd, t_memory_context* ctx){
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t pid = *(uint32_t*)list_get(paquete, 0);
+    uint32_t id_seg = *(uint32_t*)list_get(paquete, 1);
+    list_destroy_and_destroy_elements(paquete, free);
+
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    t_programa* prog = buscar_programa(ctx, pid);
+    if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
+        pthread_mutex_lock(&ctx->mutex_programas);
+        t_segmento* seg_a_eliminar = NULL;
+        for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
+            t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
+            if (seg->id == id_seg) {
+                seg_a_eliminar = seg;
+                list_remove(prog->contexto->tabla_segmentos, i);
+                break;
+            }
+        }
+        pthread_mutex_unlock(&ctx->mutex_programas);
+
+        if (seg_a_eliminar != NULL) {
+            eliminar_segmento(ctx, seg_a_eliminar);
+            enviar_mensaje(MSG_OK, cliente_fd);
+        } else {
+            enviar_mensaje("SEG_NOT_FOUND", cliente_fd);
+        }
+    } else {
+        enviar_mensaje("PROG_NOT_FOUND", cliente_fd);
+    }
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+
+}
+
 void atender_cliente(void *arg) {
     t_args_hilo_cliente* args = (t_args_hilo_cliente*)arg;
     int cliente_fd = args->cliente_fd;
@@ -485,39 +472,7 @@ void atender_cliente(void *arg) {
                 break;
             }
             case ELIMINAR_SEGMENTO:
-            {
-                t_list* paquete = recibir_paquete(cliente_fd);
-                uint32_t pid = *(uint32_t*)list_get(paquete, 0);
-                uint32_t id_seg = *(uint32_t*)list_get(paquete, 1);
-                list_destroy_and_destroy_elements(paquete, free);
-
-                pthread_mutex_lock(&ctx->mutex_memoria);
-                t_programa* prog = buscar_programa(ctx, pid);
-                if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
-                    pthread_mutex_lock(&ctx->mutex_programas);
-                    t_segmento* seg_a_eliminar = NULL;
-                    for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
-                        t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
-                        if (seg->id == id_seg) {
-                            seg_a_eliminar = seg;
-                            list_remove(prog->contexto->tabla_segmentos, i);
-                            break;
-                        }
-                    }
-                    pthread_mutex_unlock(&ctx->mutex_programas);
-
-                    if (seg_a_eliminar != NULL) {
-                        eliminar_segmento(ctx, seg_a_eliminar);
-                        enviar_mensaje(MSG_OK, cliente_fd);
-                    } else {
-                        enviar_mensaje("SEG_NOT_FOUND", cliente_fd);
-                    }
-                } else {
-                    enviar_mensaje("PROG_NOT_FOUND", cliente_fd);
-                }
-                pthread_mutex_unlock(&ctx->mutex_memoria);
-                break;
-            }
+                procesar_eliminar_segmento_handler(cliente_fd, ctx);
             case SOLICITUD_TAM_MAX_SEGMENTO:
             {
                 t_paquete* paq = crear_paquete();
