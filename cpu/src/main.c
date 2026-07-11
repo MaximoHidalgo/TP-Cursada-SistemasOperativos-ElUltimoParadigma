@@ -1,4 +1,4 @@
-#include "cpu_utils.h"
+#include "cpu_init.h"
 
 int main(int argc, char* argv[]) {
     t_cpu_context* ctx = iniciar_contexto(argc, argv);

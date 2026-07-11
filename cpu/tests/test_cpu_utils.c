@@ -50,6 +50,7 @@ void* mock_recibir_buffer(int* size, int socket_cliente) {
     return buffer;
 }
 
+#include "../src/cpu_init.c"
 #include "../src/cpu_utils.c"
 #undef main
 
