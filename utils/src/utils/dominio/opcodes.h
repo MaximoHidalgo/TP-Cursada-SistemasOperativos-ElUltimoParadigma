@@ -17,6 +17,7 @@ typedef enum {
 	ENVIO_CONTEXTO,
 	ACTUALIZACION_CONTEXTO,
 	INTERRUPCION_QUANTUM,
+	INTERRUPCION_DESALOJO, // <- nueva operacion agregada para el desalojo de procesos
 	FIN_DE_QUANTUM,
 	SYSCALL_EXIT,
 	SYSCALL_SLEEP,

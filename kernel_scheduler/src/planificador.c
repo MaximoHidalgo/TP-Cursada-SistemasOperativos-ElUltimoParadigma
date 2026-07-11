@@ -136,7 +136,8 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
 
     t_estado_proceso estado_anterior = proceso->estado;
     proceso->estado = ESTADO_PROCESO_READY;
-    
+    //=============================================================
+    //revisar este bloque si es necesario o no este bloque
     if (estado_anterior == ESTADO_PROCESO_SUSP_READY) {
         log_info(estratega->logger, "## Solicitando DESUSPENDER_PROCESO a Memoria para PID %d", proceso->pid);
         enviar_int(estratega->socket_memoria, DESUSPENDER_PROCESO);
@@ -144,6 +145,7 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
         
         recibir_mensaje(estratega->socket_memoria, estratega->logger);
     }
+    //=============================================================
 
     log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
              proceso->pid, 
@@ -151,7 +153,21 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
              planificador_nombre_estado(proceso->estado));
 
     encolar_en_cola_ready(estratega->colas, proceso);
-
+    //============================================
+    //bloque de codigo agregado para verificar que si esta habilitado el desalojo, que evalue si es desalojable el nuevo proceso ingresado
+    // Validamos si hay un proceso ejecutando actualmente en la CPU
+    if (estratega->proceso_exec != NULL) {
+        // La función internamente evalúa si el desalojo está habilitado y si las prioridades lo ameritan
+        if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, proceso->cola_prioridad)) {
+            
+            log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", proceso->pid, estratega->proceso_exec->pid);
+            
+            // Enviamos la interrupción usando la nueva operación
+            int opcode_interrupcion = INTERRUPCION_DESALOJO;
+            send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+        }
+    }
+    //============================
     pthread_mutex_unlock(&estratega->mutex_colas);
     return proceso;
 }
@@ -397,6 +413,12 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
                      planificador_nombre_estado(liberado->estado));
 
             if (liberado->estado == ESTADO_PROCESO_SUSP_READY) {
+                /* ======================BLOQUE DE CODIGO COMENTADO, PARA CONSULTAR EN GRUPO======================
+                //RAZON DE PONERLO COMENTADO: como paso a estado suspendido ready, necesitaba tratarlo en la cola de suspendidos ready
+                //para que luego sea tratado por el plani de mediano plazo que desencola los suspendidos ready
+                //por eso lo comente, pero igual quiero consultarlo con usteds, quiza este pasando por
+                //alto algo, hasta mientras lo modifique para que pase directo a cola ready 
+
                 // If SUSP_READY, we should put it in the new processes queue or a SUSP_READY queue.
                 // In TP, SUSP_READY goes to the new queue (cola_new) wait or directly to ready queue?
                 // "Una vez que el proceso vuelva de este evento pasará al estado Ready / Suspended Ready."
@@ -405,8 +427,29 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
                 queue_push(estratega->cola_new, liberado);
                 log_info(estratega->logger, "Proceso %d movido a cola NEW desde SUSP_READY", liberado->pid);
                 // planificador_admitir_a_ready(estratega);
+                */
+                // Lo agregamos a nuestra lista especial de suspendidos
+                list_add(estratega->cola_susp_ready, liberado);
+                log_info(estratega->logger, "Proceso %d movido a la lista de SUSP_READY", liberado->pid);
+
             } else {
                 encolar_en_cola_ready(estratega->colas, liberado);
+                //============================================
+                //bloque de codigo agregado para verificar que si esta habilitado el desalojo, que evalue si es desalojable el nuevo proceso ingresado
+                // Validamos si hay un proceso ejecutando actualmente en la CPU
+                if (estratega->proceso_exec != NULL) {
+                    // CAMBIAMOS "proceso->cola_prioridad" por "liberado->cola_prioridad"
+                    if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, liberado->cola_prioridad)) {
+                        
+                        // CAMBIAMOS "proceso->pid" por "liberado->pid"
+                        log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", liberado->pid, estratega->proceso_exec->pid);
+                        
+                        // Enviamos la interrupción usando la nueva operación
+                        int opcode_interrupcion = INTERRUPCION_DESALOJO;
+                        send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+                    }
+                }
+                //============================
             }
             
             if (!queue_is_empty(interfaz->cola_bloqueados)) {
@@ -517,6 +560,19 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
                      planificador_nombre_estado(liberado->estado));
 
             encolar_en_cola_ready(estratega->colas, liberado);
+            //============================================
+            // Validamos si hay un proceso ejecutando actualmente en la CPU
+            if (estratega->proceso_exec != NULL) {
+                // Evaluamos el desalojo con la prioridad del proceso 'liberado'
+                if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, liberado->cola_prioridad)) {
+                    
+                    log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", liberado->pid, estratega->proceso_exec->pid);
+                    
+                    int opcode_interrupcion = INTERRUPCION_DESALOJO;
+                    send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+                }
+            }
+            //============================================
         } else {
             // Nadie esperaba, el mutex queda libre
             mutex->tomado = 0;
@@ -679,6 +735,21 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
             proceso->estado = ESTADO_PROCESO_READY;
             log_info(estratega->logger, "## (%d) Pasa del estado SUSP_READY al estado READY", proceso->pid);
             encolar_en_cola_ready(estratega->colas, proceso);
+            //============================================
+                //bloque de codigo agregado para verificar que si esta habilitado el desalojo, que evalue si es desalojable el nuevo proceso ingresado
+                // Validamos si hay un proceso ejecutando actualmente en la CPU
+                if (estratega->proceso_exec != NULL) {
+                    // La función internamente evalúa si el desalojo está habilitado y si las prioridades lo ameritan
+                    if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, proceso->cola_prioridad)) {
+                        
+                        log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", proceso->pid, estratega->proceso_exec->pid);
+                        
+                        // Enviamos la interrupción usando la nueva operación
+                        int opcode_interrupcion = INTERRUPCION_DESALOJO;
+                        send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+                    }
+                }
+                //============================
         } else {
             i++;
         }
