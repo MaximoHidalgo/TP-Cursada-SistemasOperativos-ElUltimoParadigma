@@ -1,10 +1,7 @@
 #ifndef ESTRUCTURAS_CPU_H
 #define ESTRUCTURAS_CPU_H
 
-#include <commons/log.h>
-#include <commons/config.h>
 #include <utils/dominio/estructuras.h>
-#include <commons/collections/list.h>
 
 typedef struct {
     int id;

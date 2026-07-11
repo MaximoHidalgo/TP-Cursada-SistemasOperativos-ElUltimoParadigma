@@ -1,11 +1,6 @@
 #ifndef SYSCALLS_H_
 #define SYSCALLS_H_
 
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <commons/log.h>
-#include <commons/string.h>
 #include "estructuras_cpu.h"
 #include "cpu_utils.h"
 #include "cpu_memoria.h"

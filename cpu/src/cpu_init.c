@@ -7,9 +7,11 @@
 static bool inicializar_entorno(t_cpu_context* ctx, char* path_config) {
     ctx->config = config_create(path_config);
     if (ctx->config == NULL) {
-        // Fallback logger for errors if config doesn't exist
-        ctx->logger = log_create(ctx->id_cpu, ctx->id_cpu, true, LOG_LEVEL_INFO);
+        // Fallback logger para errores si el config no existe
+        char* fallback_log_name = string_from_format("%s.log", ctx->id_cpu);
+        ctx->logger = log_create(fallback_log_name, ctx->id_cpu, true, LOG_LEVEL_INFO);
         log_error(ctx->logger, "No se pudo leer el archivo de configuracion");
+        free(fallback_log_name);
         return false;
     }
 

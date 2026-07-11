@@ -1,12 +1,7 @@
 #ifndef CICLO_INSTRUCCION_H_
 #define CICLO_INSTRUCCION_H_
 
-#include <stdint.h>
-#include <stdlib.h>
 #include <commons/string.h>
-#include <utils/dominio/estructuras.h>
-#include <utils/dominio/opcodes.h>
-#include <utils/protocolo/protocolo.h>
 #include "estructuras_cpu.h"
 #include "cpu_memoria.h"
 #include "instrucciones.h"

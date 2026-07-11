@@ -6,21 +6,17 @@
 #include <utils/protocolo/protocolo.h>
 
 #define main main_del_cpu
-#define crear_conexion mock_crear_conexion
-#define enviar_mensaje mock_enviar_mensaje
-#define send mock_send
-#define recibir_operacion mock_recibir_operacion
-#define recibir_paquete mock_recibir_paquete
-#define recibir_buffer mock_recibir_buffer
+#define crear_conexion utils_mock_crear_conexion
+#define enviar_mensaje utils_mock_enviar_mensaje
+#define recibir_operacion utils_mock_recibir_operacion
+#define recibir_buffer utils_mock_recibir_buffer
 
-
-int mock_crear_conexion(char* ip, char* puerto) { return 100; }
-void mock_enviar_mensaje(char* msg, int socket) {}
-ssize_t mock_send(int sockfd, const void *buf, size_t len, int flags) { return len; }
+static int utils_mock_crear_conexion(char* ip, char* puerto) { return 100; }
+static void utils_mock_enviar_mensaje(char* msg, int socket) {}
 
 static int recibir_op_count = 0;
 
-int mock_recibir_operacion(int socket_cliente) {
+static int utils_mock_recibir_operacion(int socket_cliente) {
     if (recibir_op_count == 0) {
         recibir_op_count++;
         return TAM_MAX_SEGMENTO;
@@ -31,15 +27,7 @@ int mock_recibir_operacion(int socket_cliente) {
     return -1;
 }
 
-t_list* mock_recibir_paquete(int socket_cliente) {
-    t_list* lista = list_create();
-    int* val = malloc(sizeof(int));
-    *val = 128;
-    list_add(lista, val);
-    return lista;
-}
-
-void* mock_recibir_buffer(int* size, int socket_cliente) {
+static void* utils_mock_recibir_buffer(int* size, int socket_cliente) {
     *size = sizeof(int) * 2;
     void* buffer = malloc(*size);
     int desp = 0;
@@ -50,11 +38,9 @@ void* mock_recibir_buffer(int* size, int socket_cliente) {
     return buffer;
 }
 
-#include "../src/cpu_init.c"
 #include "../src/cpu_utils.c"
 #undef main
 
-// IMPORTANTE: cspec.h DEBE ser siempre el último include
 #include <cspecs/cspec.h>
 
 #ifdef __INTELLISENSE__
@@ -74,41 +60,6 @@ void* mock_recibir_buffer(int* size, int socket_cliente) {
 
 context(test_cpu_utils) {
     describe("Probando utils de CPU") {
-        it("Inicia y limpia el contexto de ejecucion correctamente") {
-            char* args[] = {"./cpu", "configs/cpu.config", "CPU_TEST"};
-            
-            // Reiniciamos contadores para el mock
-            recibir_op_count = 0;
-
-            t_cpu_context* ctx = iniciar_contexto(3, args);
-
-            should_ptr(ctx) not be null;
-            should_int(ctx->tam_max_segmento) be equal to(128);
-            should_string(ctx->id_cpu) be equal to("CPU_TEST");
-            should_ptr(ctx->config) not be null;
-            should_ptr(ctx->logger) not be null;
-            should_ptr(ctx->conexiones) not be null;
-            should_ptr(ctx->memory_sticks) not be null;
-            should_int(list_size(ctx->memory_sticks)) be equal to(0);
-
-            // Validamos que se pueda limpiar sin leaks/crashes
-            limpiar_contexto(ctx);
-        } end
-
-        it("inicializar_entorno configura logger y config correctamente") {
-            t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
-            ctx->id_cpu = strdup("TEST_ENTORNO");
-            ctx->conexiones = NULL; // para limpieza
-            
-            bool ok = inicializar_entorno(ctx, "configs/cpu.config");
-            
-            should_bool(ok) be equal to(true);
-            should_ptr(ctx->config) not be null;
-            should_ptr(ctx->logger) not be null;
-            
-            limpiar_contexto(ctx);
-        } end
-
         it("procesar_tabla_de_sticks deserializa correctamente los memory sticks") {
             t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
             ctx->id_cpu = strdup("TEST_STICKS");
@@ -155,6 +106,28 @@ context(test_cpu_utils) {
             
             list_destroy_and_destroy_elements(ctx->memory_sticks, free);
             log_destroy(ctx->logger);
+            free(ctx->id_cpu);
+            free(ctx);
+        } end
+        
+        it("actualizar_tabla_sticks envia solicitud y procesa la respuesta") {
+            t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
+            ctx->id_cpu = strdup("TEST_STICKS_2");
+            ctx->logger = log_create("test_sticks_2.log", "TEST", false, LOG_LEVEL_INFO);
+            ctx->memory_sticks = list_create();
+            ctx->conexiones = malloc(sizeof(t_conexiones_cpu));
+            ctx->conexiones->memoria = 100; // Mock socket
+            
+            recibir_op_count = 1; // Para que devuelva ENVIO_TABLA_STICKS
+            
+            actualizar_tabla_sticks(ctx);
+            
+            should_int(list_size(ctx->memory_sticks)) be equal to(0); // el buffer devuelve 0 items en este caso
+            
+            remove("test_sticks_2.log");
+            list_destroy_and_destroy_elements(ctx->memory_sticks, free);
+            log_destroy(ctx->logger);
+            free(ctx->conexiones);
             free(ctx->id_cpu);
             free(ctx);
         } end

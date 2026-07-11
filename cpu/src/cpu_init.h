@@ -1,10 +1,6 @@
 #ifndef CPU_INIT_H
 #define CPU_INIT_H
 
-#include <utils/sockets/sockets.h>
-#include <utils/protocolo/protocolo.h>
-#include <utils/dominio/opcodes.h>
-#include "estructuras_cpu.h"
 #include "cpu_utils.h"
 
 t_cpu_context* iniciar_contexto(int argc, char* argv[]);

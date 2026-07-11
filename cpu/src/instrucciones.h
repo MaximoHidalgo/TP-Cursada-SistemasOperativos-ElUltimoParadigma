@@ -1,16 +1,12 @@
 #ifndef INSTRUCCIONES_H_
 #define INSTRUCCIONES_H_
 
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <commons/log.h>
 #include <commons/string.h>
 #include "estructuras_cpu.h"
-#include "registros.h"
-#include "mmu.h"
 #include "ciclo_instruccion.h"
 #include "cpu_utils.h"
+#include "registros.h"
+#include "mmu.h"
 #include <math.h>
 
 // 1. Definimos el tipo de puntero a función:

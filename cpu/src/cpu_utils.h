@@ -1,9 +1,6 @@
 #ifndef CPU_H
 #define CPU_H
 
-#include <utils/sockets/sockets.h>
-#include <utils/protocolo/protocolo.h>
-#include <utils/dominio/opcodes.h>
 #include "estructuras_cpu.h"
 #include "ciclo_instruccion.h"
 #include "notificaciones_scheduler.h"

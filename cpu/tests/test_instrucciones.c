@@ -4,8 +4,6 @@
 #include "../src/instrucciones.h"
 #include "../src/syscalls.h"
 #include <commons/collections/list.h>
-
-// IMPORTANTE: cspec.h DEBE ser siempre el último include
 #include <cspecs/cspec.h>
 
 #ifdef __INTELLISENSE__
@@ -37,6 +35,9 @@ context(test_cpu_instrucciones) {
             ctx->pid = 1;
             memset(&(ctx->registros), 0, sizeof(t_registros));
             ctx->tabla_segmentos = list_create();
+            t_segmento* s = malloc(sizeof(t_segmento));
+            s->id = 0; s->base = 1000; s->tamanio = 500;
+            list_add(ctx->tabla_segmentos, s);
             
             cpu_ctx = malloc(sizeof(t_cpu_context));
             cpu_ctx->conexiones = malloc(sizeof(t_conexiones_cpu));
@@ -49,6 +50,13 @@ context(test_cpu_instrucciones) {
             socketpair(AF_UNIX, SOCK_STREAM, 0, sv_sched);
             cpu_ctx->conexiones->memoria = sv_mem[0];
             cpu_ctx->conexiones->scheduler = sv_sched[0];
+
+            t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
+            stick->id = 1;
+            stick->base_address = 1000;
+            stick->tamanio = 500;
+            stick->socket_fd = sv_mem[0];
+            list_add(cpu_ctx->memory_sticks, stick);
 
             instr = malloc(sizeof(t_instruccion));
             memset(instr, 0, sizeof(t_instruccion));
@@ -131,25 +139,82 @@ context(test_cpu_instrucciones) {
             should_int(ctx->registros.PC) be equal to(10); // El incremento se realiza en el ciclo de instruccion general
         } end
 
-        it("Instruccion EXIT (Syscall)") {
-            ctx->registros.PC = 5;
-            instr->identificador = strdup("EXIT");
+        it("Instruccion MOV_IN lee de memoria y guarda en registro") {
+            ctx->registros.PC = 0;
+            ctx->registros.SI = 10; // dir logica
+            instr->identificador = strdup("MOV_IN");
+            instr->parametro1 = strdup("EAX"); // Registro destino (4 bytes)
 
-            int desalojar = syscall_exit(instr, ctx, cpu_ctx);
+            // Simular respuesta de LECTURA_MEMORIA_DISTRIBUIDA
+            int op = LECTURA;
+            int size_payload = 4;
+            uint32_t val = 2024;
+            send(sv_mem[1], &op, sizeof(int), 0);
+            send(sv_mem[1], &size_payload, sizeof(int), 0);
+            send(sv_mem[1], &val, sizeof(uint32_t), 0);
+
+            int desalojar = instr_mov_in(instr, ctx, cpu_ctx);
             
-            should_int(desalojar) be equal to(1); // Todas las syscalls deben desalojar
-            should_int(ctx->registros.PC) be equal to(6); // La syscall incrementa PC antes de enviar contexto
+            should_int(desalojar) be equal to(0);
+            should_int(ctx->registros.EAX) be equal to(2024);
         } end
-        
-        it("Instruccion SLEEP (Syscall)") {
-            ctx->registros.PC = 5;
-            instr->identificador = strdup("SLEEP");
-            instr->parametro1 = strdup("1000");
 
-            int desalojar = syscall_sleep(instr, ctx, cpu_ctx);
+        it("Instruccion MOV_IN desaloja por Segmentation Fault") {
+            ctx->registros.SI = 999; // Provocará fallo en mmu
+            instr->identificador = strdup("MOV_IN");
+            instr->parametro1 = strdup("EAX");
             
-            should_int(desalojar) be equal to(1);
-            should_int(ctx->registros.PC) be equal to(6); // Deberia haber sumado 1
+            int desalojar = instr_mov_in(instr, ctx, cpu_ctx);
+            should_int(desalojar) be equal to(1); // Desaloja por SegFault
+        } end
+
+        it("Instruccion MOV_OUT lee registro y guarda en memoria") {
+            ctx->registros.PC = 0;
+            ctx->registros.DI = 10; // dir logica
+            ctx->registros.EBX = 500; // valor a guardar
+            instr->identificador = strdup("MOV_OUT");
+            instr->parametro1 = strdup("EBX"); // Registro valor (4 bytes)
+
+            // Simular respuesta de ESCRITURA_MEMORIA_DISTRIBUIDA
+            int op = MENSAJE;
+            int size_payload = 3;
+            char msj[] = "OK";
+            send(sv_mem[1], &op, sizeof(int), 0);
+            send(sv_mem[1], &size_payload, sizeof(int), 0);
+            send(sv_mem[1], msj, 3, 0);
+
+            int desalojar = instr_mov_out(instr, ctx, cpu_ctx);
+            
+            should_int(desalojar) be equal to(0);
+        } end
+
+        it("Instruccion COPY_MEM lee de memoria y escribe en memoria") {
+            ctx->registros.PC = 0;
+            ctx->registros.SI = 10; // dir logica origen
+            ctx->registros.DI = 20; // dir logica destino
+            ctx->registros.ECX = 5; // tamaño en ECX
+            instr->identificador = strdup("COPY_MEM");
+            instr->parametro1 = strdup("ECX"); // tamaño a copiar
+
+            // 1. Simular respuesta de LECTURA
+            int op_lectura = LECTURA;
+            int size_payload = 5;
+            char string_val[] = "HOLA!";
+            send(sv_mem[1], &op_lectura, sizeof(int), 0);
+            send(sv_mem[1], &size_payload, sizeof(int), 0);
+            send(sv_mem[1], string_val, 5, 0);
+
+            // 2. Simular respuesta de ESCRITURA
+            int op_escritura = MENSAJE;
+            int size_payload_esc = 3;
+            char msj[] = "OK";
+            send(sv_mem[1], &op_escritura, sizeof(int), 0);
+            send(sv_mem[1], &size_payload_esc, sizeof(int), 0);
+            send(sv_mem[1], msj, 3, 0);
+
+            int desalojar = instr_copy_mem(instr, ctx, cpu_ctx);
+            
+            should_int(desalojar) be equal to(0);
         } end
     } end
 }

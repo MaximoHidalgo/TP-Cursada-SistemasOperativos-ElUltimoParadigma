@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include "../src/mmu.h"
 #include <commons/collections/list.h>
-
-// IMPORTANTE: cspec.h DEBE ser siempre el último include
 #include <cspecs/cspec.h>
 
 #ifdef __INTELLISENSE__

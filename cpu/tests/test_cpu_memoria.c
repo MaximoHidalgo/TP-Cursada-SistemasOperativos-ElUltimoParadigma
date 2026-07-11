@@ -31,7 +31,6 @@ void mock_mem_enviar_paquete(t_paquete* paquete, int socket_cliente) {
 #include "../src/cpu_memoria.c"
 #undef main
 
-// IMPORTANTE: cspec.h DEBE ser siempre el último include
 #include <cspecs/cspec.h>
 
 #ifdef __INTELLISENSE__

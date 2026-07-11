@@ -1,10 +1,6 @@
 #ifndef NOTIFICACIONES_SCHEDULER_H_
 #define NOTIFICACIONES_SCHEDULER_H_
 
-#include <stdint.h>
-#include <utils/sockets/sockets.h>
-#include <utils/protocolo/protocolo.h>
-#include "estructuras_cpu.h"
 #include "cpu_memoria.h"
 
 void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, t_cpu_context* ctx);

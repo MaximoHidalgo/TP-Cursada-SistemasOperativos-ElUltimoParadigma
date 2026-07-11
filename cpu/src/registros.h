@@ -1,7 +1,6 @@
 #ifndef REGISTROS_H_
 #define REGISTROS_H_
 
-#include <stdint.h>
 #include <commons/string.h>
 #include <utils/dominio/estructuras.h>
 #include <stddef.h>

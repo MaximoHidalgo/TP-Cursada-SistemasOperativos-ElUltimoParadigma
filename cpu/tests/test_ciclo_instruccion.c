@@ -3,8 +3,6 @@
 #include <sys/socket.h>
 #include "../src/ciclo_instruccion.h"
 #include <commons/collections/list.h>
-
-// IMPORTANTE: cspec.h DEBE ser siempre el último include
 #include <cspecs/cspec.h>
 
 #ifdef __INTELLISENSE__
