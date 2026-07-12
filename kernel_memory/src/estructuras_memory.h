@@ -14,6 +14,13 @@ typedef struct {
 } t_hueco_libre;
 
 typedef struct {
+    int pid;
+    char** instrucciones;
+    int cantidad_instrucciones;
+    t_contexto_ejecucion* contexto; 
+} t_programa;
+
+typedef struct {
     int id;
     int socket_fd;
     uint32_t tamanio;
@@ -39,6 +46,8 @@ typedef struct {
     t_list* huecos_libres;
     t_list* segmentos_globales;
     pthread_mutex_t mutex_memoria;
+
+    int scheduler_socket;
     
     t_list* memory_sticks;
     
