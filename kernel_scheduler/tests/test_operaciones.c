@@ -1,0 +1,1 @@
+//solo operaciones que hace el scheduler

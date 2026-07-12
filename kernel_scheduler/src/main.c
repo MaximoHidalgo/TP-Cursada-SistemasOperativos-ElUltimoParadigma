@@ -73,6 +73,8 @@ void iniciar_planificacion(t_scheduler_context* ctx) {
     t_proceso_planificable* pcb_inicial = malloc(sizeof(t_proceso_planificable));
     pcb_inicial->pid = 0; 
     pcb_inicial->cola_prioridad = 0;
+    pcb_inicial->prioridad_original = pcb_inicial->cola_prioridad; // Que asumo será 0 (máxima)
+
     pcb_inicial->bloqueo_id = 0;
     
     enviar_peticion_crear_proceso(pcb_inicial->pid, ctx->path_script_inicial, ctx->socket_memoria);
@@ -110,13 +112,3 @@ void iniciar_servidor_clientes(t_scheduler_context* ctx) {
     }
 }
 
-void limpiar_contexto(t_scheduler_context* ctx) {
-    if (ctx->socket_escucha != -1) close(ctx->socket_escucha);
-    if (ctx->socket_memoria != -1) close(ctx->socket_memoria);
-
-    if (ctx->estratega != NULL) destruir_estratega_planificacion(ctx->estratega);
-    if (ctx->config != NULL) config_destroy(ctx->config);
-    if (ctx->logger != NULL) log_destroy(ctx->logger);
-
-    free(ctx);
-}

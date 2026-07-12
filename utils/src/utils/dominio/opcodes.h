@@ -17,6 +17,9 @@ typedef enum {
 	ENVIO_CONTEXTO,
 	ACTUALIZACION_CONTEXTO,
 	INTERRUPCION_QUANTUM,
+	INTERRUPCION_DESALOJO, // <- nueva operacion agregada para el desalojo de procesos
+	INTERRUPCION_COMPACTACION, // <- nueva operacion agregada para desalojar procesos en cpu, por compactacion
+	DESALOJO_COMPACTACION ,  // <- la cpu la envia luego de guardar contexto del proceso, asi ks lo pasa a ready y asi km puede realizar la compaccion, en ese orden por enunciado del tp 
 	FIN_DE_QUANTUM,
 	SYSCALL_EXIT,
 	SYSCALL_SLEEP,
@@ -49,7 +52,8 @@ typedef enum {
 	INTERRUPCION_COMPACTACION,
 	DESALOJO_COMPACTACION,
 	MEMORIA_EXPANDIDA,
-	CORRUPCION_MEMORIA
+	CORRUPCION_MEMORIA,
+	
 } op_code;
 
 #endif // DOMINIO_OPCODES_H_

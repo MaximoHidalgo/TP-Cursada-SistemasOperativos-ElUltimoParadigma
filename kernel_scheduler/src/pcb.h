@@ -16,8 +16,10 @@ typedef enum {
 typedef struct {
     int pid;
     int cola_prioridad;
+    int prioridad_original; // <--- NUEVO CAMPO AGREGADO
     t_estado_proceso estado;
     uint64_t instante_ready;
+    uint64_t instante_suspension; //atributo nuevo agregado 
     uint32_t io_dir_fisica;
     uint32_t io_tamanio;
     int bloqueo_id;
