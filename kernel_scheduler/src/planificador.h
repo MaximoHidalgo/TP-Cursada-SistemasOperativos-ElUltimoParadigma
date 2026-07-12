@@ -43,6 +43,7 @@ typedef struct {
     char* nombre;
     int tomado;
     uint32_t pid_duenio;
+    t_proceso_planificable* pcb_duenio; // <--- NUEVO CAMPO AGREGADO: Razon: para corregir esto de la herencia de prioridades, cambiando su prioridad de forma directa
     t_queue* cola_bloqueados;
     pthread_mutex_t mutex_semaforo;
 } t_mutex;

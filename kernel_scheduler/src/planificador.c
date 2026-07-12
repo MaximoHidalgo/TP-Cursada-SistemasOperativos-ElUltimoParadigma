@@ -507,6 +507,8 @@ int planificador_mutex_lock(t_estratega_planificacion* estratega, t_proceso_plan
         // Libre: se lo damos al proceso actual
         mutex->tomado = 1;
         mutex->pid_duenio = pcb->pid;
+        mutex->pcb_duenio = pcb; // <--- Guardamos el puntero directo al dueño: razon: para solucionar el problema de inversion de prioridades con herencia de prioridades
+        
         log_info(estratega->logger, "## Proceso %d toma el mutex %s", pcb->pid, recurso);
         pthread_mutex_unlock(&mutex->mutex_semaforo);
         pthread_mutex_unlock(&estratega->mutex_colas);
@@ -517,6 +519,34 @@ int planificador_mutex_lock(t_estratega_planificacion* estratega, t_proceso_plan
         queue_push(mutex->cola_bloqueados, pcb);
         log_info(estratega->logger, "## Proceso %d bloqueado esperando Mutex %s", pcb->pid, recurso);
         
+         // =========================================================
+        // LÓGICA DE HERENCIA DE PRIORIDADES
+        // =========================================================
+        // Si el solicitante tiene MAYOR prioridad (número menor) que el dueño
+        if (mutex->pcb_duenio != NULL && pcb->cola_prioridad < mutex->pcb_duenio->cola_prioridad) {
+            
+            // Log Obligatorio del TP
+            log_info(estratega->logger, "## %d Cambio de prioridad: %d - %d", 
+                     mutex->pcb_duenio->pid, mutex->pcb_duenio->cola_prioridad, pcb->cola_prioridad);
+
+            int prioridad_vieja = mutex->pcb_duenio->cola_prioridad;
+            
+            // El dueño hereda la prioridad alta
+            mutex->pcb_duenio->cola_prioridad = pcb->cola_prioridad; 
+
+            // ¡CRÍTICO!: Si el dueño justo estaba esperando en READY, cambiar el número de 
+            // su prioridad no es suficiente. Tenemos que reubicarlo físicamente a la nueva cola.
+            if (mutex->pcb_duenio->estado == ESTADO_PROCESO_READY) {
+                // 1. Lo sacamos de su cola actual (de baja prioridad)
+                t_cola_planificacion* cola_vieja = obtener_cola_planificacion(estratega->colas, prioridad_vieja);
+                list_remove_element(cola_vieja->procesos->elements, mutex->pcb_duenio);
+                
+                // 2. Lo encolamos en la nueva cola (de alta prioridad)
+                encolar_en_cola_ready(estratega->colas, mutex->pcb_duenio);
+            }
+        }
+        // =========================================================
+
         // Lo sacamos de EXEC
         if (estratega->proceso_exec != NULL && estratega->proceso_exec->pid == pcb->pid) {
             estratega->proceso_exec = NULL;
@@ -541,13 +571,28 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
     pthread_mutex_lock(&mutex->mutex_semaforo);
     if (mutex->tomado == 1 && mutex->pid_duenio == pcb->pid) {
         log_info(estratega->logger, "## Proceso %d libera Mutex %s", pcb->pid, recurso);
+
+          // ==============================================================
+        // RESTAURACIÓN DE PRIORIDAD (VUELTA DE LA HERENCIA)
+        // ==============================================================
+        // Si el proceso que libera el Mutex había heredado una prioridad mayor, 
+        // se la restauramos a su valor original
+        if (pcb->cola_prioridad != pcb->prioridad_original) {
+            // Log obligatorio del TP de cambio de prioridad
+            log_info(estratega->logger, "## %d Cambio de prioridad: %d - %d", 
+                     pcb->pid, pcb->cola_prioridad, pcb->prioridad_original);
+            
+            pcb->cola_prioridad = pcb->prioridad_original;
+        }
+        // ==============================================================
         
         // Vemos si hay alguien esperando
         if (!queue_is_empty(mutex->cola_bloqueados)) {
             t_proceso_planificable* liberado = queue_pop(mutex->cola_bloqueados);
             // Le damos la tenencia del Mutex al desencolado
             mutex->pid_duenio = liberado->pid;
-            
+            mutex->pcb_duenio = liberado; // asignando atributo nuevo
+
             log_info(estratega->logger, "## Proceso %d desencolado y asume Mutex %s", liberado->pid, recurso);
             
             // Lo mandamos a READY
@@ -560,6 +605,7 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
                      planificador_nombre_estado(liberado->estado));
 
             encolar_en_cola_ready(estratega->colas, liberado);
+            
             //============================================
             // Validamos si hay un proceso ejecutando actualmente en la CPU
             if (estratega->proceso_exec != NULL) {
@@ -577,6 +623,8 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
             // Nadie esperaba, el mutex queda libre
             mutex->tomado = 0;
             mutex->pid_duenio = -1;
+            mutex->pcb_duenio = NULL; // <--- Limpiamos el puntero por seguridad
+
         }
     }
     pthread_mutex_unlock(&mutex->mutex_semaforo);

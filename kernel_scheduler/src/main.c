@@ -73,6 +73,8 @@ void iniciar_planificacion(t_scheduler_context* ctx) {
     t_proceso_planificable* pcb_inicial = malloc(sizeof(t_proceso_planificable));
     pcb_inicial->pid = 0; 
     pcb_inicial->cola_prioridad = 0;
+    pcb_inicial->prioridad_original = pcb_inicial->cola_prioridad; // Que asumo será 0 (máxima)
+
     pcb_inicial->bloqueo_id = 0;
     
     enviar_peticion_crear_proceso(pcb_inicial->pid, ctx->path_script_inicial, ctx->socket_memoria);

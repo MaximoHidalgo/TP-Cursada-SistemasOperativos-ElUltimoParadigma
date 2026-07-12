@@ -366,6 +366,7 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     t_proceso_planificable* pcb_nuevo = malloc(sizeof(t_proceso_planificable));
     pcb_nuevo->pid = nuevo_pid;
     pcb_nuevo->cola_prioridad = prioridad;
+    pcb_nuevo->prioridad_original = prioridad;  // inicializar la prioridad original
     pcb_nuevo->bloqueo_id = 0;
 
     planificador_encolar_new(ctx->estratega, pcb_nuevo);
