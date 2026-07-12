@@ -26,7 +26,7 @@ static int manejar_interrupcion_quantum(t_cpu_context* ctx, uint32_t pid_actual)
 
     if (pid_interrumpido == pid_actual) {
         log_info(ctx->logger, "## Interrupción recibida para PID %d", pid_interrumpido);
-        return 1;
+        return INTERRUPCION_QUANTUM;
     } else {
         log_warning(ctx->logger, "Se descartó interrupción del PID %d (el actual es %d)", pid_interrumpido, pid_actual);
         return 0;
@@ -38,7 +38,10 @@ static int procesar_interrupcion(t_cpu_context* ctx, uint32_t pid_actual) {
     
     if (operacion == INTERRUPCION_QUANTUM) { 
         return manejar_interrupcion_quantum(ctx, pid_actual);
-    } 
+    } else if (operacion == INTERRUPCION_DESALOJO || operacion == INTERRUPCION_COMPACTACION) {
+        log_info(ctx->logger, "## Interrupción recibida");
+        return operacion;
+    }
     
     log_warning(ctx->logger, "Se recibió un código inesperado durante el ciclo: %d", operacion);
     return 0;
@@ -74,13 +77,27 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
 
         /* 4. CHECK INTERRUPT */
         if (!desalojar) {
-            int hubo_interrupcion = chequear_interrupciones(ctx, contexto->pid);
-            if (hubo_interrupcion) {
-                log_info(ctx->logger, "## Interrupción por Fin de Quantum recibida para PID %d", contexto->pid);
+            int motivo_interrupcion = chequear_interrupciones(ctx, contexto->pid);
+            if (motivo_interrupcion > 0) {
                 desalojar = 1; // Obligamos a romper el ciclo de instrucción
                 
                 enviar_contexto_a_memoria(contexto, ctx->conexiones->memoria);
-                notificar_desalojo_a_scheduler(contexto->pid, FIN_DE_QUANTUM, ctx);
+                
+                switch (motivo_interrupcion) {
+                    case INTERRUPCION_QUANTUM:
+                        log_info(ctx->logger, "## Interrupción por Fin de Quantum recibida para PID %d", contexto->pid);
+                        notificar_desalojo_a_scheduler(contexto->pid, FIN_DE_QUANTUM, ctx);
+                        break;
+                    case INTERRUPCION_DESALOJO:
+                        notificar_desalojo_a_scheduler(contexto->pid, INTERRUPCION_DESALOJO, ctx);
+                        break;
+                    case INTERRUPCION_COMPACTACION:
+                        log_info(ctx->logger, "## Interrupción por Compactación recibida para PID %d", contexto->pid);
+                        notificar_desalojo_a_scheduler(contexto->pid, DESALOJO_COMPACTACION, ctx);
+                        break;
+                }
+            } else if (motivo_interrupcion == -1) {
+                desalojar = 1;
             }
         }
 
@@ -145,7 +162,7 @@ int chequear_interrupciones(t_cpu_context* ctx, uint32_t pid_actual) {
 
     if (bytes_recibidos == 0) {
         log_error(ctx->logger, "El Kernel Scheduler se ha desconectado inesperadamente.");
-        return 1;
+        return -1;
     }
     
     if (bytes_recibidos < 0) {
@@ -153,7 +170,7 @@ int chequear_interrupciones(t_cpu_context* ctx, uint32_t pid_actual) {
             return 0; //el socket está vacío, no hay interrupciones.
         } else {
             log_error(ctx->logger, "Error real en el socket de interrupciones.");
-            return 1; // Hubo un error de red, forzamos el desalojo.
+            return -1; // Hubo un error de red, forzamos el desalojo.
         }
     }
 
