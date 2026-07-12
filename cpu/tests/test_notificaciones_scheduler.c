@@ -46,10 +46,10 @@ context(test_notificaciones) {
         } end
 
         it("notificar_desalojo_a_scheduler envia codigo y pid") {
-            notificar_desalojo_a_scheduler(42, FIN_DE_QUANTUM, ctx);
+            notificar_desalojo_a_scheduler(42, INTERRUPCION_QUANTUM, ctx);
 
             int op = recibir_operacion(sv_sched[1]);
-            should_int(op) be equal to(FIN_DE_QUANTUM);
+            should_int(op) be equal to(INTERRUPCION_QUANTUM);
 
             t_list* paq = recibir_paquete(sv_sched[1]);
             should_int(list_size(paq)) be equal to(1);

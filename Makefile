@@ -1,7 +1,7 @@
 .PHONY: all run stop clean fueraLogs debug release test
 
 # Argumentos definidos para la prueba
-PATH_PSEUDOCODIGO = MEMORIA_PRE_2.prc
+PATH_PSEUDOCODIGO = PLANI_PRE_0.prc
 #PLANI_PRE_0.prc
 ID_CPU = CPU_1
 TAM_STICK = 1024

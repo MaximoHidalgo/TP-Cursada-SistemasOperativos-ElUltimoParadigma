@@ -632,13 +632,12 @@ static const handler_t tabla_despacho[256] = {
     [SYSCALL_MEM_ALLOC]          = handler_mem_alloc,
     [SYSCALL_MEM_FREE]           = handler_mem_free,
     [SYSCALL_INIT_PROC]          = handler_init_proc,
-    [FIN_DE_QUANTUM]             = handler_fin_quantum,
+    [INTERRUPCION_QUANTUM]       = handler_fin_quantum,
     [MEMORIA_EXPANDIDA]          = handler_mem_expandida, 
 	[CORRUPCION_MEMORIA]         = handler_mem_corrupta,
     [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion,
     [INTERRUPCION_DESALOJO]      = handler_interrupcion_desalojo,
     [DESALOJO_COMPACTACION]      = handler_desalojo_compactacion
-
 };
 
 

@@ -17,10 +17,9 @@ typedef enum {
 	ENVIO_CONTEXTO,
 	ACTUALIZACION_CONTEXTO,
 	INTERRUPCION_QUANTUM,
-	INTERRUPCION_DESALOJO, // <- nueva operacion agregada para el desalojo de procesos
-	INTERRUPCION_COMPACTACION, // <- nueva operacion agregada para desalojar procesos en cpu, por compactacion
-	DESALOJO_COMPACTACION ,  // <- la cpu la envia luego de guardar contexto del proceso, asi ks lo pasa a ready y asi km puede realizar la compaccion, en ese orden por enunciado del tp 
-	FIN_DE_QUANTUM,
+	INTERRUPCION_DESALOJO,
+	INTERRUPCION_COMPACTACION,
+	DESALOJO_COMPACTACION,
 	SYSCALL_EXIT,
 	SYSCALL_SLEEP,
 	SYSCALL_STDOUT,
@@ -48,9 +47,6 @@ typedef enum {
 	DESUSPENDER_PROCESO,
 	SYSCALL_INIT_PROC,
 	SOLICITUD_TABLA_STICKS,
-	INTERRUPCION_DESALOJO,
-	INTERRUPCION_COMPACTACION,
-	DESALOJO_COMPACTACION,
 	MEMORIA_EXPANDIDA,
 	CORRUPCION_MEMORIA,
 	

@@ -85,8 +85,9 @@ void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context
                 
                 switch (motivo_interrupcion) {
                     case INTERRUPCION_QUANTUM:
-                        log_info(ctx->logger, "## Interrupción por Fin de Quantum recibida para PID %d", contexto->pid);
-                        notificar_desalojo_a_scheduler(contexto->pid, FIN_DE_QUANTUM, ctx);
+                        log_info(ctx->logger, "## Desalojando Proceso %d por FIN DE QUANTUM", contexto->pid);
+                        notificar_desalojo_a_scheduler(contexto->pid, INTERRUPCION_QUANTUM, ctx);
+                        desalojar = 1;
                         break;
                     case INTERRUPCION_DESALOJO:
                         notificar_desalojo_a_scheduler(contexto->pid, INTERRUPCION_DESALOJO, ctx);
