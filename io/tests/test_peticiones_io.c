@@ -35,10 +35,16 @@ static void recibir_mensaje_test(int socket, int *op, int *size, char *buffer)
     recv(socket, buffer, *size, MSG_WAITALL);
 }
 
+/* variables globales para controlar el mock desde cspecs */
+char* mock_readline_return = NULL;
+bool mock_readline_retornar_null = false;
+
 /* mock readline determinista */
 char* io_readline(const char* prompt)
 {
     (void)prompt;
+    if (mock_readline_retornar_null) return NULL;
+    if (mock_readline_return) return strdup(mock_readline_return);
     return strdup("hola");
 }
 

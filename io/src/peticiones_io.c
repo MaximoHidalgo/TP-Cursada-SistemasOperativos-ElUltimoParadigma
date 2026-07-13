@@ -22,7 +22,11 @@ void ejecutar_stdin(t_io_context* ctx, int pid) {
 
     log_info(ctx->logger, "## Texto leido: %s", texto_final);
 
-    enviar_mensaje(texto_final, ctx->socket_scheduler);
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = MENSAJE;
+    buffer_write(paquete->buffer, texto_final, cantidad_a_leer);
+    enviar_paquete(paquete, ctx->socket_scheduler);
+    eliminar_paquete(paquete);
 
     free(leido);
     free(texto_final);
@@ -52,7 +56,7 @@ void ejecutar_sleep(t_io_context* ctx, int pid) {
     int milisegundos = recibir_int(ctx->socket_scheduler);
 
     log_info(ctx->logger,
-             "## PID: %d - Haciendo sleep por %d ms.",
+             "## PID: %d - Haciendo sleep por %d milisegundos.",
              pid,
              milisegundos);
 
