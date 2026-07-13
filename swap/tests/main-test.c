@@ -1,15 +1,14 @@
 #include <stdio.h>
 #include "assert.h"
 
-#define main main_swap
-#include "../src/main.c"
-#undef main
+// Eliminamos la definición de main porque ahora se usa swap_utils
+#include "../src/swap_utils.h"
 
-void test_crear_archivo_swap() {
+void test_crear_archivo_swap_old() {
      t_swap_context ctx;
 
     // Inicializamos solo los campos necesarios
-    ctx.swap_file_path = "swap_test.bin";
+    ctx.swap_file_path = "swap_test_old.bin";
     ctx.swap_file_size = 1024;
     ctx.swap_file = NULL;
 
@@ -30,8 +29,7 @@ void test_crear_archivo_swap() {
     assert(tamanio == 1024);
 
     fclose(ctx.swap_file);
-    remove("swap_test.bin");
+    remove("swap_test_old.bin");
 
     printf("test_crear_archivo_swap PASO\n");
 }
-

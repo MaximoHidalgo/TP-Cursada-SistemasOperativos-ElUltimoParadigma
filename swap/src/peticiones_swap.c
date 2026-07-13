@@ -9,17 +9,12 @@ void procesar_peticion_lectura(t_swap_context* ctx) {
     
     leer_bloque_swap(ctx->swap_file, numero_bloque, ctx->block_size, buffer);
     
-    t_paquete* paq = crear_paquete();
-    paq->codigo_operacion = LECTURA;
-    agregar_a_paquete(paq, buffer, ctx->block_size);
-    enviar_paquete(paq, ctx->socket_kernel_memory);
-    eliminar_paquete(paq);
+    enviar_int(ctx->socket_kernel_memory, LECTURA);
+    enviar_int(ctx->socket_kernel_memory, ctx->block_size);
+    send(ctx->socket_kernel_memory, buffer, ctx->block_size, 0);
     
     free(buffer);
 }
-
-
-
 
 void procesar_peticion_escritura(t_swap_context* ctx) {
     int numero_bloque = recibir_operacion(ctx->socket_kernel_memory);
@@ -35,8 +30,7 @@ void procesar_peticion_escritura(t_swap_context* ctx) {
     free(buffer);
 }
 
-void escribir_bloque_swap(FILE* archivo,int numero_bloque,int block_size,void* buffer)
-{
+void escribir_bloque_swap(FILE* archivo,int numero_bloque,int block_size,void* buffer){
     fseek(archivo, numero_bloque * block_size, SEEK_SET);
 
     fwrite(buffer, 1, block_size, archivo);
@@ -44,8 +38,7 @@ void escribir_bloque_swap(FILE* archivo,int numero_bloque,int block_size,void* b
     fflush(archivo);
 }
 
-void leer_bloque_swap(FILE* archivo, int numero_bloque, int block_size, void* destino)
-{
+void leer_bloque_swap(FILE* archivo, int numero_bloque, int block_size, void* destino){
     fseek(archivo, numero_bloque * block_size, SEEK_SET);
 
     fread(destino,1,block_size,archivo);

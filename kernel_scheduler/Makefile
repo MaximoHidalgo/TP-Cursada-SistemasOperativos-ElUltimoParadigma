@@ -57,11 +57,7 @@ TEST_OBJS = $(filter-out $(TEST_EXCLUDE), $(TESTS_C)) $(patsubst src/%.c,obj/%.o
 
 # Set test binary targets
 TEST = bin/$(NAME)_tests
-CSPECS_FOUND := $(shell find /usr /lib /usr/local -name 'libcspecs*' 2>/dev/null | head -n 1)
-TEST_EXTRA_LIBS :=
-ifneq ($(strip $(CSPECS_FOUND)),)
-TEST_EXTRA_LIBS := -lcspecs
-endif
+
 
 .PHONY: all
 all: debug
