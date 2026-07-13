@@ -52,6 +52,8 @@ TESTS_C += $(shell find $(TESTS_DIR)/ -iname "*.c" 2> /dev/null)
 TESTS_H += $(shell find $(TESTS_DIR)/ -iname "*.h" 2> /dev/null)
 
 # Set test intermediate objects
+TEST_EXCLUDE = src/main.c
+
 TEST_OBJS = $(filter-out $(TEST_EXCLUDE), $(TESTS_C)) $(patsubst src/%.c,obj/%.o,$(filter-out $(TEST_EXCLUDE), $(SRCS_C)))
 
 # Set test binary targets
@@ -82,7 +84,7 @@ $(OUT): $(OBJS) | $(dir $(OUT))
 	$(call compile_out)
 
 $(TEST): $(TEST_OBJS) $(DEPS) | $(dir $(TEST))
-	$(CC) $(CFLAGS) -o "$@" $^ $(IDIRS:%=-I%) $(LIBDIRS:%=-L%) $(RUNDIRS:%=-Wl,-rpath,%) $(LIBS:%=-l%) -lcspecs
+	$(CC) $(CFLAGS) -o "$@" $^ $(IDIRS:%=-I%) $(LIBDIRS:%=-L%) $(RUNDIRS:%=-Wl,-rpath,%) $(LIBS:%=-l%) 
 
 obj/%.o: src/%.c $(SRCS_H) $(DEPS) | $(dir $(OBJS))
 	$(call compile_objs)
