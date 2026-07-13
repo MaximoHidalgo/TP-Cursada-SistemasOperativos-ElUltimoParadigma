@@ -1,24 +1,7 @@
 # plug-n-pray-pruebas
 
-¡El sistema está listo!
-Acabo de compilar y configurar todo para que funcione con el archivo prueba_io.txt.
+Dentro de este repositorio encontraran scripts que por el momento les van a servir para ver que su TP va funcionando.
 
-Instrucciones para usarlo:
+Los scripts deben estar correctamente redactados, cualquier consulta o inconveniente con los mismos por favor crear un issue en el [foro](https://faq.utnso.com.ar/foro)
 
-Abre una terminal y ejecuta:
-
-make run
-Esto iniciará:
-
-Kernel Memory
-Kernel Scheduler
-SWAP
-Memory Stick
-2 CPUs
-3 módulos de IO
-Si en algún momento quieres detener todo, ejecuta:
-
-make stop
-Y para limpiar los archivos compilados:
-
-make clean
+[(Documento de Pruebas Finales](https://faq.utnso.com.ar/plug-n-pray-pruebas)

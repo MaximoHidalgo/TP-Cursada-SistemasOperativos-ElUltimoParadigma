@@ -1,5 +1,9 @@
 # Resultados
 
+## Pruebas Finales
+
+Remitirse al contenido del [Documento de Pruebas Finales](https://faq.utnso.com.ar/plug-n-pray-pruebas)
+
 ## Pruebas Preliminares
 
 Dentro de este archivo se encontrará una breve descripción de los resultados esperados en las pruebas.
