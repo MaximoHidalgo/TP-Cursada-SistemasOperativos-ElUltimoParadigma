@@ -10,6 +10,9 @@ void test_leer_varios_bloques();
 void test_crear_archivo_swap();
 
 int main() {
+    printf("=================================================\n");
+    printf("💿 Iniciando Tests Unitarios de SWAP\n");
+    printf("=================================================\n\n");
 
     test_escribir_primer_bloque();
     test_escribir_bloque_intermedio();
@@ -17,7 +20,8 @@ int main() {
     test_leer_bloque();
     test_leer_varios_bloques();
     test_crear_archivo_swap();
-    
-    printf("Todos los test de SWAP fueron pasados correctamente\n");
+    printf("\n=================================================\n");
+    printf(">:) Todos los tests de SWAP se ejecutaron.\n");
+    printf("=================================================\n");
     return 0;
 }
