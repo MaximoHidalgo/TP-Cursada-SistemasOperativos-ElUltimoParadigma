@@ -10,11 +10,7 @@ static bool inicializar_entorno(t_swap_context* ctx, char* path_config) {
     char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
     t_log_level level = LOG_LEVEL_INFO;
     if (log_level_str != NULL) {
-        if (string_equals_ignore_case(log_level_str, "TRACE")) level = LOG_LEVEL_TRACE;
-        else if (string_equals_ignore_case(log_level_str, "DEBUG")) level = LOG_LEVEL_DEBUG;
-        else if (string_equals_ignore_case(log_level_str, "INFO")) level = LOG_LEVEL_INFO;
-        else if (string_equals_ignore_case(log_level_str, "WARNING")) level = LOG_LEVEL_WARNING;
-        else if (string_equals_ignore_case(log_level_str, "ERROR")) level = LOG_LEVEL_ERROR;
+        level = log_level_from_string(log_level_str);
     }
     
     ctx->logger = log_create("swap.log", "SWAP", true, level);

@@ -234,7 +234,12 @@ void procesar_suspender_proceso(int cliente_fd, t_memory_context* ctx) {
             enviar_int(ctx->swap_socket, ctx->swap_block_size);
             send(ctx->swap_socket, bloque_data, ctx->swap_block_size, 0);
             
-            recibir_mensaje(ctx->swap_socket, ctx->logger);
+            int opcode = recibir_operacion(ctx->swap_socket);
+            if(opcode == MENSAJE) {
+                recibir_mensaje(ctx->swap_socket, ctx->logger);
+            } else {
+                log_error(ctx->logger, "Opcode inesperado de SWAP: %d", opcode);
+            }
             free(bloque_data);
             offset += copy_size;
         }

@@ -15,7 +15,7 @@ void test_principal_km() {
     //archivo config
     t_memory_context* ctx_prueba = iniciar_contexto(cant_args, lista_args);
 
-    t_log* log_Prueba = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_INFO);
+    // La variable log_Prueba no se usaba porque iniciar_contexto ya crea el logger
 
      // Caso Feliz
     assert(ctx_prueba->logger != NULL);

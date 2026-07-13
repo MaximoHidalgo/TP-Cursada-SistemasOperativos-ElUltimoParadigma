@@ -1,10 +1,6 @@
 #ifndef PETICIONES_SWAP_H
 #define PETICIONES_SWAP_H
 
-#include <utils/sockets/sockets.h>
-#include <utils/protocolo/protocolo.h>
-#include <utils/dominio/estructuras.h>
-#include <utils/dominio/opcodes.h>
 #include "estructuras.h"
 
 void procesar_peticion_lectura(t_swap_context* ctx);

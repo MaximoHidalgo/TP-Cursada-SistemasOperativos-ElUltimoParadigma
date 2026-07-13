@@ -1,9 +1,13 @@
 #ifndef ESTRUCTURAS_SWAP_H_
 #define ESTRUCTURAS_SWAP_H_
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <commons/log.h>
 #include <commons/config.h>
-#include <stdio.h>
+#include <commons/string.h>
+#include <utils/sockets/sockets.h>
+#include <utils/protocolo/protocolo.h>
 
 typedef struct {
     char* ip_memory;
