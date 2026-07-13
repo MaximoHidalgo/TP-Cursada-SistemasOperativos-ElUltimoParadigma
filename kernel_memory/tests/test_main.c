@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "../src/main.h"
+#include "../src/auxiliares.h"
 
 void test_principal_km() {
     
@@ -9,15 +9,16 @@ void test_principal_km() {
     int cant_args = 2;
     //0->nombre ejecutable
     //1->primer argumento
-    char* lista_args[1]; 
-    lista_args[1] = "kernelMemory.config";
+    char* lista_args[2]; 
+    lista_args[0] = "./kernel_memory_test";
+    lista_args[1] = "configs/kernelMemory.config";
     //archivo config
-    t_memory_context* ctx_prueba = iniciar_contexto_km(cant_args, lista_args);
+    t_memory_context* ctx_prueba = iniciar_contexto(cant_args, lista_args);
 
     t_log* log_Prueba = log_create("KernelMemory.log", "KernelMemory", true, LOG_LEVEL_INFO);
 
      // Caso Feliz
-    assert(ctx_prueba->logger == log_Prueba);
+    assert(ctx_prueba->logger != NULL);
     assert(list_is_empty(ctx_prueba->programas));
     assert(ctx_prueba->instruction_delay == 500);
     assert(strcmp(ctx_prueba->base_path,"../utils/scripts") == 0);

@@ -7,6 +7,7 @@
 #include <commons/collections/list.h>
 #include <commons/bitarray.h>
 #include <pthread.h>
+#include "utils/dominio/estructuras.h"
 
 typedef struct {
     uint32_t base;

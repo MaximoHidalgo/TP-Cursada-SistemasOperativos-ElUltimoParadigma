@@ -59,7 +59,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                     enviar_paquete(paq_write, ctx->socket_memoria);
                     eliminar_paquete(paq_write);
                     
-                    int r_mem = recibir_operacion(ctx->socket_memoria);
+                    int r_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
                     if (r_mem == MENSAJE) {
                         int s_m; char* msj_m = recibir_buffer(&s_m, ctx->socket_memoria); free(msj_m);
                     }
@@ -106,7 +106,7 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
         
-        int op = recibir_operacion(ctx->socket_memoria);
+        int op = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         if (op == MENSAJE) {
             int size;
             void* buf = recibir_buffer(&size, ctx->socket_memoria);
@@ -257,7 +257,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
 
-        int respuesta = recibir_operacion(ctx->socket_memoria);
+        int respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         
         /*
         //se comenta este bloque de codigo porque...
@@ -269,7 +269,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             eliminar_paquete(paq_resp);
             
             // Esperamos la respuesta final de la creación del segmento post-compactación
-            respuesta = recibir_operacion(ctx->socket_memoria);
+            respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         }*/
         //cambio el bloque de arriba con este, porque asi puedo avisarle a la cpu que se inicio la compactacion 
         //y el mismo guarde el contexto de ejecucion y pueda asi luego sacar de la ejecucion al proceso con el
@@ -315,7 +315,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
 
-        int respuesta = recibir_operacion(ctx->socket_memoria);
+        int respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         if (respuesta == MENSAJE) {
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);

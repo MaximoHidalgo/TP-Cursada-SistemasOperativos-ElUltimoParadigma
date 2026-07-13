@@ -296,7 +296,10 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
             enviar_paquete(paq, cliente_fd);
             eliminar_paquete(paq);
                     
+            pthread_mutex_unlock(&ctx->mutex_memoria);
             int res = recibir_operacion(cliente_fd);
+            pthread_mutex_lock(&ctx->mutex_memoria);
+            
             if (res == RESPUESTA_COMPACTACION) {
                 compactar_memoria(ctx);
                 if (!hay_espacio_para_restaurar_segmentos(ctx, proc)) {
@@ -341,7 +344,10 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
         enviar_paquete(paq, cliente_fd);
         eliminar_paquete(paq);
                     
+        pthread_mutex_unlock(&ctx->mutex_memoria);
         int res = recibir_operacion(cliente_fd);
+        pthread_mutex_lock(&ctx->mutex_memoria);
+        
         if (res == RESPUESTA_COMPACTACION) {
             compactar_memoria(ctx);
             nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
@@ -473,6 +479,7 @@ void atender_cliente(void *arg) {
             }
             case ELIMINAR_SEGMENTO:
                 procesar_eliminar_segmento_handler(cliente_fd, ctx);
+                break;
             case SOLICITUD_TAM_MAX_SEGMENTO:
             {
                 t_paquete* paq = crear_paquete();

@@ -95,4 +95,5 @@ bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estr
 const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo);
 void planificador_finalizar_todo_por_bsod(t_estratega_planificacion*);
 void planificador_intentar_desuspender(t_estratega_planificacion* estratega);
+int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega);
 #endif

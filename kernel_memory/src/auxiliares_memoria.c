@@ -61,10 +61,7 @@ t_hueco_libre* buscar_hueco_libre_x_lista(t_list* huecos_libres, uint32_t tamani
 }
 
 void notificar_memoria_expandida(int scheduler_socket){
-    t_paquete* paq = crear_paquete();
-    paq->codigo_operacion = MEMORIA_EXPANDIDA;
-    enviar_paquete(paq, scheduler_socket);
-    eliminar_paquete(paq);
+    enviar_int(scheduler_socket, MEMORIA_EXPANDIDA);
 }
 
 bool hay_espacio_para_restaurar_segmentos(t_memory_context* ctx, t_contexto_ejecucion* proc){
@@ -270,6 +267,7 @@ bool ordenar_segmentos_por_base(void* a, void* b) {
 
 void actualizar_tablas_segmentos(t_memory_context* ctx, uint32_t base_vieja, uint32_t id, uint32_t nueva_base)
 {
+    pthread_mutex_lock(&ctx->mutex_programas);
     for (int i = 0; i < list_size(ctx->programas); i++) {
 
         t_programa* prog = list_get(ctx->programas, i);
@@ -280,10 +278,12 @@ void actualizar_tablas_segmentos(t_memory_context* ctx, uint32_t base_vieja, uin
 
             if (seg->base == base_vieja && seg->id == id) {
                 seg->base = nueva_base;
+                pthread_mutex_unlock(&ctx->mutex_programas);
                 return;
             }
         }
     }
+    pthread_mutex_unlock(&ctx->mutex_programas);
 }
 
 void compactar_memoria(t_memory_context* ctx) {

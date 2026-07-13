@@ -756,6 +756,10 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
 
         // B. Esperamos respuesta
         int codigo_rta = recibir_operacion(estratega->socket_memoria);
+        while (codigo_rta == MEMORIA_EXPANDIDA) {
+            log_info(estratega->logger, "Memoria expandida durante desuspension (ignorada)");
+            codigo_rta = recibir_operacion(estratega->socket_memoria);
+        }
         int hay_espacio = 0;
         if (codigo_rta == MENSAJE) { // Ajustá al opcode real que te mande la Memoria
             hay_espacio = recibir_int(estratega->socket_memoria); 
@@ -774,6 +778,10 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
             
             // Esperamos el OK de memoria
             int confirmacion = recibir_operacion(estratega->socket_memoria);
+            while (confirmacion == MEMORIA_EXPANDIDA) {
+                log_info(estratega->logger, "Memoria expandida durante desuspension (ignorada)");
+                confirmacion = recibir_operacion(estratega->socket_memoria);
+            }
             if (confirmacion == -1) {
                 log_error(estratega->logger, "Error: Kernel Memory se desconectó");
                 return;
@@ -802,4 +810,14 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
             i++;
         }
     }
+}
+
+int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega) {
+    int respuesta = recibir_operacion(socket_memoria);
+    while (respuesta == MEMORIA_EXPANDIDA) {
+        log_info(estratega->logger, "Memoria expandida: Se detectó un nuevo Memory Stick.");
+        planificador_intentar_desuspender(estratega);
+        respuesta = recibir_operacion(socket_memoria);
+    }
+    return respuesta;
 }
