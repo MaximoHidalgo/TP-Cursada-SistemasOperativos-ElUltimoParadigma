@@ -1,6 +1,4 @@
 #include "peticiones_io.h"
-#include <utils/io/io_wrapper.h>
-#include <unistd.h>
 
 /*------------------------------------------------*/
 /* STDIN                                         */
@@ -19,19 +17,8 @@ void ejecutar_stdin(t_io_context* ctx, int pid) {
         leido = strdup("");
     }
 
-    char* texto_final = malloc(cantidad_a_leer + 1);
-
-    int len_leido = strlen(leido);
-
-    for (int i = 0; i < cantidad_a_leer; i++) {
-        if (i < len_leido) {
-            texto_final[i] = leido[i];
-        } else {
-            texto_final[i] = '\0';
-        }
-    }
-
-    texto_final[cantidad_a_leer] = '\0';
+    char* texto_final = calloc(cantidad_a_leer + 1, sizeof(char));
+    strncpy(texto_final, leido, cantidad_a_leer);
 
     log_info(ctx->logger, "## Texto leido: %s", texto_final);
 
@@ -54,6 +41,7 @@ void ejecutar_stdout(t_io_context* ctx, int pid) {
              texto);
 
     free(texto);
+    enviar_mensaje(MSG_OK, ctx->socket_scheduler);
 }
 
 /*------------------------------------------------*/
@@ -69,6 +57,7 @@ void ejecutar_sleep(t_io_context* ctx, int pid) {
              milisegundos);
 
     usleep(milisegundos * 1000);
+    enviar_mensaje(MSG_OK, ctx->socket_scheduler);
 }
 
 /*------------------------------------------------*/
@@ -82,15 +71,10 @@ void procesar_peticion_io(t_io_context* ctx) {
 
     if (string_equals_ignore_case(ctx->io_name, "SLEEP")) {
         ejecutar_sleep(ctx, pid);
-        enviar_mensaje(MSG_OK, ctx->socket_scheduler);
-    }
-    else if (string_equals_ignore_case(ctx->io_name, "STDOUT")) {
-        ejecutar_stdout(ctx, pid);
-        enviar_mensaje(MSG_OK, ctx->socket_scheduler);
-    }
-    else if (string_equals_ignore_case(ctx->io_name, "STDIN")) {
+    } else if (string_equals_ignore_case(ctx->io_name, "STDIN")) {
         ejecutar_stdin(ctx, pid);
-        /* STDIN ya responde dentro de la función */
+    } else if (string_equals_ignore_case(ctx->io_name, "STDOUT")) {
+        ejecutar_stdout(ctx, pid);
     }
 
     log_info(ctx->logger, "## PID: %d - Fin de IO", pid);

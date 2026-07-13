@@ -6,7 +6,7 @@ void test_ejecutar_stdin(void);
 void test_procesar_peticion_io_sleep(void);
 void test_procesar_peticion_io_stdout(void);
 
-int main(void)
+void correr_tests_legacy(void)
 {
     printf("=================================================\n");
     printf(":O Iniciando Tests Unitarios de IO\n");
@@ -21,6 +21,4 @@ int main(void)
     printf("\n=================================================\n");
     printf(">:) Todos los tests se ejecutaron.\n");
     printf("=================================================\n");
-
-    return 0;
 }

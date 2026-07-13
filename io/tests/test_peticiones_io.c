@@ -60,6 +60,12 @@ void test_ejecutar_sleep(void)
 
     ejecutar_sleep(&ctx, pid);
 
+    int op, size;
+    char buffer[64];
+    recibir_mensaje_test(s[1], &op, &size, buffer);
+    assert(op == MENSAJE);
+    assert(strcmp(buffer, MSG_OK) == 0);
+
     cerrar_socket(s);
 
     printf(";) test_ejecutar_sleep: PASO\n");
@@ -82,6 +88,12 @@ void test_ejecutar_stdout(void)
     enviar_string(s[1], texto);
 
     ejecutar_stdout(&ctx, pid);
+
+    int op, size;
+    char buffer[64];
+    recibir_mensaje_test(s[1], &op, &size, buffer);
+    assert(op == MENSAJE);
+    assert(strcmp(buffer, MSG_OK) == 0);
 
     cerrar_socket(s);
 
