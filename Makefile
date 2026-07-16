@@ -2,7 +2,10 @@
 
 # Argumentos definidos para la prueba
 PATH_PSEUDOCODIGO = PLANI_PRE_0.prc
-#PLANI_PRE_0.prc
+
+# Aca abajo se ponen los argumentos que se quieran usar como accesos rapidos
+#PLANI_PRE_0.prc PLANI_MEM.prc MEMORIA_PRE_0.prc PCP.prc PHP.prc PMP.prc
+
 ID_CPU = CPU_1
 TAM_STICK = 1024
 TIPO_IO = IO_STDIN
