@@ -1,5 +1,19 @@
 #include "atender_cliente_scheduler.h"
 
+static const char* obtener_nombre_syscall(int tipo_syscall) {
+    switch (tipo_syscall) {
+        case SYSCALL_SLEEP: return "SLEEP";
+        case SYSCALL_STDOUT: return "STDOUT";
+        case SYSCALL_STDIN: return "STDIN";
+        case SYSCALL_MUTEX_CREATE: return "MUTEX_CREATE";
+        case SYSCALL_MUTEX_LOCK: return "MUTEX_LOCK";
+        case SYSCALL_MUTEX_UNLOCK: return "MUTEX_UNLOCK";
+        case SYSCALL_MEM_ALLOC: return "MEM_ALLOC";
+        case SYSCALL_MEM_FREE: return "MEM_FREE";
+        default: return "UNKNOWN";
+    }
+}
+
 void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
     t_proceso_planificable* proceso_a_ejecutar = planificador_despachar_siguiente(ctx->estratega);
     
@@ -175,6 +189,9 @@ void procesar_syscall_io(int cliente_fd, t_scheduler_context* ctx, int tipo_sysc
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
     
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: %s", pid, obtener_nombre_syscall(tipo_syscall));
+    
     // Guard Clause: Validación del proceso actual
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
         despachar_proceso_a_cpu(ctx, cliente_fd);
@@ -201,7 +218,10 @@ void procesar_syscall_io(int cliente_fd, t_scheduler_context* ctx, int tipo_sysc
 void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     if (ctx->estratega->proceso_exec != NULL) {
-        log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SUCCESS", ctx->estratega->proceso_exec->pid);
+        // Log obligatorio del TP
+        log_info(ctx->logger, "## (%d) - Solicitó syscall: EXIT", ctx->estratega->proceso_exec->pid);
+        
+        log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de SUCCESS", ctx->estratega->proceso_exec->pid);
         ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
         
         t_paquete* paq_liberar = crear_paquete();
@@ -221,6 +241,9 @@ void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_s
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
     char* recurso = list_get(paquete, 1);
+
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: %s", pid, obtener_nombre_syscall(tipo_syscall));
 
     // Guard Clause
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
@@ -258,6 +281,9 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
     t_list* paquete = recibir_paquete(cliente_fd);
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
+    
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: %s", pid, obtener_nombre_syscall(tipo_syscall));
 
     // Guard Clause: Validación del proceso actual
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
@@ -283,13 +309,14 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         if (respuesta == SOLICITUD_COMPACTACION) {
             log_info(ctx->logger, "## Inicio de compactación"); // Log obligatorio del TP
             
-            // Le mandamos un "tiro" a la CPU para que frene
-            // NOTA: Deberás agregar INTERRUPCION_COMPACTACION en tu opcodes.h
-            int op_interrupcion = INTERRUPCION_COMPACTACION;
-            planificador_enviar_interrupcion(ctx->estratega, op_interrupcion);
+            // Como la CPU ya desalojó el proceso y está inactiva, autorizamos inmediatamente a Memoria
+            t_paquete* paq_resp = crear_paquete();
+            paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
+            enviar_paquete(paq_resp, ctx->socket_memoria);
+            eliminar_paquete(paq_resp);
             
-            // SALIMOS de la función. No esperamos nada. El hilo vuelve a escuchar el socket.
-            return; 
+            // Esperamos a que termine de compactar y nos devuelva el resultado real (OK/ERROR)
+            respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         }
         if (respuesta == MENSAJE) {
             int size;
@@ -299,7 +326,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             } else {
                 log_error(ctx->logger, "Out of memory. Finalizando proceso %d", pid);
                 log_error(ctx->logger, "ERROR: Memoria insuficiente para crear el segmento del proceso %d.", pid);
-                log_error(ctx->logger, "## (%d) finalizo su ejecucion con motivo de FALTA_DE_MEMORIA  %d.", pid);
+                log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de OUT_OF_MEMORY", pid);
 
                 ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
                 
@@ -359,6 +386,9 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     char* script_path = list_get(paquete, 1);
     uint32_t* prioridad_ptr = list_get(paquete, 2);
     uint32_t prioridad = *prioridad_ptr;
+
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: INIT_PROC", pid);
 
     // Guard Clause
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
@@ -462,7 +492,7 @@ int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     
     if (ctx->estratega->proceso_exec != NULL) {
-        log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SEG_FAULT", ctx->estratega->proceso_exec->pid);
+        log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de SEG_FAULT", ctx->estratega->proceso_exec->pid);
         ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
 
         t_paquete* paq_liberar = crear_paquete();
@@ -513,6 +543,7 @@ int handler_mem_expandida(int cliente_fd, t_scheduler_context* ctx){
 
 int handler_mem_corrupta(int cliente_fd, t_scheduler_context* ctx){
     planificador_finalizar_todo_por_bsod(ctx->estratega);
+    log_error(ctx->logger, "Finalizando Kernel Scheduler con motivo de Blue Screen of Death (BSOD).");
     limpiar_contexto(ctx);
     exit(EXIT_FAILURE);
 }
@@ -593,6 +624,17 @@ int atenderRespuesta(int cliente_fd, t_scheduler_context* ctx, int mensaje_clien
     return tabla_despacho[mensaje_cliente](cliente_fd, ctx);
 }
 
+void remover_cpu_de_lista(t_estratega_planificacion* estratega, int fd) {
+    if (estratega->sockets_cpu == NULL) return;
+    for (int i = 0; i < list_size(estratega->sockets_cpu); i++) {
+        int* fd_ptr = list_get(estratega->sockets_cpu, i);
+        if (fd_ptr != NULL && *fd_ptr == fd) {
+            list_remove_and_destroy_element(estratega->sockets_cpu, i, free);
+            break;
+        }
+    }
+}
+
 void atender_cliente_scheduler(void* arg) {
     t_args_hilo_scheduler* args = (t_args_hilo_scheduler*)arg;
     int cliente_fd = args->cliente_fd;
@@ -607,6 +649,7 @@ void atender_cliente_scheduler(void* arg) {
         
         // Si la tabla o la validación retornan -1, rompemos el ciclo y cerramos.
         if (status == -1) {
+            remover_cpu_de_lista(ctx->estratega, cliente_fd);
             close(cliente_fd);
             break;
         }

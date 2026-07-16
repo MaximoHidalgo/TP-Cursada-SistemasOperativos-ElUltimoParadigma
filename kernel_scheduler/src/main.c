@@ -31,14 +31,7 @@ t_scheduler_context* iniciar_contexto(int argc, char* argv[]) {
     }
 
     char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level level = LOG_LEVEL_DEBUG;
-    if (log_level_str != NULL) {
-        if (string_equals_ignore_case(log_level_str, "TRACE")) level = LOG_LEVEL_TRACE;
-        else if (string_equals_ignore_case(log_level_str, "DEBUG")) level = LOG_LEVEL_DEBUG;
-        else if (string_equals_ignore_case(log_level_str, "INFO")) level = LOG_LEVEL_INFO;
-        else if (string_equals_ignore_case(log_level_str, "WARNING")) level = LOG_LEVEL_WARNING;
-        else if (string_equals_ignore_case(log_level_str, "ERROR")) level = LOG_LEVEL_ERROR;
-    }
+    t_log_level level = log_level_from_string(log_level_str);
 
     ctx->logger = log_create("Scheduler.log", "Scheduler", true, level);
 

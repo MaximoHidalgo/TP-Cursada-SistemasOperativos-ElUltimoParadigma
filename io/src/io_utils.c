@@ -1,4 +1,5 @@
 #include "io_utils.h"
+#include <time.h>
 
 static bool es_tipo_valido(char* io_name) {
     return string_equals_ignore_case(io_name, "SLEEP")
@@ -102,4 +103,17 @@ void limpiar_contexto(t_io_context* ctx) {
     if (ctx->io_name) free(ctx->io_name);
     
     free(ctx);
+}
+
+void dormir_milisegundos(int milisegundos) {
+    // Usamos nanosleep que es el estándar POSIX moderno y no tiene los 
+    // problemas de precisión o límites de 1,000,000 microsegundos de usleep()
+    int segundos_a_dormir = milisegundos / 1000;
+    long nanosegundos_restantes_a_dormir = (milisegundos % 1000) * 1000000L;
+
+    struct timespec tiempo_de_espera;
+    tiempo_de_espera.tv_sec = segundos_a_dormir;
+    tiempo_de_espera.tv_nsec = nanosegundos_restantes_a_dormir;
+    
+    nanosleep(&tiempo_de_espera, NULL);
 }

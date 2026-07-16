@@ -7,5 +7,6 @@
 t_io_context* iniciar_contexto(int argc, char* argv[]);
 void limpiar_contexto(t_io_context* ctx);
 void atender_kernel_scheduler(t_io_context* ctx);
+void dormir_milisegundos(int milisegundos);
 
 #endif // IO_UTILS_H_

@@ -98,4 +98,5 @@ void planificador_finalizar_todo_por_bsod(t_estratega_planificacion*);
 void planificador_intentar_desuspender(t_estratega_planificacion* estratega);
 void planificador_enviar_interrupcion(t_estratega_planificacion* estratega, int opcode_interrupcion);
 int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega);
+int planificador_orquestar_compactacion_sincronica(t_estratega_planificacion* estratega);
 #endif

@@ -1,4 +1,7 @@
 #define _DEFAULT_SOURCE //para evitar el warning de usleep
+#include <commons/string.h>
+#include <unistd.h>
+#include <sys/time.h>
 #include "planificador.h"
 #include "rr.h"
 
@@ -134,53 +137,79 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
 
     pthread_mutex_lock(&estratega->mutex_colas);
 
-    if (queue_is_empty(estratega->cola_new)) {
-        pthread_mutex_unlock(&estratega->mutex_colas);
-        return NULL;
-    }
+    while (!queue_is_empty(estratega->cola_new)) {
+        t_proceso_planificable* proceso = queue_pop(estratega->cola_new);
 
-    t_proceso_planificable* proceso = queue_pop(estratega->cola_new);
-
-    if (proceso->cola_prioridad < 0 || proceso->cola_prioridad >= list_size(estratega->colas)) {
-        proceso->cola_prioridad = 0;
-    }
-
-    t_estado_proceso estado_anterior = proceso->estado;
-    proceso->estado = ESTADO_PROCESO_READY;
-    //=============================================================
-    //revisar este bloque si es necesario o no este bloque
-    if (estado_anterior == ESTADO_PROCESO_SUSP_READY) {
-        log_info(estratega->logger, "## Solicitando DESUSPENDER_PROCESO a Memoria para PID %d", proceso->pid);
-        enviar_int(estratega->socket_memoria, DESUSPENDER_PROCESO);
-        send(estratega->socket_memoria, &proceso->pid, sizeof(uint32_t), 0);
-        
-        recibir_mensaje(estratega->socket_memoria, estratega->logger);
-    }
-    //=============================================================
-
-    log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
-             proceso->pid, 
-             planificador_nombre_estado(estado_anterior), 
-             planificador_nombre_estado(proceso->estado));
-
-    encolar_en_cola_ready(estratega->colas, proceso);
-    //============================================
-    //bloque de codigo agregado para verificar que si esta habilitado el desalojo, que evalue si es desalojable el nuevo proceso ingresado
-    // Validamos si hay un proceso ejecutando actualmente en la CPU
-    if (estratega->proceso_exec != NULL) {
-        // La función internamente evalúa si el desalojo está habilitado y si las prioridades lo ameritan
-        if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, proceso->cola_prioridad)) {
-            
-            log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", proceso->pid, estratega->proceso_exec->pid);
-            
-            // Enviamos la interrupción usando la nueva operación
-            int opcode_interrupcion = INTERRUPCION_DESALOJO;
-            planificador_enviar_interrupcion(estratega, opcode_interrupcion);
+        // Validación de prioridades
+        if (estratega->algoritmo == ALGORITMO_PLANIFICACION_CMN) {
+            if (proceso->cola_prioridad < 0 || proceso->cola_prioridad >= list_size(estratega->colas)) {
+                log_error(estratega->logger, "Proceso %d rechazado: prioridad %d fuera de rango", proceso->pid, proceso->cola_prioridad);
+                proceso->estado = ESTADO_PROCESO_EXIT;
+                
+                // Avisamos a Memoria para que libere estructuras (LIBERAR_PROCESO)
+                enviar_int(estratega->socket_memoria, LIBERAR_PROCESO);
+                send(estratega->socket_memoria, &proceso->pid, sizeof(uint32_t), 0);
+                recibir_mensaje(estratega->socket_memoria, estratega->logger);
+                
+                free(proceso);
+                continue; // Buscamos si hay otro proceso válido en cola_new
+            }
+        } else {
+            // FIFO y RR: La prioridad no tiene injerencia. Forzamos a la única cola (0)
+            proceso->cola_prioridad = 0;
         }
+
+        t_estado_proceso estado_anterior = proceso->estado;
+        proceso->estado = ESTADO_PROCESO_READY;
+        //=============================================================
+        //revisar este bloque si es necesario o no este bloque
+        if (estado_anterior == ESTADO_PROCESO_SUSP_READY) {
+            log_info(estratega->logger, "## Solicitando DESUSPENDER_PROCESO a Memoria para PID %d", proceso->pid);
+            enviar_int(estratega->socket_memoria, DESUSPENDER_PROCESO);
+            send(estratega->socket_memoria, &proceso->pid, sizeof(uint32_t), 0);
+            
+            int conf = esperar_respuesta_memoria(estratega->socket_memoria, estratega);
+            if (conf == SOLICITUD_COMPACTACION) {
+                conf = planificador_orquestar_compactacion_sincronica(estratega);
+            }
+            if (conf == MENSAJE) {
+                int size;
+                char* msj = recibir_buffer(&size, estratega->socket_memoria);
+                free(msj);
+            }
+        }
+        //=============================================================
+
+        log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
+                 proceso->pid, 
+                 planificador_nombre_estado(estado_anterior), 
+                 planificador_nombre_estado(proceso->estado));
+
+        encolar_en_cola_ready(estratega->colas, proceso);
+        //============================================
+        //bloque de codigo agregado para verificar que si esta habilitado el desalojo, que evalue si es desalojable el nuevo proceso ingresado
+        // Validamos si hay un proceso ejecutando actualmente en la CPU
+        if (estratega->proceso_exec != NULL) {
+            // La función internamente evalúa si el desalojo está habilitado y si las prioridades lo ameritan
+            if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, proceso->cola_prioridad)) {
+                
+                // Log obligatorio del TP
+                log_info(estratega->logger, "## (%d) Prioridad: %d - Desalojado por cola más prioritaria por el proceso %d con prioridad %d",
+                         estratega->proceso_exec->pid, estratega->proceso_exec->cola_prioridad,
+                         proceso->pid, proceso->cola_prioridad);
+                
+                // Enviamos la interrupción usando la nueva operación
+                int opcode_interrupcion = INTERRUPCION_DESALOJO;
+                planificador_enviar_interrupcion(estratega, opcode_interrupcion);
+            }
+        }
+        //============================
+        pthread_mutex_unlock(&estratega->mutex_colas);
+        return proceso;
     }
-    //============================
+
     pthread_mutex_unlock(&estratega->mutex_colas);
-    return proceso;
+    return NULL;
 }
 
 bool planificador_encolar(t_estratega_planificacion* estratega, t_proceso_planificable* proceso) {
@@ -338,6 +367,19 @@ void* suspension_timer_thread(void* arg) {
         log_info(a->estratega->logger, "## Proceso %d suspendido por timeout", a->pcb->pid);
         a->pcb->estado = ESTADO_PROCESO_SUSP_BLOCK;
         
+        // Obtenemos el tiempo actual (timestamp) utilizando la libreria <sys/time.h>
+        struct timeval tiempo_actual;
+        gettimeofday(&tiempo_actual, NULL);
+        
+        // Convertimos el tiempo a milisegundos y lo guardamos en el PCB para futuros desempates
+        uint64_t segundos_actuales = tiempo_actual.tv_sec;
+        uint64_t microsegundos_actuales = tiempo_actual.tv_usec;
+        
+        uint64_t milisegundos_por_segundo = segundos_actuales * 1000;
+        uint64_t milisegundos_por_microsegundo = microsegundos_actuales / 1000;
+        
+        a->pcb->instante_suspension = milisegundos_por_segundo + milisegundos_por_microsegundo;
+        
         enviar_int(a->estratega->socket_memoria, SUSPENDER_PROCESO);
         send(a->estratega->socket_memoria, &a->pcb->pid, sizeof(uint32_t), 0);
         
@@ -407,64 +449,45 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
         pthread_mutex_lock(&interfaz->mutex_interfaz);
         if (interfaz->solicitud_actual != NULL) {
             t_proceso_planificable* liberado = interfaz->solicitud_actual->proceso;
-            log_info(estratega->logger, "## Proceso %d finalizó I/O en %s", liberado->pid, interfaz->nombre);
-            free(interfaz->solicitud_actual);
-            interfaz->solicitud_actual = NULL;
-            
-            t_estado_proceso estado_anterior = liberado->estado;
-            if (estado_anterior == ESTADO_PROCESO_SUSP_BLOCK) {
-                liberado->estado = ESTADO_PROCESO_SUSP_READY;
-            } else {
-                liberado->estado = ESTADO_PROCESO_READY;
-            }
-            
-            log_info(estratega->logger, "## (%d) Pasa del estado %s al estado %s", 
-                     liberado->pid, 
-                     planificador_nombre_estado(estado_anterior), 
-                     planificador_nombre_estado(liberado->estado));
-
-            if (liberado->estado == ESTADO_PROCESO_SUSP_READY) {
-                /* ======================BLOQUE DE CODIGO COMENTADO, PARA CONSULTAR EN GRUPO======================
-                //RAZON DE PONERLO COMENTADO: como paso a estado suspendido ready, necesitaba tratarlo en la cola de suspendidos ready
-                //para que luego sea tratado por el plani de mediano plazo que desencola los suspendidos ready
-                //por eso lo comente, pero igual quiero consultarlo con usteds, quiza este pasando por
-                //alto algo, hasta mientras lo modifique para que pase directo a cola ready 
-
-                // If SUSP_READY, we should put it in the new processes queue or a SUSP_READY queue.
-                // In TP, SUSP_READY goes to the new queue (cola_new) wait or directly to ready queue?
-                // "Una vez que el proceso vuelva de este evento pasará al estado Ready / Suspended Ready."
-                // "Si pasa a Suspended Ready debe ser agregado a la cola de News para que luego se pueda volver a llevar a Memoria Principal".
-                // Wait, if it goes to New, we should push it to `estratega->cola_new` and call admitir_a_ready!
-                queue_push(estratega->cola_new, liberado);
-                log_info(estratega->logger, "Proceso %d movido a cola NEW desde SUSP_READY", liberado->pid);
-                // planificador_admitir_a_ready(estratega);
-                */
-                // Lo agregamos a nuestra lista especial de suspendidos
-                list_add(estratega->cola_susp_ready, liberado);
-                log_info(estratega->logger, "Proceso %d movido a la lista de SUSP_READY", liberado->pid);
-
-            } else {
-                encolar_en_cola_ready(estratega->colas, liberado);
-                //============================================
-                //bloque de codigo agregado para verificar que si esta habilitado el desalojo, que evalue si es desalojable el nuevo proceso ingresado
-                // Validamos si hay un proceso ejecutando actualmente en la CPU
-                if (estratega->proceso_exec != NULL) {
-                    // CAMBIAMOS "proceso->cola_prioridad" por "liberado->cola_prioridad"
-                    if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, liberado->cola_prioridad)) {
-                        
-                        // CAMBIAMOS "proceso->pid" por "liberado->pid"
-                        log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", liberado->pid, estratega->proceso_exec->pid);
-                        
-                        // Enviamos la interrupción usando la nueva operación
-                        int opcode_interrupcion = INTERRUPCION_DESALOJO;
-                        planificador_enviar_interrupcion(estratega, opcode_interrupcion);
-                    }
+            if (liberado != NULL) {
+                // Log obligatorio del TP
+                log_info(estratega->logger, "## (%d) finalizó IO y pasa a %s", liberado->pid, (liberado->estado == ESTADO_PROCESO_SUSP_BLOCK) ? "SUSP. READY" : "READY");
+                free(interfaz->solicitud_actual);
+                interfaz->solicitud_actual = NULL;
+                
+                t_estado_proceso estado_anterior = liberado->estado;
+                if (estado_anterior == ESTADO_PROCESO_SUSP_BLOCK) {
+                    liberado->estado = ESTADO_PROCESO_SUSP_READY;
+                } else {
+                    liberado->estado = ESTADO_PROCESO_READY;
                 }
-                //============================
-            }
-            
-            if (!queue_is_empty(interfaz->cola_bloqueados)) {
-                interfaz->solicitud_actual = queue_pop(interfaz->cola_bloqueados);
+                
+                if (liberado->estado == ESTADO_PROCESO_SUSP_READY) {
+                    list_add(estratega->cola_susp_ready, liberado);
+                    log_info(estratega->logger, "Proceso %d movido a la lista de SUSP_READY", liberado->pid);
+                } else {
+                    encolar_en_cola_ready(estratega->colas, liberado);
+                    //============================================
+                    // Validamos si hay un proceso ejecutando actualmente en la CPU
+                    if (estratega->proceso_exec != NULL) {
+                        // Evaluamos el desalojo con la prioridad del proceso 'liberado'
+                        if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, liberado->cola_prioridad)) {
+                            
+                            // Log obligatorio del TP
+                            log_info(estratega->logger, "## (%d) Prioridad: %d - Desalojado por cola más prioritaria por el proceso %d con prioridad %d",
+                                     estratega->proceso_exec->pid, estratega->proceso_exec->cola_prioridad,
+                                     liberado->pid, liberado->cola_prioridad);
+                            
+                            int opcode_interrupcion = INTERRUPCION_DESALOJO;
+                            planificador_enviar_interrupcion(estratega, opcode_interrupcion);
+                        }
+                    }
+                    //============================
+                }
+                
+                if (!queue_is_empty(interfaz->cola_bloqueados)) {
+                    interfaz->solicitud_actual = queue_pop(interfaz->cola_bloqueados);
+                }
             }
         }
         pthread_mutex_unlock(&interfaz->mutex_interfaz);
@@ -518,9 +541,11 @@ int planificador_mutex_lock(t_estratega_planificacion* estratega, t_proceso_plan
         // Libre: se lo damos al proceso actual
         mutex->tomado = 1;
         mutex->pid_duenio = pcb->pid;
-        mutex->pcb_duenio = pcb; // <--- Guardamos el puntero directo al dueño: razon: para solucionar el problema de inversion de prioridades con herencia de prioridades
+        mutex->pcb_duenio = pcb; // <--- Guardamos el puntero directo al dueño
         
-        log_info(estratega->logger, "## Proceso %d toma el mutex %s", pcb->pid, recurso);
+        // Log obligatorio del TP
+        log_info(estratega->logger, "## (%d) Toma el Mutex %s", pcb->pid, recurso);
+        
         pthread_mutex_unlock(&mutex->mutex_semaforo);
         pthread_mutex_unlock(&estratega->mutex_colas);
         return 0; // Retorna 0 (no se bloqueó, sigue en EXEC)
@@ -581,7 +606,8 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
 
     pthread_mutex_lock(&mutex->mutex_semaforo);
     if (mutex->tomado == 1 && mutex->pid_duenio == pcb->pid) {
-        log_info(estratega->logger, "## Proceso %d libera Mutex %s", pcb->pid, recurso);
+        // Log obligatorio del TP
+        log_info(estratega->logger, "## (%d) Libera el Mutex %s", pcb->pid, recurso);
 
           // ==============================================================
         // RESTAURACIÓN DE PRIORIDAD (VUELTA DE LA HERENCIA)
@@ -623,7 +649,10 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
                 // Evaluamos el desalojo con la prioridad del proceso 'liberado'
                 if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, liberado->cola_prioridad)) {
                     
-                    log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", liberado->pid, estratega->proceso_exec->pid);
+                    // Log obligatorio del TP
+                    log_info(estratega->logger, "## (%d) Prioridad: %d - Desalojado por cola más prioritaria por el proceso %d con prioridad %d",
+                             estratega->proceso_exec->pid, estratega->proceso_exec->cola_prioridad,
+                             liberado->pid, liberado->cola_prioridad);
                     
                     int opcode_interrupcion = INTERRUPCION_DESALOJO;
                     planificador_enviar_interrupcion(estratega, opcode_interrupcion);
@@ -787,15 +816,26 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
             enviar_paquete(paq_desusp, estratega->socket_memoria);
             eliminar_paquete(paq_desusp);
             
-            // Esperamos el OK de memoria
-            int confirmacion = recibir_operacion(estratega->socket_memoria);
-            while (confirmacion == MEMORIA_EXPANDIDA) {
-                log_info(estratega->logger, "Memoria expandida durante desuspension (ignorada)");
-                confirmacion = recibir_operacion(estratega->socket_memoria);
+            // Esperamos confirmacion de memoria
+            int confirmacion = esperar_respuesta_memoria(estratega->socket_memoria, estratega);
+            
+            if (confirmacion == SOLICITUD_COMPACTACION) {
+                confirmacion = planificador_orquestar_compactacion_sincronica(estratega);
             }
+
             if (confirmacion == -1) {
                 log_error(estratega->logger, "Error: Kernel Memory se desconectó");
                 return;
+            }
+            if (confirmacion == MENSAJE) {
+                int size;
+                char* msj = recibir_buffer(&size, estratega->socket_memoria);
+                if (string_equals_ignore_case(msj, "ERROR")) {
+                    log_error(estratega->logger, "No hay espacio en Memoria Principal para desuspender PID %d", proceso->pid);
+                    free(msj);
+                    continue; // Intentamos con el siguiente
+                }
+                free(msj);
             }
 
             // Lo pasamos a READY
@@ -809,7 +849,10 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
                     // La función internamente evalúa si el desalojo está habilitado y si las prioridades lo ameritan
                     if (planificador_debe_desalojar(estratega, estratega->proceso_exec->cola_prioridad, proceso->cola_prioridad)) {
                         
-                        log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", proceso->pid, estratega->proceso_exec->pid);
+                        // Log obligatorio del TP
+                        log_info(estratega->logger, "## (%d) Prioridad: %d - Desalojado por cola más prioritaria por el proceso %d con prioridad %d",
+                                 estratega->proceso_exec->pid, estratega->proceso_exec->cola_prioridad,
+                                 proceso->pid, proceso->cola_prioridad);
                         
                         // Enviamos la interrupción usando la nueva operación
                         int opcode_interrupcion = INTERRUPCION_DESALOJO;
@@ -821,6 +864,45 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
             i++;
         }
     }
+}
+
+int planificador_orquestar_compactacion_sincronica(t_estratega_planificacion* estratega) {
+    log_info(estratega->logger, "## Inicio de compactación (Desuspender)");
+
+    // 1. Interrumpimos a la CPU que pueda estar ejecutando un proceso
+    if (estratega->proceso_exec != NULL && estratega->sockets_cpu != NULL && list_size(estratega->sockets_cpu) > 0) {
+        planificador_enviar_interrupcion(estratega, INTERRUPCION_COMPACTACION);
+        
+        // Asumiendo una sola CPU activa en la arquitectura del sistema, la atrapamos en el index 0
+        int socket_cpu = *(int*)list_get(estratega->sockets_cpu, 0);
+        
+        // Esperamos sincrónicamente a que la CPU frene y nos devuelva el DESALOJO
+        int op_cpu = recibir_operacion(socket_cpu);
+        if (op_cpu == DESALOJO_COMPACTACION) {
+            t_list* paquete = recibir_paquete(socket_cpu);
+            list_destroy_and_destroy_elements(paquete, free);
+            
+            t_proceso_planificable* desalojado = estratega->proceso_exec;
+            desalojado->estado = ESTADO_PROCESO_READY;
+            
+            // "Los Procesos desalojados, excepcionalmente, serán colocados al principio de la cola de READY."
+            t_cola_planificacion* cola = obtener_cola_planificacion(estratega->colas, desalojado->cola_prioridad);
+            list_add_in_index(cola->procesos->elements, 0, desalojado);
+            
+            estratega->proceso_exec = NULL;
+        } else {
+            log_error(estratega->logger, "Operación inesperada de CPU esperando desalojo por compactación: %d", op_cpu);
+        }
+    }
+
+    // 2. Autorizamos la compactación en Memoria enviando RESPUESTA_COMPACTACION
+    t_paquete* paq_resp = crear_paquete();
+    paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
+    enviar_paquete(paq_resp, estratega->socket_memoria);
+    eliminar_paquete(paq_resp);
+    
+    // 3. Esperamos el resultado de la memoria luego de compactar (OK/ERROR)
+    return esperar_respuesta_memoria(estratega->socket_memoria, estratega);
 }
 
 int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega) {
