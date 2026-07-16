@@ -48,7 +48,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
         // Enviar lista de memory sticks a la CPU
         pthread_mutex_lock(&ctx->mutex_memoria);
         t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = ENVIO_TABLA_STICKS; // Requiere opcode nuevo, o enviarlo como mensaje. Mejor opcode
+        paq->codigo_operacion = ENVIO_TABLA_STICKS;
         int cant = list_size(ctx->memory_sticks);
         agregar_a_paquete(paq, &cant, sizeof(int));
         for (int i = 0; i < cant; i++) {
@@ -186,79 +186,20 @@ void procesar_suspender_proceso(int cliente_fd, t_memory_context* ctx) {
     t_contexto_ejecucion* proc = prog->contexto;
     
     pthread_mutex_lock(&ctx->mutex_memoria);
-    
-    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
-        t_segmento* seg = list_get(proc->tabla_segmentos, i);
-        if (seg->id == 0 || seg->tamanio == 0) continue; 
-        
-        int cant_bloques_necesarios = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
-        int bloque_inicio = -1;
-        
-        int cant_bloques_swap = ctx->swap_file_size / ctx->swap_block_size;
-        for (int b = 0; b <= cant_bloques_swap - cant_bloques_necesarios; b++) {
-            bool libre = true;
-            for (int j = 0; j < cant_bloques_necesarios; j++) {
-                if (bitarray_test_bit(ctx->swap_bitmap, b + j)) {
-                    libre = false;
-                    break;
-                }
-            }
-            if (libre) {
-                bloque_inicio = b;
-                break;
-            }
-        }
-        
-        if (bloque_inicio == -1) {
-            log_error(ctx->logger, "No hay espacio en SWAP para el segmento %d del PID %d", seg->id, pid);
-            continue;
-        }
-        
-        for (int j = 0; j < cant_bloques_necesarios; j++) {
-            bitarray_set_bit(ctx->swap_bitmap, bloque_inicio + j);
-        }
-        
-        seg->bloque_swap = bloque_inicio;
-        
-        void* buffer_seg = leer_memoria_distribuida(ctx, seg->base, seg->tamanio);
-        
-        int offset = 0;
-        for (int j = 0; j < cant_bloques_necesarios; j++) {
-            void* bloque_data = malloc(ctx->swap_block_size);
-            memset(bloque_data, 0, ctx->swap_block_size);
-            int copy_size = (offset + ctx->swap_block_size <= seg->tamanio) ? ctx->swap_block_size : (seg->tamanio - offset);
-            memcpy(bloque_data, buffer_seg + offset, copy_size);
-            
-            enviar_int(ctx->swap_socket, ESCRITURA);
-            enviar_int(ctx->swap_socket, bloque_inicio + j);
-            enviar_int(ctx->swap_socket, ctx->swap_block_size);
-            send(ctx->swap_socket, bloque_data, ctx->swap_block_size, 0);
-            
-            int opcode = recibir_operacion(ctx->swap_socket);
-            if(opcode == MENSAJE) {
-                recibir_mensaje(ctx->swap_socket, ctx->logger);
-            } else {
-                log_error(ctx->logger, "Opcode inesperado de SWAP: %d", opcode);
-            }
-            free(bloque_data);
-            offset += copy_size;
-        }
-        free(buffer_seg);
-        
-        // Liberar espacio en memoria principal
-        for (int h = 0; h < list_size(ctx->segmentos_globales); h++) {
-            t_segmento* gs = list_get(ctx->segmentos_globales, h);
-            if (gs->base == seg->base && gs->id == seg->id) {
-                t_hueco_libre* hueco = malloc(sizeof(t_hueco_libre));
-                hueco->base = seg->base;
-                hueco->limite = seg->base + seg->tamanio;
-                list_add(ctx->huecos_libres, hueco);
-                fusionar_huecos_libres(ctx->huecos_libres);
-                
-                list_remove_and_destroy_element(ctx->segmentos_globales, h, free);
-                break;
-            }
-        }
+
+    int cant_bloques_swap = ctx->swap_file_size / ctx->swap_block_size;
+
+    bool hay_espacio_swap = hay_espacio_para_suspender_proceso(ctx, proc);
+
+    if (hay_espacio_swap)
+    {
+        suspender_proceso(ctx, proc, cant_bloques_swap);
+
+    }else{
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        enviar_mensaje("ERROR", cliente_fd);
+        log_error(ctx->logger, "No hay espacio en SWAP para suspender PID %d", pid);
+        return;
     }
     
     pthread_mutex_unlock(&ctx->mutex_memoria);
@@ -386,13 +327,6 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
     pthread_mutex_unlock(&ctx->mutex_memoria);
 }
 
-void notificar_memoria_corrupta(int scheduler_socket){
-    t_paquete* paq = crear_paquete();
-    paq->codigo_operacion = CORRUPCION_MEMORIA;
-    enviar_paquete(paq, scheduler_socket);
-    eliminar_paquete(paq);
-}
-
 void procesar_eliminar_segmento_handler(int cliente_fd, t_memory_context* ctx){
     t_list* paquete = recibir_paquete(cliente_fd);
     uint32_t pid = *(uint32_t*)list_get(paquete, 0);
@@ -425,6 +359,96 @@ void procesar_eliminar_segmento_handler(int cliente_fd, t_memory_context* ctx){
     }
     pthread_mutex_unlock(&ctx->mutex_memoria);
 
+}
+
+void procesar_liberar_proceso_handler(int cliente_fd, t_memory_context* ctx){
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t pid_a_liberar = *(uint32_t*)list_get(paquete, 0);
+    list_destroy_and_destroy_elements(paquete, free);
+
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    t_programa* prog = buscar_programa(ctx, pid_a_liberar);
+    if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
+        pthread_mutex_lock(&ctx->mutex_programas);
+        for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
+            t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
+            eliminar_segmento(ctx, seg);
+        }
+        list_clean(prog->contexto->tabla_segmentos);
+        pthread_mutex_unlock(&ctx->mutex_programas);
+    }
+    log_info(ctx->logger, "Proceso %d liberado de la memoria", pid_a_liberar);
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+}
+
+void procesar_solicitud_tam_max_segmento_handler(int cliente_fd, t_memory_context* ctx){
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = TAM_MAX_SEGMENTO;
+    agregar_a_paquete(paq, &ctx->segment_max_size, sizeof(int));
+    enviar_paquete(paq, cliente_fd);
+    eliminar_paquete(paq);
+}
+
+void procesar_leer_memoria_handler(int cliente_fd, t_memory_context* ctx){
+    int size;
+    void* buffer = recibir_buffer(&size, cliente_fd);
+    uint32_t dir_fisica, tamanio;
+    int desp = 0;
+    memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+    memcpy(&tamanio, buffer + desp, sizeof(uint32_t));
+    free(buffer);
+
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    void* data_leida = leer_memoria_distribuida(ctx, dir_fisica, tamanio);
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = MENSAJE; 
+    agregar_a_paquete(paq, data_leida, tamanio);
+    enviar_paquete(paq, cliente_fd);
+    eliminar_paquete(paq);
+    free(data_leida);
+                
+}
+
+void procesar_escribir_memoria_handler(int cliente_fd, t_memory_context* ctx){
+    int size;
+    void* buffer = recibir_buffer(&size, cliente_fd);
+    uint32_t dir_fisica, tamanio;
+    int desp = 0;
+    memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+    memcpy(&tamanio, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
+                
+    int tamanio_rep;
+    memcpy(&tamanio_rep, buffer + desp, sizeof(int)); desp += sizeof(int);
+                
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    escribir_memoria_distribuida(ctx, dir_fisica, tamanio, buffer + desp);
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+                
+    free(buffer);
+    enviar_mensaje(MSG_OK, cliente_fd);
+}
+
+void procesar_solicitud_tabla_sticks_handler(int cliente_fd, t_memory_context* ctx){
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = ENVIO_TABLA_STICKS;
+    int cant = list_size(ctx->memory_sticks);
+    agregar_a_paquete(paq, &cant, sizeof(int));
+    for (int i = 0; i < cant; i++) {
+        t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+        agregar_a_paquete(paq, &(stick->id), sizeof(int));
+        agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
+        agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
+        agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
+        int ip_len = strlen(stick->ip) + 1;
+        agregar_a_paquete(paq, &ip_len, sizeof(int));
+        agregar_a_paquete(paq, stick->ip, ip_len);
+    }
+    enviar_paquete(paq, cliente_fd);
+    eliminar_paquete(paq);
+    pthread_mutex_unlock(&ctx->mutex_memoria);
 }
 
 void atender_cliente(void *arg) {
@@ -462,101 +486,23 @@ void atender_cliente(void *arg) {
                 procesar_crear_segmento_handler(cliente_fd, ctx);
                 break;
             case LIBERAR_PROCESO:
-            {
-                t_list* paquete = recibir_paquete(cliente_fd);
-                uint32_t pid_a_liberar = *(uint32_t*)list_get(paquete, 0);
-                list_destroy_and_destroy_elements(paquete, free);
-
-                pthread_mutex_lock(&ctx->mutex_memoria);
-                t_programa* prog = buscar_programa(ctx, pid_a_liberar);
-                if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
-                    pthread_mutex_lock(&ctx->mutex_programas);
-                    for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
-                        t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
-                        eliminar_segmento(ctx, seg);
-                    }
-                    list_clean(prog->contexto->tabla_segmentos);
-                    pthread_mutex_unlock(&ctx->mutex_programas);
-                }
-                log_info(ctx->logger, "Proceso %d liberado de la memoria", pid_a_liberar);
-                pthread_mutex_unlock(&ctx->mutex_memoria);
+                procesar_liberar_proceso_handler(cliente_fd, ctx);
                 break;
-            }
             case ELIMINAR_SEGMENTO:
                 procesar_eliminar_segmento_handler(cliente_fd, ctx);
                 break;
             case SOLICITUD_TAM_MAX_SEGMENTO:
-            {
-                t_paquete* paq = crear_paquete();
-                paq->codigo_operacion = TAM_MAX_SEGMENTO;
-                agregar_a_paquete(paq, &ctx->segment_max_size, sizeof(int));
-                enviar_paquete(paq, cliente_fd);
-                eliminar_paquete(paq);
+                procesar_solicitud_tam_max_segmento_handler(cliente_fd, ctx);
                 break;
-            }
             case LEER_MEMORIA:
-            {
-                int size;
-                void* buffer = recibir_buffer(&size, cliente_fd);
-                uint32_t dir_fisica, tamanio;
-                int desp = 0;
-                memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                memcpy(&tamanio, buffer + desp, sizeof(uint32_t));
-                free(buffer);
-
-                pthread_mutex_lock(&ctx->mutex_memoria);
-                void* data_leida = leer_memoria_distribuida(ctx, dir_fisica, tamanio);
-                pthread_mutex_unlock(&ctx->mutex_memoria);
-
-                t_paquete* paq = crear_paquete();
-                paq->codigo_operacion = MENSAJE; 
-                agregar_a_paquete(paq, data_leida, tamanio);
-                enviar_paquete(paq, cliente_fd);
-                eliminar_paquete(paq);
-                free(data_leida);
-                
+                procesar_leer_memoria_handler(cliente_fd, ctx);
                 break;
-            }
             case ESCRIBIR_MEMORIA:
-            {
-                int size;
-                void* buffer = recibir_buffer(&size, cliente_fd);
-                uint32_t dir_fisica, tamanio;
-                int desp = 0;
-                memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                memcpy(&tamanio, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                
-                int tamanio_rep;
-                memcpy(&tamanio_rep, buffer + desp, sizeof(int)); desp += sizeof(int);
-                
-                pthread_mutex_lock(&ctx->mutex_memoria);
-                escribir_memoria_distribuida(ctx, dir_fisica, tamanio, buffer + desp);
-                pthread_mutex_unlock(&ctx->mutex_memoria);
-                
-                free(buffer);
-                enviar_mensaje(MSG_OK, cliente_fd);
+                procesar_escribir_memoria_handler(cliente_fd, ctx);
                 break;
-            }
             case SOLICITUD_TABLA_STICKS:
             {
-                pthread_mutex_lock(&ctx->mutex_memoria);
-                t_paquete* paq = crear_paquete();
-                paq->codigo_operacion = ENVIO_TABLA_STICKS;
-                int cant = list_size(ctx->memory_sticks);
-                agregar_a_paquete(paq, &cant, sizeof(int));
-                for (int i = 0; i < cant; i++) {
-                    t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-                    agregar_a_paquete(paq, &(stick->id), sizeof(int));
-                    agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
-                    agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
-                    agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
-                    int ip_len = strlen(stick->ip) + 1;
-                    agregar_a_paquete(paq, &ip_len, sizeof(int));
-                    agregar_a_paquete(paq, stick->ip, ip_len);
-                }
-                enviar_paquete(paq, cliente_fd);
-                eliminar_paquete(paq);
-                pthread_mutex_unlock(&ctx->mutex_memoria);
+                procesar_solicitud_tabla_sticks_handler(cliente_fd, ctx);
                 break;
             }
             case CONSULTAR_ESPACIO_LIBRE:
