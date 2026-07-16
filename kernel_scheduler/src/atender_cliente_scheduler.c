@@ -48,9 +48,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
             // Mensaje de una IO ya registrada
             if (string_equals_ignore_case(mensaje, "OK")) {
                 planificador_io_terminada(ctx->estratega, cliente_fd);
-                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
-                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
-                }
+
                 // 2 y 3. Verificamos la lista e intentamos despachar
                 if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
                     for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
@@ -83,8 +81,14 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                 }
                 
                 planificador_io_terminada(ctx->estratega, cliente_fd);
-                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
-                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+
+                if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
+                    for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+                        int* fd_cpu = list_get(ctx->estratega->sockets_cpu, i);
+                        if (ctx->estratega->proceso_exec == NULL) {
+                            despachar_proceso_a_cpu(ctx, *fd_cpu);
+                        }
+                    }
                 }
             }
         } else {
@@ -282,7 +286,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             // Le mandamos un "tiro" a la CPU para que frene
             // NOTA: Deberás agregar INTERRUPCION_COMPACTACION en tu opcodes.h
             int op_interrupcion = INTERRUPCION_COMPACTACION;
-            send(ctx->estratega->socket_cpu, &op_interrupcion, sizeof(int), 0);
+            planificador_enviar_interrupcion(ctx->estratega, op_interrupcion);
             
             // SALIMOS de la función. No esperamos nada. El hilo vuelve a escuchar el socket.
             return; 
@@ -482,9 +486,13 @@ int handler_respuesta_compactacion(int fd, t_scheduler_context* ctx) {
     // Primero intentamos des-suspender procesos (ahora que la memoria está contigua)
     planificador_intentar_desuspender(ctx->estratega);
     
-    // Luego, volvemos a enviar procesos a CPU que estaban detenidos
-    if (ctx->estratega->socket_cpu != -1) {
-        despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+    if (!list_is_empty(ctx->estratega->sockets_cpu)) {
+        for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+            int* fd = list_get(ctx->estratega->sockets_cpu, i);
+            if(fd != NULL && *fd != -1) {
+                despachar_proceso_a_cpu(ctx, *fd);
+            }
+        }
     }
     return 1;
 }

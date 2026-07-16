@@ -27,6 +27,16 @@ static bool config_get_bool_compatible(t_config* config, char* key) {
     return valor != NULL && string_equals_ignore_case(valor, "TRUE");
 }
 
+void planificador_enviar_interrupcion(t_estratega_planificacion* estratega, int opcode_interrupcion) {
+    if (estratega->sockets_cpu == NULL) return;
+    for (int i = 0; i < list_size(estratega->sockets_cpu); i++) {
+        int* fd_cpu = list_get(estratega->sockets_cpu, i);
+        if (fd_cpu != NULL && *fd_cpu != -1) {
+            send(*fd_cpu, &opcode_interrupcion, sizeof(int), 0);
+        }
+    }
+}
+
 t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log* logger) {
     t_estratega_planificacion* estratega = calloc(1, sizeof(t_estratega_planificacion));
 
@@ -165,7 +175,7 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
             
             // Enviamos la interrupción usando la nueva operación
             int opcode_interrupcion = INTERRUPCION_DESALOJO;
-            send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+            planificador_enviar_interrupcion(estratega, opcode_interrupcion);
         }
     }
     //============================
@@ -447,7 +457,7 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
                         
                         // Enviamos la interrupción usando la nueva operación
                         int opcode_interrupcion = INTERRUPCION_DESALOJO;
-                        send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+                        planificador_enviar_interrupcion(estratega, opcode_interrupcion);
                     }
                 }
                 //============================
@@ -616,7 +626,7 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
                     log_info(estratega->logger, "## Desalojo: El PID %d desaloja al PID %d por prioridad", liberado->pid, estratega->proceso_exec->pid);
                     
                     int opcode_interrupcion = INTERRUPCION_DESALOJO;
-                    send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+                    planificador_enviar_interrupcion(estratega, opcode_interrupcion);
                 }
             }
             //============================================
@@ -803,7 +813,7 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
                         
                         // Enviamos la interrupción usando la nueva operación
                         int opcode_interrupcion = INTERRUPCION_DESALOJO;
-                        send(estratega->socket_cpu, &opcode_interrupcion, sizeof(int), 0);
+                        planificador_enviar_interrupcion(estratega, opcode_interrupcion);
                     }
                 }
                 //============================
