@@ -1,7 +1,7 @@
 .PHONY: all run stop clean fueraLogs debug release test
 
 # Argumentos definidos para la prueba
-PATH_PSEUDOCODIGO = PLANI_PRE_0.prc
+PATH_PSEUDOCODIGO = PMP.prc
 
 # Aca abajo se ponen los argumentos que se quieran usar como accesos rapidos
 #PLANI_PRE_0.prc PLANI_MEM.prc MEMORIA_PRE_0.prc PCP.prc PHP.prc PMP.prc
