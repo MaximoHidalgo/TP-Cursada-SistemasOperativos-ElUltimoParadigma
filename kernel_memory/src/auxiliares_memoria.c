@@ -60,6 +60,10 @@ t_hueco_libre* buscar_hueco_libre_x_lista(t_list* huecos_libres, uint32_t tamani
     return hueco_elegido;
 }
 
+void notificar_memoria_corrupta(int scheduler_socket){
+    enviar_int(scheduler_socket, CORRUPCION_MEMORIA);
+}
+
 void notificar_memoria_expandida(int scheduler_socket){
     enviar_int(scheduler_socket, MEMORIA_EXPANDIDA);
 }
@@ -403,4 +407,147 @@ void escribir_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, ui
         
         escrito += bytes_a_escribir;
     }
+}
+
+void liberar_segemento_de_memoria(t_memory_context* ctx, t_segmento* seg){
+
+    // Liberar espacio en memoria principal
+    for (int h = 0; h < list_size(ctx->segmentos_globales); h++) {
+        t_segmento* gs = list_get(ctx->segmentos_globales, h);
+        if (gs->base == seg->base && gs->id == seg->id) {
+            t_hueco_libre* hueco = malloc(sizeof(t_hueco_libre));
+            hueco->base = seg->base;
+            hueco->limite = seg->base + seg->tamanio;
+            list_add(ctx->huecos_libres, hueco);
+            fusionar_huecos_libres(ctx->huecos_libres);
+                
+            list_remove_and_destroy_element(ctx->segmentos_globales, h, free);
+            break;
+        }
+    }
+}
+
+void escribir_segmento_en_swap(t_memory_context* ctx, t_segmento* seg, int bloque_inicio, void* buffer_seg, int cant_bloques_necesarios){
+
+    int offset = 0;
+    for (int j = 0; j < cant_bloques_necesarios; j++) {
+        void* bloque_data = malloc(ctx->swap_block_size);
+        memset(bloque_data, 0, ctx->swap_block_size);
+        int copy_size = (offset + ctx->swap_block_size <= seg->tamanio) ? ctx->swap_block_size : (seg->tamanio - offset);
+        memcpy(bloque_data, buffer_seg + offset, copy_size);
+            
+        enviar_int(ctx->swap_socket, ESCRITURA);
+        enviar_int(ctx->swap_socket, bloque_inicio + j);
+        enviar_int(ctx->swap_socket, ctx->swap_block_size);
+        send(ctx->swap_socket, bloque_data, ctx->swap_block_size, 0);
+            
+        recibir_mensaje(ctx->swap_socket, ctx->logger);
+        free(bloque_data);
+        offset += copy_size;
+    }
+    free(buffer_seg);
+}
+
+void suspender_proceso(t_memory_context* ctx, t_contexto_ejecucion* proc, int cant_bloques_swap){
+
+    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
+        t_segmento* seg = list_get(proc->tabla_segmentos, i);
+        if (seg->id == 0 || seg->tamanio == 0) continue; 
+        
+        int cant_bloques_necesarios = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
+        int bloque_inicio = -1;
+        
+        for (int b = 0; b <= cant_bloques_swap - cant_bloques_necesarios; b++) {
+            bool libre = true;
+            for (int j = 0; j < cant_bloques_necesarios; j++) {
+                if (bitarray_test_bit(ctx->swap_bitmap, b + j)) {
+                    libre = false;
+                    break;
+                }
+            }
+            if (libre) {
+                bloque_inicio = b;
+                break;
+            }
+        }
+        
+        if (bloque_inicio == -1) {
+            log_error(ctx->logger, "Error interno: la verificación previa indicó que había espacio en SWAP");
+            return;
+        }
+        
+        for (int j = 0; j < cant_bloques_necesarios; j++) {
+            bitarray_set_bit(ctx->swap_bitmap, bloque_inicio + j);
+        }
+        
+        seg->bloque_swap = bloque_inicio;
+        
+        void* buffer_seg = leer_memoria_distribuida(ctx, seg->base, seg->tamanio);
+        
+        escribir_segmento_en_swap(ctx, seg, bloque_inicio, buffer_seg, cant_bloques_necesarios);
+        
+        liberar_segemento_de_memoria(ctx, seg);
+    }
+
+}
+
+bool hay_espacio_para_suspender_proceso(t_memory_context* ctx, t_contexto_ejecucion* proc)
+{
+    int cant_bloques_swap = ctx->swap_file_size / ctx->swap_block_size;
+
+    int bitmap_size = (cant_bloques_swap + 7) / 8;
+    void* bitmap_aux_data = malloc(bitmap_size);
+    memcpy(bitmap_aux_data, ctx->bitarray_data, bitmap_size);
+
+    t_bitarray* bitmap_aux = bitarray_create_with_mode(
+        bitmap_aux_data,
+        bitmap_size,
+        LSB_FIRST
+    );
+
+    for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
+
+        t_segmento* seg = list_get(proc->tabla_segmentos, i);
+
+        if (seg->id == 0 || seg->tamanio == 0)
+            continue;
+
+        int cant_bloques_necesarios =
+            (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
+
+        int bloque_inicio = -1;
+
+        for (int b = 0; b <= cant_bloques_swap - cant_bloques_necesarios; b++) {
+
+            bool libre = true;
+
+            for (int j = 0; j < cant_bloques_necesarios; j++) {
+
+                if (bitarray_test_bit(bitmap_aux, b + j)) {
+                    libre = false;
+                    break;
+                }
+            }
+
+            if (libre) {
+                bloque_inicio = b;
+                break;
+            }
+        }
+
+        if (bloque_inicio == -1) {
+            bitarray_destroy(bitmap_aux);
+            free(bitmap_aux_data);
+            return false;
+        }
+
+        for (int j = 0; j < cant_bloques_necesarios; j++) {
+            bitarray_set_bit(bitmap_aux, bloque_inicio + j);
+        }
+    }
+
+    bitarray_destroy(bitmap_aux);
+    free(bitmap_aux_data);
+
+    return true;
 }
