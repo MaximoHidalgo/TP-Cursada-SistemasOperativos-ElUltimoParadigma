@@ -34,7 +34,8 @@ typedef struct {
     t_dictionary* mutex_creados; 
     pthread_mutex_t mutex_colas;
     t_log* logger;
-    int socket_cpu;
+    //int socket_cpu; //comentado porque no me permite trabajar con varias cpus
+    t_list* sockets_cpu; //<--atributo agregado para soportar varias cpus
     int socket_memoria;
     int suspension_timeout;
 } t_estratega_planificacion;

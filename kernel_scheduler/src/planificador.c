@@ -47,7 +47,8 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
     estratega->proceso_exec = NULL;
     estratega->desalojo_entre_colas = config_get_bool_compatible(config, "QUEUE_PREEMPTION");
     estratega->logger = logger;
-    estratega->socket_cpu = -1;
+    //estratega->socket_cpu = -1;
+    estratega->sockets_cpu = list_create(); //inicializada para contener varias cpus
     pthread_mutex_init(&estratega->mutex_colas, NULL);
 
     if (estratega->algoritmo == ALGORITMO_PLANIFICACION_INVALIDO) {

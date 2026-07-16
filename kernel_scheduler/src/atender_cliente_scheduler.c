@@ -32,7 +32,15 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
 
     if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
         log_info(ctx->logger, "## CPU %s Conectada", mensaje);
-        ctx->estratega->socket_cpu = cliente_fd;
+        //ctx->estratega->socket_cpu = cliente_fd;
+        //despachar_proceso_a_cpu(ctx, cliente_fd);
+
+        // 1. Agregamos el socket a la lista de CPUs
+        int* nuevo_socket_cpu = malloc(sizeof(int));
+        *nuevo_socket_cpu = cliente_fd;
+        list_add(ctx->estratega->sockets_cpu, nuevo_socket_cpu);
+        
+        // Despachamos a esta CPU que se acaba de conectar
         despachar_proceso_a_cpu(ctx, cliente_fd);
     } else {
         t_interfaz_io* interfaz = buscar_interfaz_por_socket(ctx->estratega, cliente_fd);
@@ -42,6 +50,15 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                 planificador_io_terminada(ctx->estratega, cliente_fd);
                 if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
                     despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+                }
+                // 2 y 3. Verificamos la lista e intentamos despachar
+                if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
+                    for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+                        int* fd_cpu = list_get(ctx->estratega->sockets_cpu, i);
+                        if (ctx->estratega->proceso_exec == NULL) {
+                            despachar_proceso_a_cpu(ctx, *fd_cpu);
+                        }
+                    }
                 }
             } else {
                 // Es el texto leido por STDIN
@@ -258,22 +275,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         eliminar_paquete(paq_mem);
 
         int respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
-        
-        /*
-        //se comenta este bloque de codigo porque...
-        if (respuesta == SOLICITUD_COMPACTACION) {
-            log_info(ctx->logger, "Compactación requerida. Avisando a Memoria que puede proceder...");
-            t_paquete* paq_resp = crear_paquete();
-            paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
-            enviar_paquete(paq_resp, ctx->socket_memoria);
-            eliminar_paquete(paq_resp);
-            
-            // Esperamos la respuesta final de la creación del segmento post-compactación
-            respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
-        }*/
-        //cambio el bloque de arriba con este, porque asi puedo avisarle a la cpu que se inicio la compactacion 
-        //y el mismo guarde el contexto de ejecucion y pueda asi luego sacar de la ejecucion al proceso con el
-        //proximo llamado que me haga la cpu en atender cliente (hare un handler para responder como se debe a esa respuesta) 
+    
         if (respuesta == SOLICITUD_COMPACTACION) {
             log_info(ctx->logger, "## Inicio de compactación"); // Log obligatorio del TP
             
