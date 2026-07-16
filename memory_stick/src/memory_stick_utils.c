@@ -28,7 +28,7 @@ t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
     }
     
     char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level level = log_level_from_string(log_level_str);
+    t_log_level level = log_level_str ? log_level_from_string(log_level_str) : LOG_LEVEL_INFO;
     ctx->logger = log_create("memory_stick.log", "MEMORY_STICK", true, level);
 
     ctx->tamanio_total = tamanio_stick;

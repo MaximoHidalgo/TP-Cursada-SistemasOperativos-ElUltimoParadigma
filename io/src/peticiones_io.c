@@ -60,7 +60,19 @@ void ejecutar_sleep(t_io_context* ctx, int pid) {
              pid,
              milisegundos);
 
-    usleep(milisegundos * 1000);
+    // usleep() falla silenciosamente o devuelve error si el valor >= 1,000,000 microsegundos
+    // Convertimos a segundos (sleep) y microsegundos restantes (usleep)
+    // hay que revisar igual que sigue ejecutando mal
+    int segundos = milisegundos / 1000;
+    int microsegundos_restantes = (milisegundos % 1000) * 1000;
+    
+    if (segundos > 0) {
+        sleep(segundos);
+    }
+    if (microsegundos_restantes > 0) {
+        usleep(microsegundos_restantes);
+    }
+    
     enviar_mensaje(MSG_OK, ctx->socket_scheduler);
 }
 
