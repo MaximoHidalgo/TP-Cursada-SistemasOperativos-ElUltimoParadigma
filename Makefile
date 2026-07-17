@@ -1,7 +1,7 @@
 .PHONY: all run stop clean fueraLogs debug release test
 
 # Argumentos definidos para la prueba
-PATH_PSEUDOCODIGO = MEMORIA_PRE_0.prc
+PATH_PSEUDOCODIGO = PHP.prc
 
 # Aca abajo se ponen los argumentos que se quieran usar como accesos rapidos
 #PLANI_PRE_0.prc PLANI_MEM.prc MEMORIA_PRE_0.prc PCP.prc PHP.prc PMP.prc
@@ -17,6 +17,31 @@ CONFIG_SWAP = swap.config
 CONFIG_STICK = memory_stick.config
 CONFIG_CPU = cpu.config
 CONFIG_IO = io.config
+
+# Prueba Base
+# CONFIG_SCHEDULER = prueba_base.config
+# CONFIG_MEMORY = prueba_base.config
+# CONFIG_STICK = prueba_base.config
+
+# Prueba PCP
+# CONFIG_SCHEDULER = prueba_pcp.config
+# CONFIG_MEMORY = prueba_pcp.config
+# CONFIG_STICK = prueba_pcp.config
+
+# Prueba Memoria
+# CONFIG_SCHEDULER = prueba_mem.config
+# CONFIG_MEMORY = prueba_mem.config
+# CONFIG_STICK = prueba_mem_1.config # Y sus variantes 2, 3 y 4 (y ajustar TAM_STICK)
+
+# Prueba PMP
+# CONFIG_SCHEDULER = prueba_pmp.config
+# CONFIG_MEMORY = prueba_pmp.config
+# CONFIG_STICK = prueba_pmp_1.config # Y sus variantes 2, 3 y 4 (y ajustar TAM_STICK)
+
+# Prueba PHP (Herencia de Prioridades)
+# CONFIG_SCHEDULER = prueba_php.config
+# CONFIG_MEMORY = prueba_php.config
+# CONFIG_STICK = prueba_php_1.config # Y su variante 2 (y ajustar TAM_STICK)
 
 # Variable con el comando para abrir una nueva terminal.
 # Usamos xterm con -hold para que la ventana NO se cierre si el módulo crashea.
