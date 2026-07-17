@@ -16,8 +16,8 @@ bool requiere_compactacion(t_memory_context* ctx, uint32_t tamanio);
 t_hueco_libre* buscar_hueco_libre(t_memory_context* ctx, uint32_t tamanio);
 
 bool restaurar_segmentos(t_contexto_ejecucion* proc, t_memory_context* ctx, int cliente_fd);
-t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio, int* needs_compaction);
-void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento);
+t_segmento* crear_segmento(t_memory_context* ctx, uint32_t pid, uint32_t id, uint32_t tamanio, int* needs_compaction);
+void eliminar_segmento(t_memory_context* ctx, uint32_t pid, t_segmento* segmento);
 
 bool ordenar_segmentos_por_base(void* a, void* b);
 void compactar_memoria(t_memory_context* ctx);

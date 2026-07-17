@@ -36,6 +36,7 @@ typedef struct {
     int socket_servidor;
     t_list* programas;
     int instruction_delay;
+    int compaction_delay;
     char* base_path;
     pthread_mutex_t mutex_programas;
     

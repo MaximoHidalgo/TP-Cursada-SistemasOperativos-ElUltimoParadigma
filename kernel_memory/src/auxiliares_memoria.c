@@ -68,6 +68,24 @@ void notificar_memoria_expandida(int scheduler_socket){
     enviar_int(scheduler_socket, MEMORIA_EXPANDIDA);
 }
 
+/**
+ * Busca un rango contiguo de bloques libres en un bitmap de SWAP.
+ * Retorna el índice del primer bloque libre, o -1 si no hay espacio.
+ */
+static int buscar_bloques_libres_en_swap(t_bitarray* bitmap, int total_bloques, int cant_bloques_necesarios) {
+    for (int b = 0; b <= total_bloques - cant_bloques_necesarios; b++) {
+        bool libre = true;
+        for (int j = 0; j < cant_bloques_necesarios; j++) {
+            if (bitarray_test_bit(bitmap, b + j)) {
+                libre = false;
+                break;
+            }
+        }
+        if (libre) return b;
+    }
+    return -1;
+}
+
 bool hay_espacio_para_restaurar_segmentos(t_memory_context* ctx, t_contexto_ejecucion* proc){
     bool hay_espacio = true;
 
@@ -125,27 +143,7 @@ bool requiere_compactacion(t_memory_context* ctx, uint32_t tamanio){
 }
 
 t_hueco_libre* buscar_hueco_libre(t_memory_context* ctx, uint32_t tamanio) {
-    t_hueco_libre* hueco_elegido = NULL;
-
-    for (int i = 0; i < list_size(ctx->huecos_libres); i++) {
-        t_hueco_libre* hueco = list_get(ctx->huecos_libres, i);
-        uint32_t tam_hueco = hueco->limite - hueco->base;
-
-        if (tam_hueco >= tamanio) {
-            if (string_equals_ignore_case(ctx->allocation_strategy, "FIRST")) {
-                return hueco;
-            } else if (string_equals_ignore_case(ctx->allocation_strategy, "BEST")) {
-                if (hueco_elegido == NULL || tam_hueco < (hueco_elegido->limite - hueco_elegido->base)) {
-                    hueco_elegido = hueco;
-                }
-            } else if (string_equals_ignore_case(ctx->allocation_strategy, "WORST")) {
-                if (hueco_elegido == NULL || tam_hueco > (hueco_elegido->limite - hueco_elegido->base)) {
-                    hueco_elegido = hueco;
-                }
-            }
-        }
-    }
-    return hueco_elegido;
+    return buscar_hueco_libre_x_lista(ctx->huecos_libres, tamanio, ctx);
 }
 
 bool restaurar_segmentos(t_contexto_ejecucion* proc, t_memory_context* ctx, int cliente_fd){
@@ -205,7 +203,7 @@ bool restaurar_segmentos(t_contexto_ejecucion* proc, t_memory_context* ctx, int 
     return true;
 }
 
-t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio, int* needs_compaction) {
+t_segmento* crear_segmento(t_memory_context* ctx, uint32_t pid, uint32_t id, uint32_t tamanio, int* needs_compaction) {
     if (tamanio > ctx->segment_max_size) {
         log_error(ctx->logger, "Tamanio solicitado %d mayor a SEGMENT_MAX_SIZE %d", tamanio, ctx->segment_max_size);
         return NULL;
@@ -241,11 +239,12 @@ t_segmento* crear_segmento(t_memory_context* ctx, uint32_t id, uint32_t tamanio,
     }
 
     list_add(ctx->segmentos_globales, segmento);
-    log_info(ctx->logger, "PID: <PID_FALTANTE> - Crear Segmento: %d - Base: %d - TAMAÑO: %d", id, segmento->base, tamanio);
+    // Log obligatorio del TP (strict format)
+    log_info(ctx->logger, "## PID: %d - Segmento Creado %d - Tamaño: %d", pid, id, tamanio);
     return segmento;
 }
 
-void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento) {
+void eliminar_segmento(t_memory_context* ctx, uint32_t pid, t_segmento* segmento) {
     for (int i = 0; i < list_size(ctx->segmentos_globales); i++) {
         if (list_get(ctx->segmentos_globales, i) == segmento) {
             list_remove(ctx->segmentos_globales, i);
@@ -259,7 +258,7 @@ void eliminar_segmento(t_memory_context* ctx, t_segmento* segmento) {
     list_add(ctx->huecos_libres, nuevo_hueco);
     fusionar_huecos_libres(ctx->huecos_libres);
 
-    log_info(ctx->logger, "PID: <PID_FALTANTE> - Eliminar Segmento: %d - Base: %d - TAMAÑO: %d", segmento->id, segmento->base, segmento->tamanio);
+    log_info(ctx->logger, "## PID: %d - Eliminar Segmento: %d - Base: %d - TAMAÑO: %d", pid, segmento->id, segmento->base, segmento->tamanio);
     free(segmento);
 }
 
@@ -292,7 +291,7 @@ void actualizar_tablas_segmentos(t_memory_context* ctx, uint32_t base_vieja, uin
 
 void compactar_memoria(t_memory_context* ctx) {
     log_info(ctx->logger, "## Inicio de compactación");
-    usleep(config_get_int_value(ctx->config, "COMPACTION_DELAY") * 1000);
+    usleep(ctx->compaction_delay * 1000);
     
     list_sort(ctx->segmentos_globales, ordenar_segmentos_por_base);
     
@@ -455,21 +454,7 @@ void suspender_proceso(t_memory_context* ctx, t_contexto_ejecucion* proc, int ca
         if (seg->id == 0 || seg->tamanio == 0) continue; 
         
         int cant_bloques_necesarios = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
-        int bloque_inicio = -1;
-        
-        for (int b = 0; b <= cant_bloques_swap - cant_bloques_necesarios; b++) {
-            bool libre = true;
-            for (int j = 0; j < cant_bloques_necesarios; j++) {
-                if (bitarray_test_bit(ctx->swap_bitmap, b + j)) {
-                    libre = false;
-                    break;
-                }
-            }
-            if (libre) {
-                bloque_inicio = b;
-                break;
-            }
-        }
+        int bloque_inicio = buscar_bloques_libres_en_swap(ctx->swap_bitmap, cant_bloques_swap, cant_bloques_necesarios);
         
         if (bloque_inicio == -1) {
             log_error(ctx->logger, "Error interno: la verificación previa indicó que había espacio en SWAP");
@@ -515,25 +500,7 @@ bool hay_espacio_para_suspender_proceso(t_memory_context* ctx, t_contexto_ejecuc
         int cant_bloques_necesarios =
             (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
 
-        int bloque_inicio = -1;
-
-        for (int b = 0; b <= cant_bloques_swap - cant_bloques_necesarios; b++) {
-
-            bool libre = true;
-
-            for (int j = 0; j < cant_bloques_necesarios; j++) {
-
-                if (bitarray_test_bit(bitmap_aux, b + j)) {
-                    libre = false;
-                    break;
-                }
-            }
-
-            if (libre) {
-                bloque_inicio = b;
-                break;
-            }
-        }
+        int bloque_inicio = buscar_bloques_libres_en_swap(bitmap_aux, cant_bloques_swap, cant_bloques_necesarios);
 
         if (bloque_inicio == -1) {
             bitarray_destroy(bitmap_aux);

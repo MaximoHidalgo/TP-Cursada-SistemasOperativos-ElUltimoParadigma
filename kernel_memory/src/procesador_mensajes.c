@@ -1,84 +1,96 @@
 #include "procesador_mensajes.h"
 #include "auxiliares_memoria.h"
 
+static void conectar_memory_stick(int cliente_fd, t_memory_context* ctx, char* mensaje) {
+    char **partes = string_split(mensaje, "|");
+    uint32_t stick_size = atoi(partes[1]);
+    char* stick_ip = strdup(partes[2]);
+    int stick_puerto = atoi(partes[3]);
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    
+    t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
+    stick->socket_fd = cliente_fd;
+    stick->tamanio = stick_size;
+    stick->base_address = ctx->memoria_total;
+    stick->id = list_size(ctx->memory_sticks) + 1;
+    stick->ip = stick_ip;
+    stick->puerto = stick_puerto;
+    
+    list_add(ctx->memory_sticks, stick);
+    
+    t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
+    nuevo_hueco->base = ctx->memoria_total;
+    nuevo_hueco->limite = ctx->memoria_total + stick_size;
+    list_add(ctx->huecos_libres, nuevo_hueco);
+    fusionar_huecos_libres(ctx->huecos_libres);
+    
+    ctx->memoria_total += stick_size;
+    // Log obligatorio del TP (strict format)
+    log_info(ctx->logger, "## Memory Stick de %d bytes Conectada", stick_size);
+    log_info(ctx->logger, "Memory Stick registrada en %s:%d. Memoria total actual: %d bytes", stick_ip, stick_puerto, ctx->memoria_total);
+    
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+
+    notificar_memoria_expandida(ctx->scheduler_socket);
+    
+    string_array_destroy(partes);
+}
+
+static void conectar_cpu(int cliente_fd, t_memory_context* ctx, char* mensaje) {
+    log_info(ctx->logger, "## CPU %s Conectada", mensaje);
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = ENVIO_TABLA_STICKS;
+    int cant = list_size(ctx->memory_sticks);
+    agregar_a_paquete(paq, &cant, sizeof(int));
+    for (int i = 0; i < cant; i++) {
+        t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+        agregar_a_paquete(paq, &(stick->id), sizeof(int));
+        agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
+        agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
+        agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
+        int ip_len = strlen(stick->ip) + 1;
+        agregar_a_paquete(paq, &ip_len, sizeof(int));
+        agregar_a_paquete(paq, stick->ip, ip_len);
+    }
+    enviar_paquete(paq, cliente_fd);
+    eliminar_paquete(paq);
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+}
+
+static void conectar_swap(int cliente_fd, t_memory_context* ctx, char* mensaje) {
+    char **partes = string_split(mensaje, "|");
+    ctx->swap_file_size = atoi(partes[1]);
+    ctx->swap_block_size = atoi(partes[2]);
+    ctx->swap_socket = cliente_fd;
+    
+    int cant_bloques = ctx->swap_file_size / ctx->swap_block_size;
+    int bits_bytes = (cant_bloques + 7) / 8;
+    ctx->bitarray_data = malloc(bits_bytes);
+    memset(ctx->bitarray_data, 0, bits_bytes);
+    ctx->swap_bitmap = bitarray_create_with_mode(ctx->bitarray_data, bits_bytes, LSB_FIRST);
+    
+    log_info(ctx->logger, "## SWAP Conectado. Tamaño: %d, Tamaño Bloque: %d, Total Bloques: %d", ctx->swap_file_size, ctx->swap_block_size, cant_bloques);
+    string_array_destroy(partes);
+}
+
 void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     char *mensaje = recibir_handshake(cliente_fd);
     
     if (string_starts_with(mensaje, "STICK|")) {
-        char **partes = string_split(mensaje, "|");
-        uint32_t stick_size = atoi(partes[1]);
-        char* stick_ip = strdup(partes[2]);
-        int stick_puerto = atoi(partes[3]);
-        
-        pthread_mutex_lock(&ctx->mutex_memoria);
-        
-        t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
-        stick->socket_fd = cliente_fd;
-        stick->tamanio = stick_size;
-        stick->base_address = ctx->memoria_total;
-        stick->id = list_size(ctx->memory_sticks) + 1;
-        stick->ip = stick_ip;
-        stick->puerto = stick_puerto;
-        
-        list_add(ctx->memory_sticks, stick);
-        
-        t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
-        nuevo_hueco->base = ctx->memoria_total;
-        nuevo_hueco->limite = ctx->memoria_total + stick_size;
-        list_add(ctx->huecos_libres, nuevo_hueco);
-        fusionar_huecos_libres(ctx->huecos_libres);
-        
-        ctx->memoria_total += stick_size;
-        log_info(ctx->logger, "## Memory Stick de %d bytes Conectada en %s:%d. Memoria total: %d", stick_size, stick_ip, stick_puerto, ctx->memoria_total);
-        
-        pthread_mutex_unlock(&ctx->mutex_memoria);
-
-        notificar_memoria_expandida(ctx->scheduler_socket);
-        
-        string_array_destroy(partes);
+        conectar_memory_stick(cliente_fd, ctx, mensaje);
     }
     else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
         ctx->scheduler_socket = cliente_fd;
-
         log_info(ctx->logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
     }
     else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
-        log_info(ctx->logger, "## CPU %s Conectada", mensaje);
-        
-        // Enviar lista de memory sticks a la CPU
-        pthread_mutex_lock(&ctx->mutex_memoria);
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = ENVIO_TABLA_STICKS;
-        int cant = list_size(ctx->memory_sticks);
-        agregar_a_paquete(paq, &cant, sizeof(int));
-        for (int i = 0; i < cant; i++) {
-            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-            agregar_a_paquete(paq, &(stick->id), sizeof(int));
-            agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
-            agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
-            agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
-            int ip_len = strlen(stick->ip) + 1;
-            agregar_a_paquete(paq, &ip_len, sizeof(int));
-            agregar_a_paquete(paq, stick->ip, ip_len);
-        }
-        enviar_paquete(paq, cliente_fd);
-        eliminar_paquete(paq);
-        pthread_mutex_unlock(&ctx->mutex_memoria);
+        conectar_cpu(cliente_fd, ctx, mensaje);
     }
     else if (string_starts_with(mensaje, "SWAP|")) {
-        char **partes = string_split(mensaje, "|");
-        ctx->swap_file_size = atoi(partes[1]);
-        ctx->swap_block_size = atoi(partes[2]);
-        ctx->swap_socket = cliente_fd;
-        
-        int cant_bloques = ctx->swap_file_size / ctx->swap_block_size;
-        int bits_bytes = (cant_bloques + 7) / 8;
-        ctx->bitarray_data = malloc(bits_bytes);
-        memset(ctx->bitarray_data, 0, bits_bytes);
-        ctx->swap_bitmap = bitarray_create_with_mode(ctx->bitarray_data, bits_bytes, LSB_FIRST);
-        
-        log_info(ctx->logger, "## SWAP Conectado. Tamaño: %d, Tamaño Bloque: %d, Total Bloques: %d", ctx->swap_file_size, ctx->swap_block_size, cant_bloques);
-        string_array_destroy(partes);
+        conectar_swap(cliente_fd, ctx, mensaje);
     }
     else { 
         log_info(ctx->logger, "## Módulo Conectado: %s", mensaje);
@@ -100,10 +112,7 @@ void procesar_crear_proceso_handler(int cliente_fd, t_memory_context* ctx) {
     buffer_reader_destroy(reader);
     free(buffer);
     
-    char *path_completo = string_new();
-    string_append(&path_completo, ctx->base_path);
-    string_append(&path_completo, "/");
-    string_append(&path_completo, path);
+    char* path_completo = string_from_format("%s/%s", ctx->base_path, path);
     
     log_info(ctx->logger, "Creando proceso PID %d con script: %s", pid, path_completo);
     crear_proceso(ctx, pid, path_completo);
@@ -282,7 +291,7 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
 
     int needs_compaction = 0;
     pthread_mutex_lock(&ctx->mutex_memoria);
-    t_segmento* nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
+    t_segmento* nuevo_seg = crear_segmento(ctx, pid, id_seg, tamanio_seg, &needs_compaction);
                 
     if (needs_compaction) {
         t_paquete* paq = crear_paquete();
@@ -296,7 +305,7 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
         
         if (res == RESPUESTA_COMPACTACION) {
             compactar_memoria(ctx);
-            nuevo_seg = crear_segmento(ctx, id_seg, tamanio_seg, &needs_compaction);
+            nuevo_seg = crear_segmento(ctx, pid, id_seg, tamanio_seg, &needs_compaction);
         }
     }
 
@@ -310,19 +319,13 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
             }
 
             list_add(prog->contexto->tabla_segmentos, nuevo_seg);
-            log_info(ctx->logger, "DEBUG: Added segment to PID %d. Total segments now: %d", pid, list_size(prog->contexto->tabla_segmentos));
             pthread_mutex_unlock(&ctx->mutex_programas);
-
         } else {
-
-            log_error(ctx->logger, "DEBUG: prog was NULL for PID %d in CREAR_SEGMENTO!", pid);
+            log_error(ctx->logger, "Programa no encontrado para PID %d en CREAR_SEGMENTO", pid);
         }
-            enviar_mensaje(MSG_OK, cliente_fd);
-
+        enviar_mensaje(MSG_OK, cliente_fd);
     } else {
-
         enviar_mensaje("OUT_OF_MEMORY", cliente_fd);
-
     }
     pthread_mutex_unlock(&ctx->mutex_memoria);
 }
@@ -349,7 +352,7 @@ void procesar_eliminar_segmento_handler(int cliente_fd, t_memory_context* ctx){
         pthread_mutex_unlock(&ctx->mutex_programas);
 
         if (seg_a_eliminar != NULL) {
-            eliminar_segmento(ctx, seg_a_eliminar);
+            eliminar_segmento(ctx, pid, seg_a_eliminar);
             enviar_mensaje(MSG_OK, cliente_fd);
         } else {
             enviar_mensaje("SEG_NOT_FOUND", cliente_fd);
@@ -368,16 +371,53 @@ void procesar_liberar_proceso_handler(int cliente_fd, t_memory_context* ctx){
 
     pthread_mutex_lock(&ctx->mutex_memoria);
     t_programa* prog = buscar_programa(ctx, pid_a_liberar);
-    if (prog != NULL && prog->contexto->tabla_segmentos != NULL) {
+    if (prog == NULL) {
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        log_error(ctx->logger, "Intento de liberar PID %d inexistente", pid_a_liberar);
+        return;
+    }
+
+    // 1. Liberar todos los segmentos de memoria asociados al proceso
+    if (prog->contexto->tabla_segmentos != NULL) {
         pthread_mutex_lock(&ctx->mutex_programas);
         for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
             t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
-            eliminar_segmento(ctx, seg);
+            eliminar_segmento(ctx, pid_a_liberar, seg);
         }
         list_clean(prog->contexto->tabla_segmentos);
         pthread_mutex_unlock(&ctx->mutex_programas);
     }
-    log_info(ctx->logger, "Proceso %d liberado de la memoria", pid_a_liberar);
+
+    // 2. Eliminar el programa de la lista global y liberar todas sus estructuras
+    pthread_mutex_lock(&ctx->mutex_programas);
+    for (int i = 0; i < list_size(ctx->programas); i++) {
+        if (list_get(ctx->programas, i) == prog) {
+            list_remove(ctx->programas, i);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&ctx->mutex_programas);
+
+    // 3. Liberar instrucciones
+    if (prog->instrucciones != NULL) {
+        for (int i = 0; i < prog->cantidad_instrucciones; i++) {
+            free(prog->instrucciones[i]);
+        }
+        free(prog->instrucciones);
+    }
+
+    // 4. Liberar contexto de ejecución
+    if (prog->contexto != NULL) {
+        if (prog->contexto->tabla_segmentos != NULL) {
+            list_destroy(prog->contexto->tabla_segmentos);
+        }
+        free(prog->contexto);
+    }
+
+    // 5. Liberar el programa
+    free(prog);
+
+    log_info(ctx->logger, "## PID: %d - Proceso Finalizado y liberado de la memoria", pid_a_liberar);
     pthread_mutex_unlock(&ctx->mutex_memoria);
 }
 
@@ -390,17 +430,17 @@ void procesar_solicitud_tam_max_segmento_handler(int cliente_fd, t_memory_contex
 }
 
 void procesar_leer_memoria_handler(int cliente_fd, t_memory_context* ctx){
-    int size;
-    void* buffer = recibir_buffer(&size, cliente_fd);
-    uint32_t dir_fisica, tamanio;
-    int desp = 0;
-    memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-    memcpy(&tamanio, buffer + desp, sizeof(uint32_t));
-    free(buffer);
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t pid = *(uint32_t*)list_get(paquete, 0);
+    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
+    uint32_t tamanio = *(uint32_t*)list_get(paquete, 2);
+    list_destroy_and_destroy_elements(paquete, free);
 
     pthread_mutex_lock(&ctx->mutex_memoria);
     void* data_leida = leer_memoria_distribuida(ctx, dir_fisica, tamanio);
     pthread_mutex_unlock(&ctx->mutex_memoria);
+
+    log_info(ctx->logger, "## PID: %d - Lectura - Dir. Física: %d - Tamaño: %d", pid, dir_fisica, tamanio);
 
     t_paquete* paq = crear_paquete();
     paq->codigo_operacion = MENSAJE; 
@@ -408,25 +448,26 @@ void procesar_leer_memoria_handler(int cliente_fd, t_memory_context* ctx){
     enviar_paquete(paq, cliente_fd);
     eliminar_paquete(paq);
     free(data_leida);
-                
 }
 
 void procesar_escribir_memoria_handler(int cliente_fd, t_memory_context* ctx){
-    int size;
-    void* buffer = recibir_buffer(&size, cliente_fd);
-    uint32_t dir_fisica, tamanio;
-    int desp = 0;
-    memcpy(&dir_fisica, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-    memcpy(&tamanio, buffer + desp, sizeof(uint32_t)); desp += sizeof(uint32_t);
-                
-    int tamanio_rep;
-    memcpy(&tamanio_rep, buffer + desp, sizeof(int)); desp += sizeof(int);
+    t_list* paquete = recibir_paquete(cliente_fd);
+    uint32_t pid = *(uint32_t*)list_get(paquete, 0);
+    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
+    uint32_t tamanio = *(uint32_t*)list_get(paquete, 2);
+    
+    void* data_a_escribir = malloc(tamanio);
+    memcpy(data_a_escribir, list_get(paquete, 3), tamanio);
+    
+    list_destroy_and_destroy_elements(paquete, free);
                 
     pthread_mutex_lock(&ctx->mutex_memoria);
-    escribir_memoria_distribuida(ctx, dir_fisica, tamanio, buffer + desp);
+    escribir_memoria_distribuida(ctx, dir_fisica, tamanio, data_a_escribir);
     pthread_mutex_unlock(&ctx->mutex_memoria);
                 
-    free(buffer);
+    log_info(ctx->logger, "## PID: %d - Escritura - Dir. Física: %d - Tamaño: %d", pid, dir_fisica, tamanio);
+
+    free(data_a_escribir);
     enviar_mensaje(MSG_OK, cliente_fd);
 }
 
@@ -449,6 +490,36 @@ void procesar_solicitud_tabla_sticks_handler(int cliente_fd, t_memory_context* c
     enviar_paquete(paq, cliente_fd);
     eliminar_paquete(paq);
     pthread_mutex_unlock(&ctx->mutex_memoria);
+}
+
+void procesar_consultar_espacio_libre_handler(int cliente_fd, t_memory_context* ctx) {
+    int espacio_libre_total = 0;
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    for (int i = 0; i < list_size(ctx->huecos_libres); i++) {
+        t_hueco_libre* hueco = list_get(ctx->huecos_libres, i);
+        espacio_libre_total += (hueco->limite - hueco->base);
+    }
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+    
+    // El Kernel Scheduler espera un opcode (MENSAJE) y luego el int
+    enviar_int(cliente_fd, MENSAJE);
+    send(cliente_fd, &espacio_libre_total, sizeof(int), 0); 
+}
+
+void procesar_desconexion_cliente(int cliente_fd, t_memory_context* ctx) {
+    log_warning(ctx->logger, "Cliente desconectado");
+    for (int i = 0; i < list_size(ctx->memory_sticks); i++)
+    {
+        t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+
+        if (cliente_fd == stick->socket_fd)
+        {
+            notificar_memoria_corrupta(ctx->scheduler_socket);
+        }
+    }
+    
+    close(cliente_fd);
 }
 
 void atender_cliente(void *arg) {
@@ -501,31 +572,13 @@ void atender_cliente(void *arg) {
                 procesar_escribir_memoria_handler(cliente_fd, ctx);
                 break;
             case SOLICITUD_TABLA_STICKS:
-            {
                 procesar_solicitud_tabla_sticks_handler(cliente_fd, ctx);
                 break;
-            }
             case CONSULTAR_ESPACIO_LIBRE:
-            {
-                int espacio_fijo_mock = 999999; 
-                send(cliente_fd, &espacio_fijo_mock, sizeof(int), 0); 
+                procesar_consultar_espacio_libre_handler(cliente_fd, ctx);
                 break;
-            }
             case -1:
-                log_warning(ctx->logger, "Cliente desconectado");
-                for (int i = 0; i < list_size(ctx->memory_sticks); i++)
-                {
-                    t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
-
-                    if (cliente_fd == stick->socket_fd)
-                    {
-
-                    notificar_memoria_corrupta(ctx->scheduler_socket);
-
-                    }
-                }
-                
-                close(cliente_fd);
+                procesar_desconexion_cliente(cliente_fd, ctx);
                 return;
             default:
                 log_warning(ctx->logger, "Operación desconocida: %d", cod_op);

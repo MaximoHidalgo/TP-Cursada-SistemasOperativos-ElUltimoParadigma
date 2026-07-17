@@ -82,6 +82,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                 if (proceso != NULL) {
                     t_paquete* paq_write = crear_paquete();
                     paq_write->codigo_operacion = ESCRIBIR_MEMORIA;
+                    agregar_a_paquete(paq_write, &(proceso->pid), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, &(proceso->io_dir_fisica), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, &(proceso->io_tamanio), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, mensaje, proceso->io_tamanio);
@@ -136,6 +137,7 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
         // Pedimos leer a memoria
         t_paquete* paq_mem = crear_paquete();
         paq_mem->codigo_operacion = LEER_MEMORIA;
+        agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, &dir_fisica, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, &tamanio, sizeof(uint32_t));
         enviar_paquete(paq_mem, ctx->socket_memoria);

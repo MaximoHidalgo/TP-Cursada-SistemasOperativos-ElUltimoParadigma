@@ -18,7 +18,9 @@ void crear_proceso(t_memory_context* ctx, int pid, char* path);
 char* obtener_instruccion(t_memory_context* ctx, int pid, int pc);
 
 t_memory_context* iniciar_contexto(int argc, char* argv[]);
+void inicializar_entorno(t_memory_context* ctx, int argc, char* argv[]);
 int iniciar_servidor_memoria(t_memory_context* ctx);
+void iniciar_escucha_servidor(t_memory_context* ctx);
 void limpiar_contexto(t_memory_context* ctx);
 
 #endif // AUXILIARES_H
