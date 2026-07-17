@@ -104,7 +104,7 @@ bool hay_espacio_para_restaurar_segmentos(t_memory_context* ctx, t_contexto_ejec
 
     for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
         t_segmento* seg = list_get(proc->tabla_segmentos, i);
-        if (seg->id == 0 || seg->tamanio == 0) continue;
+        if (seg->tamanio == 0) continue;
 
         t_hueco_libre* hueco_libre = buscar_hueco_libre_x_lista(huecos_aux, seg->tamanio, ctx);
         if (!hueco_libre) {
@@ -149,7 +149,7 @@ t_hueco_libre* buscar_hueco_libre(t_memory_context* ctx, uint32_t tamanio) {
 bool restaurar_segmentos(t_contexto_ejecucion* proc, t_memory_context* ctx, int cliente_fd){
     for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
         t_segmento* seg = list_get(proc->tabla_segmentos, i);
-        if (seg->id == 0 || seg->tamanio == 0) continue;
+        if (seg->tamanio == 0) continue;
         
         t_hueco_libre* hueco_disponible = buscar_hueco_libre(ctx, seg->tamanio);
 
@@ -167,12 +167,7 @@ bool restaurar_segmentos(t_contexto_ejecucion* proc, t_memory_context* ctx, int 
             free(hueco_disponible);
         }
         
-        t_segmento* nuevo_seg = malloc(sizeof(t_segmento));
-        nuevo_seg->id = seg->id;
-        nuevo_seg->tamanio = seg->tamanio;
-        nuevo_seg->base = seg->base;
-        nuevo_seg->bloque_swap = -1;
-        list_add(ctx->segmentos_globales, nuevo_seg);
+        list_add(ctx->segmentos_globales, seg);
         
         // Leer de SWAP y escribir en Memoria Principal
         int cant_bloques = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
@@ -420,7 +415,7 @@ void liberar_segmento_de_memoria(t_memory_context* ctx, t_segmento* seg){
             list_add(ctx->huecos_libres, hueco);
             fusionar_huecos_libres(ctx->huecos_libres);
                 
-            list_remove_and_destroy_element(ctx->segmentos_globales, h, free);
+            list_remove(ctx->segmentos_globales, h);
             break;
         }
     }
@@ -440,7 +435,10 @@ void escribir_segmento_en_swap(t_memory_context* ctx, t_segmento* seg, int bloqu
         enviar_int(ctx->swap_socket, ctx->swap_block_size);
         send(ctx->swap_socket, bloque_data, ctx->swap_block_size, 0);
             
-        recibir_mensaje(ctx->swap_socket, ctx->logger);
+        int r = recibir_operacion(ctx->swap_socket);
+        if (r == MENSAJE) {
+            int s; char* m = recibir_buffer(&s, ctx->swap_socket); free(m);
+        }
         free(bloque_data);
         offset += copy_size;
     }
@@ -451,7 +449,7 @@ void suspender_proceso(t_memory_context* ctx, t_contexto_ejecucion* proc, int ca
 
     for (int i = 0; i < list_size(proc->tabla_segmentos); i++) {
         t_segmento* seg = list_get(proc->tabla_segmentos, i);
-        if (seg->id == 0 || seg->tamanio == 0) continue; 
+        if (seg->tamanio == 0) continue;
         
         int cant_bloques_necesarios = (seg->tamanio + ctx->swap_block_size - 1) / ctx->swap_block_size;
         int bloque_inicio = buscar_bloques_libres_en_swap(ctx->swap_bitmap, cant_bloques_swap, cant_bloques_necesarios);
@@ -494,7 +492,7 @@ bool hay_espacio_para_suspender_proceso(t_memory_context* ctx, t_contexto_ejecuc
 
         t_segmento* seg = list_get(proc->tabla_segmentos, i);
 
-        if (seg->id == 0 || seg->tamanio == 0)
+        if (seg->tamanio == 0)
             continue;
 
         int cant_bloques_necesarios =

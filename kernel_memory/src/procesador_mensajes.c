@@ -32,7 +32,9 @@ static void conectar_memory_stick(int cliente_fd, t_memory_context* ctx, char* m
     
     pthread_mutex_unlock(&ctx->mutex_memoria);
 
+    pthread_mutex_lock(&ctx->mutex_scheduler_socket);
     notificar_memoria_expandida(ctx->scheduler_socket);
+    pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
     
     string_array_destroy(partes);
 }
@@ -76,11 +78,13 @@ static void conectar_swap(int cliente_fd, t_memory_context* ctx, char* mensaje) 
     string_array_destroy(partes);
 }
 
-void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
+bool procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     char *mensaje = recibir_handshake(cliente_fd);
+    bool should_continue = true;
     
     if (string_starts_with(mensaje, "STICK|")) {
         conectar_memory_stick(cliente_fd, ctx, mensaje);
+        should_continue = false;
     }
     else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
         ctx->scheduler_socket = cliente_fd;
@@ -91,11 +95,13 @@ void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
     }
     else if (string_starts_with(mensaje, "SWAP|")) {
         conectar_swap(cliente_fd, ctx, mensaje);
+        should_continue = false;
     }
     else { 
         log_info(ctx->logger, "## Módulo Conectado: %s", mensaje);
     }
     free(mensaje);
+    return should_continue;
 }
 
 void procesar_crear_proceso_handler(int cliente_fd, t_memory_context* ctx) {
@@ -233,7 +239,7 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
     for (int k = 0; k < list_size(proc->tabla_segmentos); k++) {
         t_segmento* seg = list_get(proc->tabla_segmentos, k);
 
-        if(seg->id == 0 || seg->tamanio == 0) continue;
+        if(seg->tamanio == 0) continue;
 
         memoria_necesaria += seg->tamanio;
     }
@@ -515,7 +521,9 @@ void procesar_desconexion_cliente(int cliente_fd, t_memory_context* ctx) {
 
         if (cliente_fd == stick->socket_fd)
         {
+            pthread_mutex_lock(&ctx->mutex_scheduler_socket);
             notificar_memoria_corrupta(ctx->scheduler_socket);
+            pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
         }
     }
     
@@ -531,10 +539,18 @@ void atender_cliente(void *arg) {
     while (1) {
         int cod_op = recibir_operacion(cliente_fd);
 
+        bool is_scheduler = (cliente_fd == ctx->scheduler_socket);
+        if (is_scheduler) pthread_mutex_lock(&ctx->mutex_scheduler_socket);
+
         switch(cod_op) {
-            case MENSAJE:
-                procesar_mensaje_handshake(cliente_fd, ctx);
+            case MENSAJE: {
+                bool keep = procesar_mensaje_handshake(cliente_fd, ctx);
+                if (!keep) {
+                    if (is_scheduler) pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
+                    return;
+                }
                 break;
+            }
             case CREAR_PROCESO:
                 procesar_crear_proceso_handler(cliente_fd, ctx);
                 break;
@@ -578,12 +594,16 @@ void atender_cliente(void *arg) {
                 procesar_consultar_espacio_libre_handler(cliente_fd, ctx);
                 break;
             case -1:
+                if (is_scheduler) pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
                 procesar_desconexion_cliente(cliente_fd, ctx);
                 return;
             default:
                 log_warning(ctx->logger, "Operación desconocida: %d", cod_op);
                 close(cliente_fd);
+                if (is_scheduler) pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
                 return;
         }
+
+        if (is_scheduler) pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
     }
 }

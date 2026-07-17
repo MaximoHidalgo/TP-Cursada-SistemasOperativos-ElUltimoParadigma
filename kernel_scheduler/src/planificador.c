@@ -63,6 +63,7 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
     //estratega->socket_cpu = -1;
     estratega->sockets_cpu = list_create(); //inicializada para contener varias cpus
     pthread_mutex_init(&estratega->mutex_colas, NULL);
+    pthread_mutex_init(&estratega->mutex_socket_memoria, NULL);
 
     if (estratega->algoritmo == ALGORITMO_PLANIFICACION_INVALIDO) {
         log_error(logger, "Algoritmo de planificacion invalido");
@@ -112,6 +113,7 @@ void destruir_estratega_planificacion(t_estratega_planificacion* estratega) {
     }
 
     pthread_mutex_destroy(&estratega->mutex_colas);
+    pthread_mutex_destroy(&estratega->mutex_socket_memoria);
     free(estratega);
 }
 
@@ -137,8 +139,14 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
 
     pthread_mutex_lock(&estratega->mutex_colas);
 
-    while (!queue_is_empty(estratega->cola_new)) {
-        t_proceso_planificable* proceso = queue_pop(estratega->cola_new);
+    while (!list_is_empty(estratega->cola_susp_ready) || !queue_is_empty(estratega->cola_new)) {
+        t_proceso_planificable* proceso = NULL;
+        
+        if (!list_is_empty(estratega->cola_susp_ready)) {
+            proceso = list_remove(estratega->cola_susp_ready, 0);
+        } else {
+            proceso = queue_pop(estratega->cola_new);
+        }
 
         // Validación de prioridades
         if (estratega->algoritmo == ALGORITMO_PLANIFICACION_CMN) {
@@ -147,9 +155,14 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
                 proceso->estado = ESTADO_PROCESO_EXIT;
                 
                 // Avisamos a Memoria para que libere estructuras (LIBERAR_PROCESO)
+                pthread_mutex_lock(&estratega->mutex_socket_memoria);
                 enviar_int(estratega->socket_memoria, LIBERAR_PROCESO);
                 send(estratega->socket_memoria, &proceso->pid, sizeof(uint32_t), 0);
-                recibir_mensaje(estratega->socket_memoria, estratega->logger);
+                int resp_mem = esperar_respuesta_memoria(estratega->socket_memoria, estratega);
+                if (resp_mem == MENSAJE) {
+                    int size_m; char* msj_m = recibir_buffer(&size_m, estratega->socket_memoria); free(msj_m);
+                }
+                pthread_mutex_unlock(&estratega->mutex_socket_memoria);
                 
                 free(proceso);
                 continue; // Buscamos si hay otro proceso válido en cola_new
@@ -165,6 +178,7 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
         //revisar este bloque si es necesario o no este bloque
         if (estado_anterior == ESTADO_PROCESO_SUSP_READY) {
             log_info(estratega->logger, "## Solicitando DESUSPENDER_PROCESO a Memoria para PID %d", proceso->pid);
+            pthread_mutex_lock(&estratega->mutex_socket_memoria);
             enviar_int(estratega->socket_memoria, DESUSPENDER_PROCESO);
             send(estratega->socket_memoria, &proceso->pid, sizeof(uint32_t), 0);
             
@@ -177,6 +191,7 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
                 char* msj = recibir_buffer(&size, estratega->socket_memoria);
                 free(msj);
             }
+            pthread_mutex_unlock(&estratega->mutex_socket_memoria);
         }
         //=============================================================
 
@@ -204,8 +219,6 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
             }
         }
         //============================
-        pthread_mutex_unlock(&estratega->mutex_colas);
-        return proceso;
     }
 
     pthread_mutex_unlock(&estratega->mutex_colas);
@@ -378,12 +391,20 @@ void* suspension_timer_thread(void* arg) {
         uint64_t milisegundos_por_segundo = segundos_actuales * 1000;
         uint64_t milisegundos_por_microsegundo = microsegundos_actuales / 1000;
         
-        a->pcb->instante_suspension = milisegundos_por_segundo + milisegundos_por_microsegundo;
-        
+        pthread_mutex_lock(&a->estratega->mutex_socket_memoria);
         enviar_int(a->estratega->socket_memoria, SUSPENDER_PROCESO);
         send(a->estratega->socket_memoria, &a->pcb->pid, sizeof(uint32_t), 0);
         
-        recibir_mensaje(a->estratega->socket_memoria, a->estratega->logger);
+        int resp_mem = esperar_respuesta_memoria(a->estratega->socket_memoria, a->estratega);
+        if (resp_mem == MENSAJE) {
+            int size_m; char* msj_m = recibir_buffer(&size_m, a->estratega->socket_memoria); free(msj_m);
+        }
+        pthread_mutex_unlock(&a->estratega->mutex_socket_memoria);
+        pthread_mutex_unlock(&a->estratega->mutex_colas);
+        
+        planificador_admitir_a_ready(a->estratega);
+        free(a);
+        return NULL;
     }
     pthread_mutex_unlock(&a->estratega->mutex_colas);
     free(a);
@@ -462,9 +483,20 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
                     liberado->estado = ESTADO_PROCESO_READY;
                 }
                 
+                
+                if (!queue_is_empty(interfaz->cola_bloqueados)) {
+                    interfaz->solicitud_actual = queue_pop(interfaz->cola_bloqueados);
+                }
+
                 if (liberado->estado == ESTADO_PROCESO_SUSP_READY) {
                     list_add(estratega->cola_susp_ready, liberado);
                     log_info(estratega->logger, "Proceso %d movido a la lista de SUSP_READY", liberado->pid);
+                    
+                    pthread_mutex_unlock(&interfaz->mutex_interfaz);
+                    pthread_mutex_unlock(&estratega->mutex_colas);
+                    
+                    planificador_admitir_a_ready(estratega);
+                    return;
                 } else {
                     encolar_en_cola_ready(estratega->colas, liberado);
                     //============================================
@@ -485,9 +517,6 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
                     //============================
                 }
                 
-                if (!queue_is_empty(interfaz->cola_bloqueados)) {
-                    interfaz->solicitud_actual = queue_pop(interfaz->cola_bloqueados);
-                }
             }
         }
         pthread_mutex_unlock(&interfaz->mutex_interfaz);
@@ -788,6 +817,7 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
         t_proceso_planificable* proceso = list_get(estratega->cola_susp_ready, i);
 
         // A. Consultamos a memoria
+        pthread_mutex_lock(&estratega->mutex_socket_memoria);
         t_paquete* paq = crear_paquete();
         paq->codigo_operacion = CONSULTAR_ESPACIO_LIBRE;
         agregar_a_paquete(paq, &(proceso->pid), sizeof(uint32_t));
@@ -795,21 +825,19 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
         eliminar_paquete(paq);
 
         // B. Esperamos respuesta
-        int codigo_rta = recibir_operacion(estratega->socket_memoria);
-        while (codigo_rta == MEMORIA_EXPANDIDA) {
-            log_info(estratega->logger, "Memoria expandida durante desuspension (ignorada)");
-            codigo_rta = recibir_operacion(estratega->socket_memoria);
-        }
+        int codigo_rta = esperar_respuesta_memoria(estratega->socket_memoria, estratega);
         int hay_espacio = 0;
         if (codigo_rta == MENSAJE) { // Ajustá al opcode real que te mande la Memoria
             hay_espacio = recibir_int(estratega->socket_memoria); 
         }
+        pthread_mutex_unlock(&estratega->mutex_socket_memoria);
 
         // C. Evaluamos
         if (hay_espacio) {
             list_remove(estratega->cola_susp_ready, i);
             
             // Avisamos a memoria para des-suspender
+            pthread_mutex_lock(&estratega->mutex_socket_memoria);
             t_paquete* paq_desusp = crear_paquete();
             paq_desusp->codigo_operacion = DESUSPENDER_PROCESO;
             agregar_a_paquete(paq_desusp, &(proceso->pid), sizeof(uint32_t));
@@ -825,6 +853,7 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
 
             if (confirmacion == -1) {
                 log_error(estratega->logger, "Error: Kernel Memory se desconectó");
+                pthread_mutex_unlock(&estratega->mutex_socket_memoria);
                 return;
             }
             if (confirmacion == MENSAJE) {
@@ -833,10 +862,12 @@ void planificador_intentar_desuspender(t_estratega_planificacion* estratega) {
                 if (string_equals_ignore_case(msj, "ERROR")) {
                     log_error(estratega->logger, "No hay espacio en Memoria Principal para desuspender PID %d", proceso->pid);
                     free(msj);
+                    pthread_mutex_unlock(&estratega->mutex_socket_memoria);
                     continue; // Intentamos con el siguiente
                 }
                 free(msj);
             }
+            pthread_mutex_unlock(&estratega->mutex_socket_memoria);
 
             // Lo pasamos a READY
             proceso->estado = ESTADO_PROCESO_READY;
@@ -905,12 +936,26 @@ int planificador_orquestar_compactacion_sincronica(t_estratega_planificacion* es
     return esperar_respuesta_memoria(estratega->socket_memoria, estratega);
 }
 
+void* hilo_desuspender_memoria(void* arg) {
+    t_estratega_planificacion* estratega = (t_estratega_planificacion*)arg;
+    planificador_intentar_desuspender(estratega);
+    return NULL;
+}
+
 int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega) {
     int respuesta = recibir_operacion(socket_memoria);
+    bool hubo_expansion = false;
     while (respuesta == MEMORIA_EXPANDIDA) {
         log_info(estratega->logger, "Memoria expandida: Se detectó un nuevo Memory Stick.");
-        planificador_intentar_desuspender(estratega);
+        hubo_expansion = true;
         respuesta = recibir_operacion(socket_memoria);
     }
+    
+    if (hubo_expansion) {
+        pthread_t hilo_desuspension;
+        pthread_create(&hilo_desuspension, NULL, (void*)hilo_desuspender_memoria, estratega);
+        pthread_detach(hilo_desuspension);
+    }
+    
     return respuesta;
 }

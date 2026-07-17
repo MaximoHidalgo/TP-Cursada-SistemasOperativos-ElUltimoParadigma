@@ -77,6 +77,16 @@ static void conectar_con_scheduler(t_cpu_context* ctx, char* ip, char* puerto) {
     }
 }
 
+static void ignorar_interrupcion_quantum(t_cpu_context* ctx) {
+    t_list* dummy = recibir_paquete(ctx->conexiones->scheduler);
+    if (dummy) list_destroy_and_destroy_elements(dummy, free);
+    log_info(ctx->logger, "Se recibio interrupcion QUANTUM pero la CPU estaba inactiva. Ignorando.");
+}
+
+static void ignorar_interrupcion_desalojo(t_cpu_context* ctx, int process_ID) {
+    log_info(ctx->logger, "Se recibio interrupcion (%d) pero la CPU estaba inactiva. Ignorando.", process_ID);
+}
+
 static void procesar_pid_a_ejecutar(t_cpu_context* ctx) {
     t_list* paquete = recibir_paquete(ctx->conexiones->scheduler);
     if (!paquete || list_is_empty(paquete)) {
@@ -149,6 +159,15 @@ void atender_kernel_scheduler(t_cpu_context* ctx) {
         switch(process_ID) {
             case PID_A_EJECUTAR:
                 procesar_pid_a_ejecutar(ctx);
+                break;
+            case INTERRUPCION_QUANTUM:
+                ignorar_interrupcion_quantum(ctx);
+                break;
+            case INTERRUPCION_DESALOJO:
+                ignorar_interrupcion_desalojo(ctx, process_ID);
+                break;
+            case INTERRUPCION_COMPACTACION:
+                ignorar_interrupcion_desalojo(ctx, process_ID);
                 break;
             case -1:
                 log_error(ctx->logger, "El Kernel Scheduler se desconectó inesperadamente.");

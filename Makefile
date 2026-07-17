@@ -1,7 +1,7 @@
 .PHONY: all run stop clean fueraLogs debug release test
 
 # Argumentos definidos para la prueba
-PATH_PSEUDOCODIGO = PMP.prc
+PATH_PSEUDOCODIGO = MEMORIA_PRE_0.prc
 
 # Aca abajo se ponen los argumentos que se quieran usar como accesos rapidos
 #PLANI_PRE_0.prc PLANI_MEM.prc MEMORIA_PRE_0.prc PCP.prc PHP.prc PMP.prc
@@ -142,7 +142,7 @@ run-base:
 	@echo "Levantando Prueba Base..."
 	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./configs/prueba_base.config" &
 	sleep 2
-	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/prueba_base.config PLANI_PRE_0.prc" &
+	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/prueba_base.config MEMORIA_PRE_0.prc" &
 	sleep 2
 	$(TERMINAL) "cd swap && ./bin/swap ./configs/swap.config" &
 	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_base.config 256" &

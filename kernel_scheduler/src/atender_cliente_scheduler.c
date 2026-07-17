@@ -86,6 +86,8 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                     agregar_a_paquete(paq_write, &(proceso->io_dir_fisica), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, &(proceso->io_tamanio), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, mensaje, proceso->io_tamanio);
+                    
+                    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
                     enviar_paquete(paq_write, ctx->socket_memoria);
                     eliminar_paquete(paq_write);
                     
@@ -93,6 +95,7 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                     if (r_mem == MENSAJE) {
                         int s_m; char* msj_m = recibir_buffer(&s_m, ctx->socket_memoria); free(msj_m);
                     }
+                    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 }
                 
                 planificador_io_terminada(ctx->estratega, cliente_fd);
@@ -140,6 +143,8 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
         agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, &dir_fisica, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, &tamanio, sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
         
@@ -147,6 +152,7 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
         if (op == MENSAJE) {
             int size;
             void* buf = recibir_buffer(&size, ctx->socket_memoria);
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
             
             int op_io = PETICION_IO;
             send(interfaz->socket_fd, &op_io, sizeof(int), 0);
@@ -162,6 +168,8 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
             send(interfaz->socket_fd, dummy, len, 0);
             free(dummy);
             free(buf);
+        } else {
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
         }
     }
     planificador_atender_peticion_io(ctx->estratega, ctx->estratega->proceso_exec, "STDOUT");
@@ -229,10 +237,15 @@ void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
         t_paquete* paq_liberar = crear_paquete();
         paq_liberar->codigo_operacion = LIBERAR_PROCESO;
         agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_liberar, ctx->socket_memoria);
+        pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+        
         eliminar_paquete(paq_liberar);
         
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+        planificador_admitir_a_ready(ctx->estratega);
     }
     despachar_proceso_a_cpu(ctx, cliente_fd);
     list_destroy_and_destroy_elements(paquete, free);
@@ -303,6 +316,8 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, tamanio_ptr, sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
 
@@ -324,24 +339,29 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);
             if (string_equals_ignore_case(msj, "OK")) {
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 devolver_ejecucion_a_cpu(ctx, cliente_fd);
             } else {
-                log_error(ctx->logger, "Out of memory. Finalizando proceso %d", pid);
-                log_error(ctx->logger, "ERROR: Memoria insuficiente para crear el segmento del proceso %d.", pid);
-                log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de OUT_OF_MEMORY", pid);
+                log_info(ctx->logger, "## Out of Memory para proceso %d. Reencolando en NEW para reintento.", pid);
 
-                ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
-                
-                t_paquete* paq_liberar = crear_paquete();
-                paq_liberar->codigo_operacion = LIBERAR_PROCESO;
-                agregar_a_paquete(paq_liberar, &pid, sizeof(uint32_t));
-                enviar_paquete(paq_liberar, ctx->socket_memoria);
-                eliminar_paquete(paq_liberar);
+                // No matamos al proceso: lo devolvemos a cola_new para que el
+                // planificador de mediano plazo lo re-admita cuando haya espacio
+                // (tras la suspensión y swapeo de otros procesos).
+                t_proceso_planificable* proceso_oom = ctx->estratega->proceso_exec;
+                ctx->estratega->proceso_exec = NULL;
+                proceso_oom->estado = ESTADO_PROCESO_NEW;
 
-                planificador_liberar_exec(ctx->estratega, pid);
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+
+                pthread_mutex_lock(&ctx->estratega->mutex_colas);
+                queue_push(ctx->estratega->cola_new, proceso_oom);
+                pthread_mutex_unlock(&ctx->estratega->mutex_colas);
+
                 despachar_proceso_a_cpu(ctx, cliente_fd);
             }
             free(msj);
+        } else {
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
         }
     } else if (tipo_syscall == SYSCALL_MEM_FREE) {
         uint32_t* id_seg_ptr = list_get(paquete, 1);
@@ -350,6 +370,8 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         paq_mem->codigo_operacion = ELIMINAR_SEGMENTO;
         agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
 
@@ -358,10 +380,14 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);
             if (string_equals_ignore_case(msj, "OK")) {
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 devolver_ejecucion_a_cpu(ctx, cliente_fd);
+            } else {
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
             }
             free(msj);
         }else{
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
             log_error(ctx->logger,"Error desconocido al intentar liberar el segmento %d del PID %d.",*id_seg_ptr,pid);
         }
     }
@@ -404,7 +430,14 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
 
     log_info(ctx->logger, "## Proceso %d solicita crear nuevo proceso con script %s", pid, script_path);
 
+    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
     enviar_peticion_crear_proceso(nuevo_pid, script_path, ctx->socket_memoria);
+
+    int resp_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+    if (resp_mem == MENSAJE) {
+        int s; char* msj = recibir_buffer(&s, ctx->socket_memoria); free(msj);
+    }
+    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
 
     t_proceso_planificable* pcb_nuevo = malloc(sizeof(t_proceso_planificable));
     pcb_nuevo->pid = nuevo_pid;
@@ -473,7 +506,14 @@ int handler_interrupcion_desalojo(int fd, t_scheduler_context* ctx) {
         ctx->estratega->proceso_exec = NULL;
         
         // 4. Espiamos quién es el nuevo proceso más prioritario (el culpable) para el log
-        t_proceso_planificable* culpable = planificador_obtener_siguiente(ctx->estratega);
+        t_proceso_planificable* culpable = NULL;
+        for (int i = 0; i < list_size(ctx->estratega->colas); i++) {
+            t_cola_planificacion* cola = list_get(ctx->estratega->colas, i);
+            if (!queue_is_empty(cola->procesos)) {
+                culpable = list_get(cola->procesos->elements, 0);
+                break;
+            }
+        }
         
         if (culpable != NULL) {
             // LOG MÍNIMO Y OBLIGATORIO EXACTO

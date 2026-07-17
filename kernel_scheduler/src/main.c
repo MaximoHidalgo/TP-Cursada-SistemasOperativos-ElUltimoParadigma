@@ -70,8 +70,15 @@ void iniciar_planificacion(t_scheduler_context* ctx) {
 
     pcb_inicial->bloqueo_id = 0;
     
+    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
     enviar_peticion_crear_proceso(pcb_inicial->pid, ctx->path_script_inicial, ctx->socket_memoria);
     
+    int resp_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+    if (resp_mem == MENSAJE) {
+        int s; char* msj = recibir_buffer(&s, ctx->socket_memoria); free(msj);
+    }
+    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+
     planificador_encolar_new(ctx->estratega, pcb_inicial);
     planificador_admitir_a_ready(ctx->estratega);
 }

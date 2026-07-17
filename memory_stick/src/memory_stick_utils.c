@@ -67,6 +67,18 @@ void conectar_kernel_memory(t_memory_stick_context* ctx) {
     char *msj_handshake = string_from_format("%s|%u|%s|%s", HANDSHAKE_STICK, ctx->tamanio_total, "127.0.0.1", ctx->puerto_escucha);
     enviar_mensaje(msj_handshake, ctx->socket_kernel_memory);
     free(msj_handshake);
+    
+    t_args_hilo_cpu* args = malloc(sizeof(t_args_hilo_cpu));
+    args->socket_cliente = ctx->socket_kernel_memory;
+    args->ctx = ctx;
+
+    pthread_t hilo_km;
+    if (pthread_create(&hilo_km, NULL, atender_cliente_cpu, args) != 0) {
+        log_error(ctx->logger, "Fallo al crear el hilo para Kernel Memory");
+        free(args);
+    } else {
+        pthread_detach(hilo_km);
+    }
 }
 
 void iniciar_servidor_cpus(t_memory_stick_context* ctx) {

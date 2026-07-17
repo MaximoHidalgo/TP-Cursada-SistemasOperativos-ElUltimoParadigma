@@ -50,6 +50,7 @@ typedef struct {
     pthread_mutex_t mutex_memoria;
 
     int scheduler_socket;
+    pthread_mutex_t mutex_scheduler_socket;
     
     t_list* memory_sticks;
     
