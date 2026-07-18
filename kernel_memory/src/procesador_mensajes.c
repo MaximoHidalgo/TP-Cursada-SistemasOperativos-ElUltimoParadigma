@@ -252,10 +252,9 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
 
         if (requiere_compactacion(ctx, memoria_necesaria))
         {
-            t_paquete* paq = crear_paquete();
-            paq->codigo_operacion = SOLICITUD_COMPACTACION;
-            enviar_paquete(paq, cliente_fd);
-            eliminar_paquete(paq);
+            int op_sol = SOLICITUD_COMPACTACION;
+            send(cliente_fd, &op_sol, sizeof(int), 0);
+
                     
             pthread_mutex_unlock(&ctx->mutex_memoria);
             int res = recibir_operacion(cliente_fd);
@@ -300,10 +299,9 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
     t_segmento* nuevo_seg = crear_segmento(ctx, pid, id_seg, tamanio_seg, &needs_compaction);
                 
     if (needs_compaction) {
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SOLICITUD_COMPACTACION;
-        enviar_paquete(paq, cliente_fd);
-        eliminar_paquete(paq);
+        int op_sol = SOLICITUD_COMPACTACION;
+        send(cliente_fd, &op_sol, sizeof(int), 0);
+
                     
         pthread_mutex_unlock(&ctx->mutex_memoria);
         int res = recibir_operacion(cliente_fd);
@@ -450,7 +448,13 @@ void procesar_leer_memoria_handler(int cliente_fd, t_memory_context* ctx){
 
     t_paquete* paq = crear_paquete();
     paq->codigo_operacion = MENSAJE; 
-    agregar_a_paquete(paq, data_leida, tamanio);
+    
+    // Evitamos usar agregar_a_paquete para no agregar el prefijo de tamaño adicional (4 bytes)
+    // ya que el Scheduler lee con recibir_buffer y espera los bytes limpios.
+    paq->buffer->size = tamanio;
+    paq->buffer->stream = malloc(tamanio);
+    memcpy(paq->buffer->stream, data_leida, tamanio);
+    
     enviar_paquete(paq, cliente_fd);
     eliminar_paquete(paq);
     free(data_leida);

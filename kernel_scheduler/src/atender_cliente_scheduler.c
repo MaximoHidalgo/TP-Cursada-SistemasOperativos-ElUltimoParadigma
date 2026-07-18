@@ -327,10 +327,9 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             log_info(ctx->logger, "## Inicio de compactación"); // Log obligatorio del TP
             
             // Como la CPU ya desalojó el proceso y está inactiva, autorizamos inmediatamente a Memoria
-            t_paquete* paq_resp = crear_paquete();
-            paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
-            enviar_paquete(paq_resp, ctx->socket_memoria);
-            eliminar_paquete(paq_resp);
+            int op_resp = RESPUESTA_COMPACTACION;
+            send(ctx->socket_memoria, &op_resp, sizeof(int), 0);
+
             
             // Esperamos a que termine de compactar y nos devuelva el resultado real (OK/ERROR)
             respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
@@ -479,11 +478,10 @@ int handler_desalojo_compactacion(int fd, t_scheduler_context* ctx) {
         ctx->estratega->proceso_exec = NULL;
     }
     
-    // Ahora que la CPU está libre, LE DAMOS EL OK A MEMORIA para que compacte
-    t_paquete* paq_resp = crear_paquete();
-    paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
-    enviar_paquete(paq_resp, ctx->socket_memoria);
-    eliminar_paquete(paq_resp);
+    // Ahora que la CPU está libre, LE DAMOS EL OK A Memoria para que compacte
+    int op_resp = RESPUESTA_COMPACTACION;
+    send(ctx->socket_memoria, &op_resp, sizeof(int), 0);
+
     
     list_destroy_and_destroy_elements(paquete, free);
     return 1;
