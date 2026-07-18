@@ -71,7 +71,8 @@ int syscall_stdout(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
     uint32_t dir_fisica = 0;
     if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault en STDOUT logica %d", dir_logica);
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
+        enviar_operacion_con_pid(SYSCALL_SEG_FAULT, contexto->pid, ctx->conexiones->scheduler);
+        return 1;
     } else {
         notificar_syscall_memoria_a_scheduler(SYSCALL_STDOUT, contexto->pid, dir_fisica, tamanio, ctx);
         return 1;
@@ -88,7 +89,8 @@ int syscall_stdin(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_
     uint32_t dir_fisica = 0;
     if (mmu_traducir(ctx, contexto, dir_logica, tamanio, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault en STDIN logica %d", dir_logica);
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
+        enviar_operacion_con_pid(SYSCALL_SEG_FAULT, contexto->pid, ctx->conexiones->scheduler);
+        return 1;
     } else {
         notificar_syscall_memoria_a_scheduler(SYSCALL_STDIN, contexto->pid, dir_fisica, tamanio, ctx);
         return 1;
@@ -109,5 +111,6 @@ int syscall_init_proc(t_instruccion* instruccion, t_contexto_ejecucion* contexto
 int syscall_exit(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx) {
     log_info(ctx->logger, "Atrapada Syscall EXIT. Desalojando a Kernel...");
     contexto->registros.PC++;
-    return desalojar_proceso(contexto, ctx, SYSCALL_EXIT);
+    enviar_operacion_con_pid(SYSCALL_EXIT, contexto->pid, ctx->conexiones->scheduler);
+    return 1;
 }

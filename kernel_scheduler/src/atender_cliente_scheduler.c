@@ -283,10 +283,17 @@ void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_s
             break;
         }
 
-        case SYSCALL_MUTEX_UNLOCK:
-            planificador_mutex_unlock(ctx->estratega, ctx->estratega->proceso_exec, recurso);
-            devolver_ejecucion_a_cpu(ctx, cliente_fd); // Sigue en EXEC
+        case SYSCALL_MUTEX_UNLOCK: {
+            int debe_desalojar = planificador_mutex_unlock(ctx->estratega, ctx->estratega->proceso_exec, recurso);
+            if (debe_desalojar) {
+                encolar_en_cola_ready(ctx->estratega->colas, ctx->estratega->proceso_exec);
+                ctx->estratega->proceso_exec = NULL;
+                despachar_proceso_a_cpu(ctx, cliente_fd);
+            } else {
+                devolver_ejecucion_a_cpu(ctx, cliente_fd); // Sigue en EXEC
+            }
             break;
+        }
     }
     
     list_destroy_and_destroy_elements(paquete, free);
@@ -343,6 +350,17 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
             } else {
                 log_info(ctx->logger, "## Out of Memory para proceso %d. Reencolando en NEW para reintento.", pid);
 
+                t_paquete* paq_pc = crear_paquete();
+                paq_pc->codigo_operacion = AJUSTAR_PC_OOM;
+                agregar_a_paquete(paq_pc, &pid, sizeof(uint32_t));
+                enviar_paquete(paq_pc, ctx->socket_memoria);
+                eliminar_paquete(paq_pc);
+                
+                int rta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+                if (rta == MENSAJE) {
+                    int s; char* m = recibir_buffer(&s, ctx->socket_memoria); free(m);
+                }
+                
                 // No matamos al proceso: lo devolvemos a cola_new para que el
                 // planificador de mediano plazo lo re-admita cuando haya espacio
                 // (tras la suspensión y swapeo de otros procesos).
@@ -382,12 +400,15 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
                 pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 devolver_ejecucion_a_cpu(ctx, cliente_fd);
             } else {
+                log_error(ctx->logger, "Error de memoria al intentar liberar segmento %d para PID %d: %s", *id_seg_ptr, pid, msj);
                 pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+                devolver_ejecucion_a_cpu(ctx, cliente_fd);
             }
             free(msj);
         }else{
             pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
             log_error(ctx->logger,"Error desconocido al intentar liberar el segmento %d del PID %d.",*id_seg_ptr,pid);
+            devolver_ejecucion_a_cpu(ctx, cliente_fd);
         }
     }
     

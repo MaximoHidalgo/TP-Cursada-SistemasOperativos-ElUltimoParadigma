@@ -90,7 +90,8 @@ int instr_mov_in(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_c
 
     if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault accediendo a dir logica %d", dir_logica);
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
+        enviar_operacion_con_pid(SYSCALL_SEG_FAULT, contexto->pid, ctx->conexiones->scheduler);
+        return 1;
     } else {
         void* buf = leer_memoria_distribuida_cpu(ctx, dir_fisica, tam);
         if (buf != NULL) {
@@ -113,7 +114,8 @@ int instr_mov_out(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_
 
     if (mmu_traducir(ctx, contexto, dir_logica, tam, ctx->tam_max_segmento, &dir_fisica) == -1) {
         log_error(ctx->logger, "Segmentation Fault escribiendo a dir logica %d", dir_logica);
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
+        enviar_operacion_con_pid(SYSCALL_SEG_FAULT, contexto->pid, ctx->conexiones->scheduler);
+        return 1;
     } else {
         escribir_memoria_distribuida_cpu(ctx, dir_fisica, tam, &valor);
         log_info(ctx->logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %d", contexto->pid, dir_fisica, valor);
@@ -131,7 +133,8 @@ int instr_copy_mem(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t
     if (mmu_traducir(ctx, contexto, dir_logica_si, tam, ctx->tam_max_segmento, &dir_fisica_si) == -1 || 
         mmu_traducir(ctx, contexto, dir_logica_di, tam, ctx->tam_max_segmento, &dir_fisica_di) == -1) {
         log_error(ctx->logger, "Segmentation Fault en COPY_MEM");
-        return desalojar_proceso(contexto, ctx, SYSCALL_SEG_FAULT);
+        enviar_operacion_con_pid(SYSCALL_SEG_FAULT, contexto->pid, ctx->conexiones->scheduler);
+        return 1;
     } else {
         void* buf = leer_memoria_distribuida_cpu(ctx, dir_fisica_si, tam);
         if (buf != NULL) {

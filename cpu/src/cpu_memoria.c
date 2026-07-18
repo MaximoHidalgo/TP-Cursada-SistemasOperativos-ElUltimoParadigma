@@ -51,4 +51,13 @@ void enviar_contexto_a_memoria(t_contexto_ejecucion* contexto, int conexion_memo
     serializar_contexto(paquete, contexto);
     enviar_paquete(paquete, conexion_memory);
     eliminar_paquete(paquete);
+
+    // Esperamos confirmación (ACK) para evitar Race Conditions con los mensajes
+    // que Kernel Scheduler manda asíncronamente a Kernel Memory (EJ: OOM/EXIT)
+    int op = recibir_operacion(conexion_memory);
+    if (op == MENSAJE) {
+        int size;
+        char* msg = recibir_buffer(&size, conexion_memory);
+        free(msg);
+    }
 }
