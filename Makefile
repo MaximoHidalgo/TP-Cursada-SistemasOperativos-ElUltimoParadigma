@@ -214,3 +214,71 @@ run-php:
 	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDIN" &
 	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDOUT" &
 	$(TERMINAL) "cd io && ./bin/io ./configs/io.config SLEEP" &
+
+run-es3_1:
+	@echo "Levantando Prueba ES3_1..."
+	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./configs/prueba_es3_1.config" &
+	sleep 2
+	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/prueba_es3_1.config ES3_1.prc" &
+	sleep 2
+	$(TERMINAL) "cd swap && ./bin/swap ./configs/swap.config" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_1.config 128" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_2.config 128" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_3.config 128" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_4.config 128" &
+	sleep 1
+	$(TERMINAL) "cd cpu && ./bin/cpu ./configs/cpu.config CPU_1" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDIN" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDOUT" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config SLEEP" &
+
+run-es3_2:
+	@echo "Levantando Prueba ES3_2..."
+	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./configs/prueba_es3_2.config" &
+	sleep 2
+	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/prueba_es3_2.config ES3_2.prc" &
+	sleep 2
+	$(TERMINAL) "cd swap && ./bin/swap ./configs/swap.config" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_1.config 128" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_2.config 128" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_3.config 128" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_4.config 128" &
+	sleep 1
+	$(TERMINAL) "cd cpu && ./bin/cpu ./configs/cpu.config CPU_1" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDIN" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDOUT" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config SLEEP" &
+
+run-es3_3:
+	@echo "Levantando Prueba ES3_3..."
+	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./configs/prueba_es3_3.config" &
+	sleep 2
+	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/prueba_es3_3.config ES3_3.prc" &
+	sleep 2
+	$(TERMINAL) "cd swap && ./bin/swap ./configs/swap.config" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_1.config 256" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_2.config 256" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_3.config 256" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_4.config 256" &
+	sleep 1
+	$(TERMINAL) "cd cpu && ./bin/cpu ./configs/cpu.config CPU_1" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDIN" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDOUT" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config SLEEP" &
+
+run-es3_4:
+	@echo "Levantando Prueba ES3_4..."
+	$(TERMINAL) "cd kernel_memory && ./bin/kernel_memory ./configs/prueba_es3_4.config" &
+	sleep 2
+	$(TERMINAL) "cd kernel_scheduler && ./bin/kernel_scheduler ./configs/prueba_es3_4.config ES3_4.prc" &
+	sleep 2
+	$(TERMINAL) "cd swap && ./bin/swap ./configs/swap.config" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_1.config 256" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_2.config 256" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_3.config 256" &
+	$(TERMINAL) "cd memory_stick && ./bin/memory_stick ./configs/prueba_es3_4.config 256" &
+	sleep 1
+	$(TERMINAL) "cd cpu && ./bin/cpu ./configs/cpu.config CPU_1" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDIN" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDOUT" &
+	$(TERMINAL) "cd io && ./bin/io ./configs/io.config SLEEP" &
