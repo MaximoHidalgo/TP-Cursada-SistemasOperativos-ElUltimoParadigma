@@ -80,7 +80,7 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
 
 void planificador_mutex_create(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
 int planificador_mutex_lock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
-void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
+int planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
 
 bool planificador_encolar(t_estratega_planificacion* estratega, t_proceso_planificable* proceso);
 t_proceso_planificable* planificador_obtener_siguiente(t_estratega_planificacion* estratega);

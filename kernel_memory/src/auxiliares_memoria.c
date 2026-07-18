@@ -350,7 +350,9 @@ void* leer_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint3
         if (r_op == LECTURA) {
             int size_buf;
             void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
-            memcpy(buffer + leido, res, bytes_a_leer);
+            // El Memory Stick usa agregar_a_paquete, que prefija el payload con un int de tamanio.
+            // Asi que copiamos saltando ese int (res + sizeof(int)).
+            memcpy(buffer + leido, res + sizeof(int), bytes_a_leer);
             free(res);
         } else {
             log_error(ctx->logger, "Error al leer del memory stick");

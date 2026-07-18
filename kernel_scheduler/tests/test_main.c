@@ -29,7 +29,7 @@ static t_scheduler_context* crear_contexto_test(void) {
     ctx->estratega->cola_new = queue_create();
     ctx->estratega->colas = list_create();
     ctx->estratega->quantum_rr = 3;
-    ctx->estratega->socket_cpu = -1;
+    ctx->estratega->sockets_cpu = -1;
     ctx->estratega->socket_memoria = -1;
     pthread_mutex_init(&ctx->estratega->mutex_colas, NULL);
 

@@ -168,6 +168,7 @@ void procesar_actualizacion_contexto_handler(int cliente_fd, t_memory_context* c
     } else {
         log_error(ctx->logger, "Error: Intento de actualizar contexto de PID %d inexistente", contexto_actualizado.pid);
     }
+    enviar_mensaje("OK", cliente_fd);
 }
 
 void procesar_fetch_instruccion_handler(int cliente_fd, t_memory_context* ctx) {
@@ -252,10 +253,9 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
 
         if (requiere_compactacion(ctx, memoria_necesaria))
         {
-            t_paquete* paq = crear_paquete();
-            paq->codigo_operacion = SOLICITUD_COMPACTACION;
-            enviar_paquete(paq, cliente_fd);
-            eliminar_paquete(paq);
+            int op_sol = SOLICITUD_COMPACTACION;
+            send(cliente_fd, &op_sol, sizeof(int), 0);
+
                     
             pthread_mutex_unlock(&ctx->mutex_memoria);
             int res = recibir_operacion(cliente_fd);
@@ -300,10 +300,9 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
     t_segmento* nuevo_seg = crear_segmento(ctx, pid, id_seg, tamanio_seg, &needs_compaction);
                 
     if (needs_compaction) {
-        t_paquete* paq = crear_paquete();
-        paq->codigo_operacion = SOLICITUD_COMPACTACION;
-        enviar_paquete(paq, cliente_fd);
-        eliminar_paquete(paq);
+        int op_sol = SOLICITUD_COMPACTACION;
+        send(cliente_fd, &op_sol, sizeof(int), 0);
+
                     
         pthread_mutex_unlock(&ctx->mutex_memoria);
         int res = recibir_operacion(cliente_fd);
@@ -450,7 +449,13 @@ void procesar_leer_memoria_handler(int cliente_fd, t_memory_context* ctx){
 
     t_paquete* paq = crear_paquete();
     paq->codigo_operacion = MENSAJE; 
-    agregar_a_paquete(paq, data_leida, tamanio);
+    
+    // Evitamos usar agregar_a_paquete para no agregar el prefijo de tamaño adicional (4 bytes)
+    // ya que el Scheduler lee con recibir_buffer y espera los bytes limpios.
+    paq->buffer->size = tamanio;
+    paq->buffer->stream = malloc(tamanio);
+    memcpy(paq->buffer->stream, data_leida, tamanio);
+    
     enviar_paquete(paq, cliente_fd);
     eliminar_paquete(paq);
     free(data_leida);
@@ -597,6 +602,19 @@ void atender_cliente(void *arg) {
                 if (is_scheduler) pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
                 procesar_desconexion_cliente(cliente_fd, ctx);
                 return;
+            case AJUSTAR_PC_OOM: {
+                t_list* paq = recibir_paquete(cliente_fd);
+                uint32_t pid_aj = *(uint32_t*)list_get(paq, 0);
+                list_destroy_and_destroy_elements(paq, free);
+                t_programa* p = buscar_programa(ctx, pid_aj);
+                if (p) {
+                    pthread_mutex_lock(&ctx->mutex_programas);
+                    p->contexto->registros.PC--;
+                    pthread_mutex_unlock(&ctx->mutex_programas);
+                }
+                enviar_mensaje("OK", cliente_fd);
+                break;
+            }
             default:
                 log_warning(ctx->logger, "Operación desconocida: %d", cod_op);
                 close(cliente_fd);

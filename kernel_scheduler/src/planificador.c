@@ -623,14 +623,16 @@ int planificador_mutex_lock(t_estratega_planificacion* estratega, t_proceso_plan
     }
 }
 
-void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso) {
-    if (estratega == NULL || pcb == NULL || recurso == NULL) return;
+int planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso) {
+    if (estratega == NULL || pcb == NULL || recurso == NULL) return 0;
+
+    int debe_desalojar = 0;
 
     pthread_mutex_lock(&estratega->mutex_colas);
     t_mutex* mutex = dictionary_get(estratega->mutex_creados, recurso);
     if (mutex == NULL) {
         pthread_mutex_unlock(&estratega->mutex_colas);
-        return;
+        return 0;
     }
 
     pthread_mutex_lock(&mutex->mutex_semaforo);
@@ -683,8 +685,7 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
                              estratega->proceso_exec->pid, estratega->proceso_exec->cola_prioridad,
                              liberado->pid, liberado->cola_prioridad);
                     
-                    int opcode_interrupcion = INTERRUPCION_DESALOJO;
-                    planificador_enviar_interrupcion(estratega, opcode_interrupcion);
+                    debe_desalojar = 1;
                 }
             }
             //============================================
@@ -698,6 +699,7 @@ void planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_p
     }
     pthread_mutex_unlock(&mutex->mutex_semaforo);
     pthread_mutex_unlock(&estratega->mutex_colas);
+    return debe_desalojar;
 }
 
 void planificador_finalizar_todo_por_bsod(t_estratega_planificacion* estratega) {
@@ -927,10 +929,8 @@ int planificador_orquestar_compactacion_sincronica(t_estratega_planificacion* es
     }
 
     // 2. Autorizamos la compactación en Memoria enviando RESPUESTA_COMPACTACION
-    t_paquete* paq_resp = crear_paquete();
-    paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
-    enviar_paquete(paq_resp, estratega->socket_memoria);
-    eliminar_paquete(paq_resp);
+    int op_resp = RESPUESTA_COMPACTACION;
+    send(estratega->socket_memoria, &op_resp, sizeof(int), 0);
     
     // 3. Esperamos el resultado de la memoria luego de compactar (OK/ERROR)
     return esperar_respuesta_memoria(estratega->socket_memoria, estratega);
