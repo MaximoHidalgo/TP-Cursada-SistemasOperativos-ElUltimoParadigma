@@ -31,14 +31,7 @@ t_scheduler_context* iniciar_contexto(int argc, char* argv[]) {
     }
 
     char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level level = LOG_LEVEL_DEBUG;
-    if (log_level_str != NULL) {
-        if (string_equals_ignore_case(log_level_str, "TRACE")) level = LOG_LEVEL_TRACE;
-        else if (string_equals_ignore_case(log_level_str, "DEBUG")) level = LOG_LEVEL_DEBUG;
-        else if (string_equals_ignore_case(log_level_str, "INFO")) level = LOG_LEVEL_INFO;
-        else if (string_equals_ignore_case(log_level_str, "WARNING")) level = LOG_LEVEL_WARNING;
-        else if (string_equals_ignore_case(log_level_str, "ERROR")) level = LOG_LEVEL_ERROR;
-    }
+    t_log_level level = log_level_from_string(log_level_str);
 
     ctx->logger = log_create("Scheduler.log", "Scheduler", true, level);
 
@@ -73,10 +66,19 @@ void iniciar_planificacion(t_scheduler_context* ctx) {
     t_proceso_planificable* pcb_inicial = malloc(sizeof(t_proceso_planificable));
     pcb_inicial->pid = 0; 
     pcb_inicial->cola_prioridad = 0;
+    pcb_inicial->prioridad_original = pcb_inicial->cola_prioridad; // Que asumo será 0 (máxima)
+
     pcb_inicial->bloqueo_id = 0;
     
+    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
     enviar_peticion_crear_proceso(pcb_inicial->pid, ctx->path_script_inicial, ctx->socket_memoria);
     
+    int resp_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+    if (resp_mem == MENSAJE) {
+        int s; char* msj = recibir_buffer(&s, ctx->socket_memoria); free(msj);
+    }
+    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+
     planificador_encolar_new(ctx->estratega, pcb_inicial);
     planificador_admitir_a_ready(ctx->estratega);
 }
@@ -110,13 +112,3 @@ void iniciar_servidor_clientes(t_scheduler_context* ctx) {
     }
 }
 
-void limpiar_contexto(t_scheduler_context* ctx) {
-    if (ctx->socket_escucha != -1) close(ctx->socket_escucha);
-    if (ctx->socket_memoria != -1) close(ctx->socket_memoria);
-
-    if (ctx->estratega != NULL) destruir_estratega_planificacion(ctx->estratega);
-    if (ctx->config != NULL) config_destroy(ctx->config);
-    if (ctx->logger != NULL) log_destroy(ctx->logger);
-
-    free(ctx);
-}

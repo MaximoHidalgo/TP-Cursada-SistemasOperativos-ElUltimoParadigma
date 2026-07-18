@@ -1,5 +1,19 @@
 #include "atender_cliente_scheduler.h"
 
+static const char* obtener_nombre_syscall(int tipo_syscall) {
+    switch (tipo_syscall) {
+        case SYSCALL_SLEEP: return "SLEEP";
+        case SYSCALL_STDOUT: return "STDOUT";
+        case SYSCALL_STDIN: return "STDIN";
+        case SYSCALL_MUTEX_CREATE: return "MUTEX_CREATE";
+        case SYSCALL_MUTEX_LOCK: return "MUTEX_LOCK";
+        case SYSCALL_MUTEX_UNLOCK: return "MUTEX_UNLOCK";
+        case SYSCALL_MEM_ALLOC: return "MEM_ALLOC";
+        case SYSCALL_MEM_FREE: return "MEM_FREE";
+        default: return "UNKNOWN";
+    }
+}
+
 void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
     t_proceso_planificable* proceso_a_ejecutar = planificador_despachar_siguiente(ctx->estratega);
     
@@ -32,7 +46,15 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
 
     if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
         log_info(ctx->logger, "## CPU %s Conectada", mensaje);
-        ctx->estratega->socket_cpu = cliente_fd;
+        //ctx->estratega->socket_cpu = cliente_fd;
+        //despachar_proceso_a_cpu(ctx, cliente_fd);
+
+        // 1. Agregamos el socket a la lista de CPUs
+        int* nuevo_socket_cpu = malloc(sizeof(int));
+        *nuevo_socket_cpu = cliente_fd;
+        list_add(ctx->estratega->sockets_cpu, nuevo_socket_cpu);
+        
+        // Despachamos a esta CPU que se acaba de conectar
         despachar_proceso_a_cpu(ctx, cliente_fd);
     } else {
         t_interfaz_io* interfaz = buscar_interfaz_por_socket(ctx->estratega, cliente_fd);
@@ -40,8 +62,15 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
             // Mensaje de una IO ya registrada
             if (string_equals_ignore_case(mensaje, "OK")) {
                 planificador_io_terminada(ctx->estratega, cliente_fd);
-                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
-                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+
+                // 2 y 3. Verificamos la lista e intentamos despachar
+                if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
+                    for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+                        int* fd_cpu = list_get(ctx->estratega->sockets_cpu, i);
+                        if (ctx->estratega->proceso_exec == NULL) {
+                            despachar_proceso_a_cpu(ctx, *fd_cpu);
+                        }
+                    }
                 }
             } else {
                 // Es el texto leido por STDIN
@@ -53,21 +82,31 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
                 if (proceso != NULL) {
                     t_paquete* paq_write = crear_paquete();
                     paq_write->codigo_operacion = ESCRIBIR_MEMORIA;
+                    agregar_a_paquete(paq_write, &(proceso->pid), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, &(proceso->io_dir_fisica), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, &(proceso->io_tamanio), sizeof(uint32_t));
                     agregar_a_paquete(paq_write, mensaje, proceso->io_tamanio);
+                    
+                    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
                     enviar_paquete(paq_write, ctx->socket_memoria);
                     eliminar_paquete(paq_write);
                     
-                    int r_mem = recibir_operacion(ctx->socket_memoria);
+                    int r_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
                     if (r_mem == MENSAJE) {
                         int s_m; char* msj_m = recibir_buffer(&s_m, ctx->socket_memoria); free(msj_m);
                     }
+                    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 }
                 
                 planificador_io_terminada(ctx->estratega, cliente_fd);
-                if (ctx->estratega->proceso_exec == NULL && ctx->estratega->socket_cpu != -1) {
-                    despachar_proceso_a_cpu(ctx, ctx->estratega->socket_cpu);
+
+                if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
+                    for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+                        int* fd_cpu = list_get(ctx->estratega->sockets_cpu, i);
+                        if (ctx->estratega->proceso_exec == NULL) {
+                            despachar_proceso_a_cpu(ctx, *fd_cpu);
+                        }
+                    }
                 }
             }
         } else {
@@ -101,15 +140,19 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
         // Pedimos leer a memoria
         t_paquete* paq_mem = crear_paquete();
         paq_mem->codigo_operacion = LEER_MEMORIA;
+        agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, &dir_fisica, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, &tamanio, sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
         
-        int op = recibir_operacion(ctx->socket_memoria);
+        int op = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         if (op == MENSAJE) {
             int size;
             void* buf = recibir_buffer(&size, ctx->socket_memoria);
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
             
             int op_io = PETICION_IO;
             send(interfaz->socket_fd, &op_io, sizeof(int), 0);
@@ -125,6 +168,8 @@ static void manejar_io_stdout(t_scheduler_context* ctx, t_list* paquete, uint32_
             send(interfaz->socket_fd, dummy, len, 0);
             free(dummy);
             free(buf);
+        } else {
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
         }
     }
     planificador_atender_peticion_io(ctx->estratega, ctx->estratega->proceso_exec, "STDOUT");
@@ -154,6 +199,9 @@ void procesar_syscall_io(int cliente_fd, t_scheduler_context* ctx, int tipo_sysc
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
     
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: %s", pid, obtener_nombre_syscall(tipo_syscall));
+    
     // Guard Clause: Validación del proceso actual
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
         despachar_proceso_a_cpu(ctx, cliente_fd);
@@ -180,16 +228,24 @@ void procesar_syscall_io(int cliente_fd, t_scheduler_context* ctx, int tipo_sysc
 void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     if (ctx->estratega->proceso_exec != NULL) {
-        log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SUCCESS", ctx->estratega->proceso_exec->pid);
+        // Log obligatorio del TP
+        log_info(ctx->logger, "## (%d) - Solicitó syscall: EXIT", ctx->estratega->proceso_exec->pid);
+        
+        log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de SUCCESS", ctx->estratega->proceso_exec->pid);
         ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
         
         t_paquete* paq_liberar = crear_paquete();
         paq_liberar->codigo_operacion = LIBERAR_PROCESO;
         agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_liberar, ctx->socket_memoria);
+        pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+        
         eliminar_paquete(paq_liberar);
         
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+        planificador_admitir_a_ready(ctx->estratega);
     }
     despachar_proceso_a_cpu(ctx, cliente_fd);
     list_destroy_and_destroy_elements(paquete, free);
@@ -200,6 +256,9 @@ void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_s
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
     char* recurso = list_get(paquete, 1);
+
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: %s", pid, obtener_nombre_syscall(tipo_syscall));
 
     // Guard Clause
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
@@ -237,6 +296,9 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
     t_list* paquete = recibir_paquete(cliente_fd);
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
+    
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: %s", pid, obtener_nombre_syscall(tipo_syscall));
 
     // Guard Clause: Validación del proceso actual
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
@@ -254,41 +316,52 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, tamanio_ptr, sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
 
-        int respuesta = recibir_operacion(ctx->socket_memoria);
-        
+        int respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+    
         if (respuesta == SOLICITUD_COMPACTACION) {
-            log_info(ctx->logger, "Compactación requerida. Avisando a Memoria que puede proceder...");
+            log_info(ctx->logger, "## Inicio de compactación"); // Log obligatorio del TP
+            
+            // Como la CPU ya desalojó el proceso y está inactiva, autorizamos inmediatamente a Memoria
             t_paquete* paq_resp = crear_paquete();
             paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
             enviar_paquete(paq_resp, ctx->socket_memoria);
             eliminar_paquete(paq_resp);
             
-            // Esperamos la respuesta final de la creación del segmento post-compactación
-            respuesta = recibir_operacion(ctx->socket_memoria);
+            // Esperamos a que termine de compactar y nos devuelva el resultado real (OK/ERROR)
+            respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         }
-
         if (respuesta == MENSAJE) {
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);
             if (string_equals_ignore_case(msj, "OK")) {
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 devolver_ejecucion_a_cpu(ctx, cliente_fd);
             } else {
-                log_error(ctx->logger, "Out of memory. Finalizando proceso %d", pid);
-                ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
-                
-                t_paquete* paq_liberar = crear_paquete();
-                paq_liberar->codigo_operacion = LIBERAR_PROCESO;
-                agregar_a_paquete(paq_liberar, &pid, sizeof(uint32_t));
-                enviar_paquete(paq_liberar, ctx->socket_memoria);
-                eliminar_paquete(paq_liberar);
+                log_info(ctx->logger, "## Out of Memory para proceso %d. Reencolando en NEW para reintento.", pid);
 
-                planificador_liberar_exec(ctx->estratega, pid);
+                // No matamos al proceso: lo devolvemos a cola_new para que el
+                // planificador de mediano plazo lo re-admita cuando haya espacio
+                // (tras la suspensión y swapeo de otros procesos).
+                t_proceso_planificable* proceso_oom = ctx->estratega->proceso_exec;
+                ctx->estratega->proceso_exec = NULL;
+                proceso_oom->estado = ESTADO_PROCESO_NEW;
+
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+
+                pthread_mutex_lock(&ctx->estratega->mutex_colas);
+                queue_push(ctx->estratega->cola_new, proceso_oom);
+                pthread_mutex_unlock(&ctx->estratega->mutex_colas);
+
                 despachar_proceso_a_cpu(ctx, cliente_fd);
             }
             free(msj);
+        } else {
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
         }
     } else if (tipo_syscall == SYSCALL_MEM_FREE) {
         uint32_t* id_seg_ptr = list_get(paquete, 1);
@@ -297,17 +370,25 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
         paq_mem->codigo_operacion = ELIMINAR_SEGMENTO;
         agregar_a_paquete(paq_mem, &pid, sizeof(uint32_t));
         agregar_a_paquete(paq_mem, id_seg_ptr, sizeof(uint32_t));
+        
+        pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
         enviar_paquete(paq_mem, ctx->socket_memoria);
         eliminar_paquete(paq_mem);
 
-        int respuesta = recibir_operacion(ctx->socket_memoria);
+        int respuesta = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
         if (respuesta == MENSAJE) {
             int size;
             char* msj = recibir_buffer(&size, ctx->socket_memoria);
             if (string_equals_ignore_case(msj, "OK")) {
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
                 devolver_ejecucion_a_cpu(ctx, cliente_fd);
+            } else {
+                pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
             }
             free(msj);
+        }else{
+            pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+            log_error(ctx->logger,"Error desconocido al intentar liberar el segmento %d del PID %d.",*id_seg_ptr,pid);
         }
     }
     
@@ -334,6 +415,9 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     uint32_t* prioridad_ptr = list_get(paquete, 2);
     uint32_t prioridad = *prioridad_ptr;
 
+    // Log obligatorio del TP
+    log_info(ctx->logger, "## (%d) - Solicitó syscall: INIT_PROC", pid);
+
     // Guard Clause
     if (ctx->estratega->proceso_exec == NULL || ctx->estratega->proceso_exec->pid != pid) {
         despachar_proceso_a_cpu(ctx, cliente_fd);
@@ -346,11 +430,19 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
 
     log_info(ctx->logger, "## Proceso %d solicita crear nuevo proceso con script %s", pid, script_path);
 
+    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
     enviar_peticion_crear_proceso(nuevo_pid, script_path, ctx->socket_memoria);
+
+    int resp_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+    if (resp_mem == MENSAJE) {
+        int s; char* msj = recibir_buffer(&s, ctx->socket_memoria); free(msj);
+    }
+    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
 
     t_proceso_planificable* pcb_nuevo = malloc(sizeof(t_proceso_planificable));
     pcb_nuevo->pid = nuevo_pid;
     pcb_nuevo->cola_prioridad = prioridad;
+    pcb_nuevo->prioridad_original = prioridad;  // inicializar la prioridad original
     pcb_nuevo->bloqueo_id = 0;
 
     planificador_encolar_new(ctx->estratega, pcb_nuevo);
@@ -359,6 +451,230 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     devolver_ejecucion_a_cpu(ctx, cliente_fd); // Sigue en EXEC
 
     list_destroy_and_destroy_elements(paquete, free);
+}
+
+
+// 1. Definimos la firma profesional 
+//typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);
+
+// 2. Aislamos la lógica compleja del SEG_FAULT en su propio handler
+int handler_desalojo_compactacion(int fd, t_scheduler_context* ctx) {
+    t_list* paquete = recibir_paquete(fd);
+    
+    if (ctx->estratega->proceso_exec != NULL) {
+        t_proceso_planificable* desalojado = ctx->estratega->proceso_exec;
+        desalojado->estado = ESTADO_PROCESO_READY;
+        
+        // El TP exige ponerlo al PRINCIPIO de la cola
+        t_cola_planificacion* cola = obtener_cola_planificacion(ctx->estratega->colas, desalojado->cola_prioridad);
+        
+        // Como usamos t_queue de commons (que mete al final), accedemos a su lista interna 'elements'
+        // y lo insertamos a la fuerza en el índice 0.
+        //el tipo de procesos es: t_queue* procesos;, pero t_queue contiene una lista, lo que hago es aprovechar eso y romper el
+        //encapsulamiento de la cola y manipulando su lista interna, para meter al proceso al principio de la cola ready
+        //por que hago esto de esta forma?: porque la biblioteca de t_queue no me proporciona ninguna funcion de colocarlo al 
+        //principo de la cola, solo el 	queue_push que lo agrega al final, pero no es algo que el enunciado diga ante este evento
+        list_add_in_index(cola->procesos->elements, 0, desalojado);
+        
+        ctx->estratega->proceso_exec = NULL;
+    }
+    
+    // Ahora que la CPU está libre, LE DAMOS EL OK A MEMORIA para que compacte
+    t_paquete* paq_resp = crear_paquete();
+    paq_resp->codigo_operacion = RESPUESTA_COMPACTACION;
+    enviar_paquete(paq_resp, ctx->socket_memoria);
+    eliminar_paquete(paq_resp);
+    
+    list_destroy_and_destroy_elements(paquete, free);
+    return 1;
+}
+
+int handler_interrupcion_desalojo(int fd, t_scheduler_context* ctx) {
+    // Recibimos el paquete que nos mandó la CPU
+    t_list* paquete = recibir_paquete(fd);
+    
+    if (ctx->estratega->proceso_exec != NULL) {
+        t_proceso_planificable* desalojado = ctx->estratega->proceso_exec;
+        
+        // 1. Lo pasamos a estado READY
+        desalojado->estado = ESTADO_PROCESO_READY;
+        
+        // 2. Lo reencolamos en la cola multinivel que le corresponde
+        encolar_en_cola_ready(ctx->estratega->colas, desalojado);
+        
+        // 3. Liberamos el puntero EXEC para que la CPU quede libre para el Scheduler
+        ctx->estratega->proceso_exec = NULL;
+        
+        // 4. Espiamos quién es el nuevo proceso más prioritario (el culpable) para el log
+        t_proceso_planificable* culpable = NULL;
+        for (int i = 0; i < list_size(ctx->estratega->colas); i++) {
+            t_cola_planificacion* cola = list_get(ctx->estratega->colas, i);
+            if (!queue_is_empty(cola->procesos)) {
+                culpable = list_get(cola->procesos->elements, 0);
+                break;
+            }
+        }
+        
+        if (culpable != NULL) {
+            // LOG MÍNIMO Y OBLIGATORIO EXACTO
+            log_info(ctx->logger, "## (%d) Prioridad: %d - Desalojado por cola más prioritaria por el proceso %d con prioridad %d", 
+                     desalojado->pid, desalojado->cola_prioridad, 
+                     culpable->pid, culpable->cola_prioridad);
+        }
+    }
+    
+    // 5. Mandamos a ejecutar a ese nuevo proceso que lidera la cola
+    despachar_proceso_a_cpu(ctx, fd);
+    
+    list_destroy_and_destroy_elements(paquete, free);
+    return 1;
+}
+
+int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
+    t_list* paquete = recibir_paquete(cliente_fd);
+    
+    if (ctx->estratega->proceso_exec != NULL) {
+        log_info(ctx->logger, "## (%d) finalizó su ejecución con motivo de SEG_FAULT", ctx->estratega->proceso_exec->pid);
+        ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
+
+        t_paquete* paq_liberar = crear_paquete();
+        paq_liberar->codigo_operacion = LIBERAR_PROCESO;
+        agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
+        enviar_paquete(paq_liberar, ctx->socket_memoria);
+        eliminar_paquete(paq_liberar);
+
+        planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+    }
+    
+    despachar_proceso_a_cpu(ctx, cliente_fd);
+    list_destroy_and_destroy_elements(paquete, free);
+    
+    return 1; // Retornamos 1 para indicar que el hilo debe continuar escuchando
+}
+
+int handler_respuesta_compactacion(int fd, t_scheduler_context* ctx) {
+    log_info(ctx->logger, "## Fin de compactación");
+    
+    // Primero intentamos des-suspender procesos (ahora que la memoria está contigua)
+    planificador_intentar_desuspender(ctx->estratega);
+    
+    if (!list_is_empty(ctx->estratega->sockets_cpu)) {
+        for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+            int* fd = list_get(ctx->estratega->sockets_cpu, i);
+            if(fd != NULL && *fd != -1) {
+                despachar_proceso_a_cpu(ctx, *fd);
+            }
+        }
+    }
+    return 1;
+}
+
+int handler_mem_expandida(int cliente_fd, t_scheduler_context* ctx){
+    //recorrer todos procesos supendidos
+    //    recorrer por orden de prioridad
+    //    ir desuspendiendo
+    //    proprocesos suspendidos con misma prioridad: se evalua primero el que mas tiempo lleve suspendido
+    
+    // Registramos que memoria tiene más espacio y luego:
+    // 1. Simplemente logeamos el evento para cumplir y dejar rastro
+    log_info(ctx->logger, "Memoria expandida: Se detectó un nuevo Memory Stick.");
+    // 2. Disparamos la planificación de mediano plazo
+    planificador_intentar_desuspender(ctx->estratega);
+    return 1;
+}
+
+int handler_mem_corrupta(int cliente_fd, t_scheduler_context* ctx){
+    planificador_finalizar_todo_por_bsod(ctx->estratega);
+    log_error(ctx->logger, "Finalizando Kernel Scheduler con motivo de Blue Screen of Death (BSOD).");
+    limpiar_contexto(ctx);
+    exit(EXIT_FAILURE);
+}
+
+
+// --- WRAPPERS PARA CADA OPERACIÓN ---
+// Retornan 1 para indicar éxito continuo.
+
+int handler_mensaje(int fd, t_scheduler_context* ctx) { procesar_mensaje_handshake(fd, ctx); return 1; }
+int handler_exit(int fd, t_scheduler_context* ctx) { procesar_syscall_exit(fd, ctx); return 1; }
+int handler_init_proc(int fd, t_scheduler_context* ctx) { procesar_syscall_init_proc(fd, ctx); return 1; }
+int handler_fin_quantum(int fd, t_scheduler_context* ctx) { procesar_fin_quantum(fd, ctx); return 1; }
+
+// I/O
+int handler_sleep(int fd, t_scheduler_context* ctx) { procesar_syscall_io(fd, ctx, SYSCALL_SLEEP); return 1; }
+int handler_stdout(int fd, t_scheduler_context* ctx) { procesar_syscall_io(fd, ctx, SYSCALL_STDOUT); return 1; }
+int handler_stdin(int fd, t_scheduler_context* ctx) { procesar_syscall_io(fd, ctx, SYSCALL_STDIN); return 1; }
+
+// Mutex
+int handler_mutex_create(int fd, t_scheduler_context* ctx) { procesar_syscall_mutex(fd, ctx, SYSCALL_MUTEX_CREATE); return 1; }
+int handler_mutex_lock(int fd, t_scheduler_context* ctx) { procesar_syscall_mutex(fd, ctx, SYSCALL_MUTEX_LOCK); return 1; }
+int handler_mutex_unlock(int fd, t_scheduler_context* ctx) { procesar_syscall_mutex(fd, ctx, SYSCALL_MUTEX_UNLOCK); return 1; }
+
+// Memoria
+int handler_mem_alloc(int fd, t_scheduler_context* ctx) { procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_ALLOC); return 1; }
+int handler_mem_free(int fd, t_scheduler_context* ctx) { 
+    procesar_syscall_memoria(fd, ctx, SYSCALL_MEM_FREE); 
+    // Luego de que se procesó el free y memoria liberó espacio, intentamos des-suspender
+    planificador_intentar_desuspender(ctx->estratega);
+    return 1; }
+
+//int handler_mem_expandida(int fd, t_scheduler_context* ctx) { procesar_memoria_expandida(fd, ctx, SYSCALL_MEM_ALLOC); return 1; }
+//int handler_mem_corrupta(int fd, t_scheduler_context* ctx) { procesar_corrupcion_memoria(fd, ctx, SYSCALL_MEM_FREE); return 1; }
+
+
+// Creamos un array estático de tamaño 256 (suficiente para cubrir todos los opcodes).
+// Los índices que no declaremos se inicializarán automáticamente en NULL.
+static const handler_t tabla_despacho[256] = {
+    [MENSAJE]                    = handler_mensaje,
+    [SYSCALL_EXIT]               = handler_exit,
+    [SYSCALL_SLEEP]              = handler_sleep,
+    [SYSCALL_STDOUT]             = handler_stdout,
+    [SYSCALL_STDIN]              = handler_stdin,
+    [SYSCALL_MUTEX_CREATE]       = handler_mutex_create,
+    [SYSCALL_MUTEX_LOCK]         = handler_mutex_lock,
+    [SYSCALL_MUTEX_UNLOCK]       = handler_mutex_unlock,
+    [SYSCALL_SEG_FAULT]          = handler_seg_fault,
+    [SYSCALL_MEM_ALLOC]          = handler_mem_alloc,
+    [SYSCALL_MEM_FREE]           = handler_mem_free,
+    [SYSCALL_INIT_PROC]          = handler_init_proc,
+    [INTERRUPCION_QUANTUM]       = handler_fin_quantum,
+    [MEMORIA_EXPANDIDA]          = handler_mem_expandida, 
+	[CORRUPCION_MEMORIA]         = handler_mem_corrupta,
+    [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion,
+    [INTERRUPCION_DESALOJO]      = handler_interrupcion_desalojo,
+    [DESALOJO_COMPACTACION]      = handler_desalojo_compactacion
+};
+
+
+//Por último, tu función orquestadora queda extremadamente simple y segura. Comprueba 
+//límites para evitar un Segmentation Fault, busca la función en la tabla mediante el 
+//índice y la ejecuta [cite: 450].
+
+int atenderRespuesta(int cliente_fd, t_scheduler_context* ctx, int mensaje_cliente) {
+    // 1. Manejo de desconexión
+    if (mensaje_cliente == -1) {
+        log_warning(ctx->logger, "El cliente se desconectó.");
+        return -1; // -1 indica que se debe cortar la conexión
+    }
+
+    // 2. Validación de seguridad (Bounds Checking) y función no mapeada
+    if (mensaje_cliente < 0 || mensaje_cliente >= 256 || tabla_despacho[mensaje_cliente] == NULL) {
+        log_warning(ctx->logger, "No entiendo el mensaje o código de operación: %d", mensaje_cliente);
+        return -1; // -1 indica error / cortar conexión
+    }
+
+    // 3. ¡Magia! Ejecuta el handler correspondiente en O(1)
+    return tabla_despacho[mensaje_cliente](cliente_fd, ctx);
+}
+
+void remover_cpu_de_lista(t_estratega_planificacion* estratega, int fd) {
+    if (estratega->sockets_cpu == NULL) return;
+    for (int i = 0; i < list_size(estratega->sockets_cpu); i++) {
+        int* fd_ptr = list_get(estratega->sockets_cpu, i);
+        if (fd_ptr != NULL && *fd_ptr == fd) {
+            list_remove_and_destroy_element(estratega->sockets_cpu, i, free);
+            break;
+        }
+    }
 }
 
 void atender_cliente_scheduler(void* arg) {
@@ -370,60 +686,25 @@ void atender_cliente_scheduler(void* arg) {
     while (1) {
         int mensaje_cliente = recibir_operacion(cliente_fd);
         
-        switch(mensaje_cliente) {
-            case MENSAJE:
-                procesar_mensaje_handshake(cliente_fd, ctx);
-                break;
-            case SYSCALL_EXIT:
-                procesar_syscall_exit(cliente_fd, ctx);
-                break;
-            case SYSCALL_SLEEP:
-            case SYSCALL_STDOUT:
-            case SYSCALL_STDIN:
-                procesar_syscall_io(cliente_fd, ctx, mensaje_cliente);
-                break;
-            case SYSCALL_MUTEX_CREATE:
-            case SYSCALL_MUTEX_LOCK:
-            case SYSCALL_MUTEX_UNLOCK:
-                procesar_syscall_mutex(cliente_fd, ctx, mensaje_cliente);
-                break;
-            case SYSCALL_SEG_FAULT:
-            {
-                t_list* paquete = recibir_paquete(cliente_fd);
-                if (ctx->estratega->proceso_exec != NULL) {
-                    log_info(ctx->logger, "## Finaliza el proceso %d - Motivo: SEG_FAULT", ctx->estratega->proceso_exec->pid);
-                    ctx->estratega->proceso_exec->estado = ESTADO_PROCESO_EXIT;
-                    
-                    t_paquete* paq_liberar = crear_paquete();
-                    paq_liberar->codigo_operacion = LIBERAR_PROCESO;
-                    agregar_a_paquete(paq_liberar, &(ctx->estratega->proceso_exec->pid), sizeof(uint32_t));
-                    enviar_paquete(paq_liberar, ctx->socket_memoria);
-                    eliminar_paquete(paq_liberar);
-                    
-                    planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
-                }
-                despachar_proceso_a_cpu(ctx, cliente_fd);
-                list_destroy_and_destroy_elements(paquete, free);
-                break;
-            }
-            case SYSCALL_MEM_ALLOC:
-            case SYSCALL_MEM_FREE:
-                procesar_syscall_memoria(cliente_fd, ctx, mensaje_cliente);
-                break;
-            case SYSCALL_INIT_PROC:
-                procesar_syscall_init_proc(cliente_fd, ctx);
-                break;
-            case FIN_DE_QUANTUM:
-                procesar_fin_quantum(cliente_fd, ctx);
-                break;
-            case -1:
-                log_warning(ctx->logger, "El cliente se desconectó.");
-                close(cliente_fd);
-                return;
-            default:
-                log_warning(ctx->logger, "No entiendo el mensaje o código de operación: %d", mensaje_cliente);
-                close(cliente_fd);
-                return;
+        // Ejecutamos la respuesta
+        int status = atenderRespuesta(cliente_fd, ctx, mensaje_cliente);
+        
+        // Si la tabla o la validación retornan -1, rompemos el ciclo y cerramos.
+        if (status == -1) {
+            remover_cpu_de_lista(ctx->estratega, cliente_fd);
+            close(cliente_fd);
+            break;
         }
     }
+}
+
+void limpiar_contexto(t_scheduler_context* ctx) {
+    if (ctx->socket_escucha != -1) close(ctx->socket_escucha);
+    if (ctx->socket_memoria != -1) close(ctx->socket_memoria);
+
+    if (ctx->estratega != NULL) destruir_estratega_planificacion(ctx->estratega);
+    if (ctx->config != NULL) config_destroy(ctx->config);
+    if (ctx->logger != NULL) log_destroy(ctx->logger);
+
+    free(ctx);
 }

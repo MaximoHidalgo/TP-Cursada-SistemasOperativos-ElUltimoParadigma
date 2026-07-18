@@ -8,11 +8,16 @@ typedef struct {
     t_memory_context* ctx;
 } t_args_hilo_cliente;
 
-void procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx);
+void notificar_memoria_expandida(int scheduler_socket);
+bool procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx);
 void procesar_crear_proceso_handler(int cliente_fd, t_memory_context* ctx);
 void procesar_solicitud_contexto_handler(int cliente_fd, t_memory_context* ctx);
 void procesar_actualizacion_contexto_handler(int cliente_fd, t_memory_context* ctx);
 void procesar_fetch_instruccion_handler(int cliente_fd, t_memory_context* ctx);
+void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx);
+void procesar_eliminar_segmento_handler(int cliente_fd, t_memory_context* ctx);
+void procesar_consultar_espacio_libre_handler(int cliente_fd, t_memory_context* ctx);
+void procesar_desconexion_cliente(int cliente_fd, t_memory_context* ctx);
 void atender_cliente(void *arg);
 
 #endif

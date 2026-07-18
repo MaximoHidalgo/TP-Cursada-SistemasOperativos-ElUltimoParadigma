@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include "colas.h"
+//#include "estructuras_scheduler.h" //agregado para implemencion de ciertas funciones
 #include <stdlib.h>
 #include <string.h>
 #include <commons/string.h>
@@ -23,6 +24,8 @@ typedef enum {
 typedef struct {
     t_algoritmo_planificacion algoritmo;
     t_queue* cola_new;
+    t_list* cola_susp_ready;//atributo agregado para tratar a los suspendidos ready
+    t_list* cola_susp_blocked; // atributo agregado para tratar a los suspendidos bloqueados
     t_list* colas;
     t_proceso_planificable* proceso_exec;
     bool desalojo_entre_colas;
@@ -31,8 +34,10 @@ typedef struct {
     t_dictionary* mutex_creados; 
     pthread_mutex_t mutex_colas;
     t_log* logger;
-    int socket_cpu;
+    //int socket_cpu; //comentado porque no me permite trabajar con varias cpus
+    t_list* sockets_cpu; //<--atributo agregado para soportar varias cpus
     int socket_memoria;
+    pthread_mutex_t mutex_socket_memoria;
     int suspension_timeout;
 } t_estratega_planificacion;
 
@@ -40,6 +45,7 @@ typedef struct {
     char* nombre;
     int tomado;
     uint32_t pid_duenio;
+    t_proceso_planificable* pcb_duenio; // <--- NUEVO CAMPO AGREGADO: Razon: para corregir esto de la herencia de prioridades, cambiando su prioridad de forma directa
     t_queue* cola_bloqueados;
     pthread_mutex_t mutex_semaforo;
 } t_mutex;
@@ -57,6 +63,8 @@ typedef struct {
     t_queue* cola_bloqueados; // Cola de t_solicitud_io*
     pthread_mutex_t mutex_interfaz;
 } t_interfaz_io;
+
+bool comparador_procesos_suspendidos(void* a, void* b); //funcion agregada para evaluar cual desuspender
 
 t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log* logger);
 void destruir_estratega_planificacion(t_estratega_planificacion* estratega);
@@ -87,5 +95,9 @@ void planificador_liberar_exec(t_estratega_planificacion* estratega, int pid);
 bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estratega, t_proceso_planificable* proceso, int socket_cpu);
 
 const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo);
-
+void planificador_finalizar_todo_por_bsod(t_estratega_planificacion*);
+void planificador_intentar_desuspender(t_estratega_planificacion* estratega);
+void planificador_enviar_interrupcion(t_estratega_planificacion* estratega, int opcode_interrupcion);
+int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega);
+int planificador_orquestar_compactacion_sincronica(t_estratega_planificacion* estratega);
 #endif

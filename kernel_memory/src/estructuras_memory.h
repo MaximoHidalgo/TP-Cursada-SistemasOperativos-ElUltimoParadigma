@@ -7,11 +7,19 @@
 #include <commons/collections/list.h>
 #include <commons/bitarray.h>
 #include <pthread.h>
+#include "utils/dominio/estructuras.h"
 
 typedef struct {
     uint32_t base;
     uint32_t limite;
 } t_hueco_libre;
+
+typedef struct {
+    int pid;
+    char** instrucciones;
+    int cantidad_instrucciones;
+    t_contexto_ejecucion* contexto; 
+} t_programa;
 
 typedef struct {
     int id;
@@ -28,6 +36,7 @@ typedef struct {
     int socket_servidor;
     t_list* programas;
     int instruction_delay;
+    int compaction_delay;
     char* base_path;
     pthread_mutex_t mutex_programas;
     
@@ -39,6 +48,9 @@ typedef struct {
     t_list* huecos_libres;
     t_list* segmentos_globales;
     pthread_mutex_t mutex_memoria;
+
+    int scheduler_socket;
+    pthread_mutex_t mutex_scheduler_socket;
     
     t_list* memory_sticks;
     

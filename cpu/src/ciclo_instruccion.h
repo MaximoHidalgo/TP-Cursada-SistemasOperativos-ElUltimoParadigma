@@ -1,11 +1,17 @@
 #ifndef CICLO_INSTRUCCION_H_
 #define CICLO_INSTRUCCION_H_
 
-#include "estructuras.h"
+#include <commons/string.h>
 #include "estructuras_cpu.h"
+#include "cpu_memoria.h"
+#include "instrucciones.h"
+#include <errno.h>
+#include "cpu_utils.h"
 
 void ejecutar_ciclo_de_instruccion(t_contexto_ejecucion* contexto, t_cpu_context* ctx);
-void notificar_desalojo_a_scheduler(uint32_t pid, int motivo_desalojo, t_cpu_context* ctx);
-void notificar_syscall_sleep_a_scheduler(uint32_t pid, uint32_t tiempo_sleep, t_cpu_context* ctx);
+char* fetch(t_contexto_ejecucion* contexto, t_cpu_context* ctx);
+t_instruccion* decode(char* instruccion_texto);
+int execute(t_instruccion* instruccion, t_contexto_ejecucion* contexto, t_cpu_context* ctx);
+int chequear_interrupciones(t_cpu_context* ctx, uint32_t pid_actual);
 
 #endif //CICLO_INSTRUCCION_H_

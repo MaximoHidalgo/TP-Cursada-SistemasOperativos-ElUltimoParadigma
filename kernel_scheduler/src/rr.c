@@ -20,6 +20,8 @@ static void* controlar_quantum(void* args_void) {
     if (sigue_en_exec) {
         t_paquete* paquete = crear_paquete();
         paquete->codigo_operacion = INTERRUPCION_QUANTUM;
+        
+        agregar_a_paquete(paquete, &(args->pid), sizeof(uint32_t));
 
         enviar_paquete(paquete, args->socket_cpu);
 

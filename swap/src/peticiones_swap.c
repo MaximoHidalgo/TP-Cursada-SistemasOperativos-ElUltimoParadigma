@@ -7,14 +7,11 @@ void procesar_peticion_lectura(t_swap_context* ctx) {
     
     void* buffer = malloc(ctx->block_size);
     
-    fseek(ctx->swap_file, numero_bloque * ctx->block_size, SEEK_SET);
-    fread(buffer, 1, ctx->block_size, ctx->swap_file);
+    leer_bloque_swap(ctx->swap_file, numero_bloque, ctx->block_size, buffer);
     
-    t_paquete* paq = crear_paquete();
-    paq->codigo_operacion = LECTURA;
-    agregar_a_paquete(paq, buffer, ctx->block_size);
-    enviar_paquete(paq, ctx->socket_kernel_memory);
-    eliminar_paquete(paq);
+    enviar_int(ctx->socket_kernel_memory, LECTURA);
+    enviar_int(ctx->socket_kernel_memory, ctx->block_size);
+    send(ctx->socket_kernel_memory, buffer, ctx->block_size, 0);
     
     free(buffer);
 }
@@ -27,12 +24,22 @@ void procesar_peticion_escritura(t_swap_context* ctx) {
     
     log_info(ctx->logger, "## Escritura del bloque: %d", numero_bloque);
     
-    fseek(ctx->swap_file, numero_bloque * ctx->block_size, SEEK_SET);
-    fwrite(buffer, 1, ctx->block_size, ctx->swap_file);
-    
-    // Es importante hacer flush o fclose no, pero un flush asegura que se guarde en disco
-    fflush(ctx->swap_file);
+    escribir_bloque_swap(ctx->swap_file, numero_bloque, ctx->block_size, buffer);
     
     enviar_mensaje("OK", ctx->socket_kernel_memory);
     free(buffer);
+}
+
+void escribir_bloque_swap(FILE* archivo,int numero_bloque,int block_size,void* buffer){
+    fseek(archivo, numero_bloque * block_size, SEEK_SET);
+
+    fwrite(buffer, 1, block_size, archivo);
+
+    fflush(archivo);
+}
+
+void leer_bloque_swap(FILE* archivo, int numero_bloque, int block_size, void* destino){
+    fseek(archivo, numero_bloque * block_size, SEEK_SET);
+
+    fread(destino,1,block_size,archivo);
 }

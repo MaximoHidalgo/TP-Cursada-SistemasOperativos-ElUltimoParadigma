@@ -12,16 +12,15 @@
 #include <commons/log.h>
 #include "estructuras_memory.h"
 
-typedef struct {
-    int pid;
-    char** instrucciones;
-    int cantidad_instrucciones;
-    t_contexto_ejecucion* contexto; 
-} t_programa;
-
 t_programa* buscar_programa(t_memory_context* ctx, int pid);
 char** leer_lineas(FILE* f, int* cantidad);
 void crear_proceso(t_memory_context* ctx, int pid, char* path);
 char* obtener_instruccion(t_memory_context* ctx, int pid, int pc);
+
+t_memory_context* iniciar_contexto(int argc, char* argv[]);
+void inicializar_entorno(t_memory_context* ctx, int argc, char* argv[]);
+int iniciar_servidor_memoria(t_memory_context* ctx);
+void iniciar_escucha_servidor(t_memory_context* ctx);
+void limpiar_contexto(t_memory_context* ctx);
 
 #endif // AUXILIARES_H

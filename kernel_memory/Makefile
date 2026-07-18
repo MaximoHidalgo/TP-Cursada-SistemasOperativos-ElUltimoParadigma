@@ -52,10 +52,12 @@ TESTS_C += $(shell find $(TESTS_DIR)/ -iname "*.c" 2> /dev/null)
 TESTS_H += $(shell find $(TESTS_DIR)/ -iname "*.h" 2> /dev/null)
 
 # Set test intermediate objects
+TEST_EXCLUDE = src/main.c
 TEST_OBJS = $(filter-out $(TEST_EXCLUDE), $(TESTS_C)) $(patsubst src/%.c,obj/%.o,$(filter-out $(TEST_EXCLUDE), $(SRCS_C)))
 
 # Set test binary targets
 TEST = bin/$(NAME)_tests
+
 
 .PHONY: all
 all: debug
@@ -71,6 +73,7 @@ release: $(OUT)
 .PHONY: test
 test: CFLAGS = $(CDEBUG)
 test: $(TEST)
+	./$(TEST)
 
 .PHONY: clean
 clean:
