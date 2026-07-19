@@ -8,10 +8,13 @@
 #include "planificador.h"
 #include "estructuras_scheduler.h"
 
-typedef struct {
+//cabezera temporal:
+#include "atender_cliente_Y_scheduler_server.h"
+//========
+/* typedef struct {
     int cliente_fd;
     t_scheduler_context* ctx;
-} t_args_hilo_scheduler;
+} t_args_hilo_scheduler; */
 
 // Typedef para punteros a funciones manejadoras
 typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);

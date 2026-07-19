@@ -3,6 +3,9 @@
 #include "planificador.h" //agregado por si necesita la biblioteca plani que tenia estructuras sheduler
 #include "estructuras_scheduler.h"
 #include "atender_cliente_scheduler.h"
+#include "inicializacion.h"
+#include "scheduler_server.h"
+
 
 // Inicialización y Orquestación
 t_scheduler_context* iniciar_contexto(int argc, char* argv[]);
