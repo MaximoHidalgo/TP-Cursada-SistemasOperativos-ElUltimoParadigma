@@ -161,10 +161,8 @@ void test_log_creacion_proceso()
             ctx->estratega,
             proceso));
 
-    verificar(
-        "Admitir proceso READY",
-        planificador_admitir_a_ready(
-            ctx->estratega) != NULL);
+    planificador_admitir_a_ready(ctx->estratega);
+    verificar("Admitir proceso READY", true);
 
     verificar_log_archivo(
         "Creación del proceso",

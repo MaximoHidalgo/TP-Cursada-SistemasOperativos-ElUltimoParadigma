@@ -134,34 +134,15 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
     }
     t_contexto_ejecucion* proc = prog->contexto;
 
-    uint32_t memoria_necesaria = 0;
-
-    for (int k = 0; k < list_size(proc->tabla_segmentos); k++) {
-        t_segmento* seg = list_get(proc->tabla_segmentos, k);
-
-        if(seg->tamanio == 0) continue;
-
-        memoria_necesaria += seg->tamanio;
-    }
+    uint32_t memoria_necesaria = calcular_memoria_necesaria(proc);
     
     pthread_mutex_lock(&ctx->mutex_memoria);
 
     bool hay_espacio = hay_espacio_para_restaurar_segmentos(ctx, proc);
     
     if (!hay_espacio) {
-
-        if (requiere_compactacion(ctx, memoria_necesaria))
-        {
-            int op_sol = SOLICITUD_COMPACTACION;
-            send(cliente_fd, &op_sol, sizeof(int), 0);
-
-                    
-            pthread_mutex_unlock(&ctx->mutex_memoria);
-            int res = recibir_operacion(cliente_fd);
-            pthread_mutex_lock(&ctx->mutex_memoria);
-            
-            if (res == RESPUESTA_COMPACTACION) {
-                compactar_memoria(ctx);
+        if (requiere_compactacion(ctx, memoria_necesaria)) {
+            if (solicitar_compactacion_al_scheduler(cliente_fd, ctx)) {
                 if (!hay_espacio_para_restaurar_segmentos(ctx, proc)) {
                     pthread_mutex_unlock(&ctx->mutex_memoria);
                     enviar_mensaje("ERROR", cliente_fd);
@@ -169,7 +150,7 @@ void procesar_desuspender_proceso(int cliente_fd, t_memory_context* ctx) {
                     return;
                 }
             }
-        }else{
+        } else {
             pthread_mutex_unlock(&ctx->mutex_memoria);
             enviar_mensaje("ERROR", cliente_fd);
             log_error(ctx->logger, "No hay espacio en Memoria Principal para desuspender PID %d", pid);
@@ -199,16 +180,7 @@ void procesar_crear_segmento_handler(int cliente_fd, t_memory_context* ctx){
     t_segmento* nuevo_seg = crear_segmento(ctx, pid, id_seg, tamanio_seg, &needs_compaction);
                 
     if (needs_compaction) {
-        int op_sol = SOLICITUD_COMPACTACION;
-        send(cliente_fd, &op_sol, sizeof(int), 0);
-
-                    
-        pthread_mutex_unlock(&ctx->mutex_memoria);
-        int res = recibir_operacion(cliente_fd);
-        pthread_mutex_lock(&ctx->mutex_memoria);
-        
-        if (res == RESPUESTA_COMPACTACION) {
-            compactar_memoria(ctx);
+        if (solicitar_compactacion_al_scheduler(cliente_fd, ctx)) {
             nuevo_seg = crear_segmento(ctx, pid, id_seg, tamanio_seg, &needs_compaction);
         }
     }
@@ -281,45 +253,7 @@ void procesar_liberar_proceso_handler(int cliente_fd, t_memory_context* ctx){
         return;
     }
 
-    // 1. Liberar todos los segmentos de memoria asociados al proceso
-    if (prog->contexto->tabla_segmentos != NULL) {
-        pthread_mutex_lock(&ctx->mutex_programas);
-        for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
-            t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
-            eliminar_segmento(ctx, pid_a_liberar, seg);
-        }
-        list_clean(prog->contexto->tabla_segmentos);
-        pthread_mutex_unlock(&ctx->mutex_programas);
-    }
-
-    // 2. Eliminar el programa de la lista global y liberar todas sus estructuras
-    pthread_mutex_lock(&ctx->mutex_programas);
-    for (int i = 0; i < list_size(ctx->programas); i++) {
-        if (list_get(ctx->programas, i) == prog) {
-            list_remove(ctx->programas, i);
-            break;
-        }
-    }
-    pthread_mutex_unlock(&ctx->mutex_programas);
-
-    // 3. Liberar instrucciones
-    if (prog->instrucciones != NULL) {
-        for (int i = 0; i < prog->cantidad_instrucciones; i++) {
-            free(prog->instrucciones[i]);
-        }
-        free(prog->instrucciones);
-    }
-
-    // 4. Liberar contexto de ejecución
-    if (prog->contexto != NULL) {
-        if (prog->contexto->tabla_segmentos != NULL) {
-            list_destroy(prog->contexto->tabla_segmentos);
-        }
-        free(prog->contexto);
-    }
-
-    // 5. Liberar el programa
-    free(prog);
+    destruir_programa(ctx, prog);
 
     log_info(ctx->logger, "## PID: %d - Proceso Finalizado y liberado de la memoria", pid_a_liberar);
     pthread_mutex_unlock(&ctx->mutex_memoria);

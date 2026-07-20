@@ -168,6 +168,43 @@ void crear_proceso(t_memory_context* ctx, int pid, char* path) {
     log_info(ctx->logger, "Se leyeron %d instrucciones para el proceso %d", prog->cantidad_instrucciones, pid);
 }
 
+void destruir_programa(t_memory_context* ctx, t_programa* prog) {
+    if (prog->contexto->tabla_segmentos != NULL) {
+        pthread_mutex_lock(&ctx->mutex_programas);
+        for (int i = 0; i < list_size(prog->contexto->tabla_segmentos); i++) {
+            t_segmento* seg = list_get(prog->contexto->tabla_segmentos, i);
+            eliminar_segmento(ctx, prog->pid, seg);
+        }
+        list_clean(prog->contexto->tabla_segmentos);
+        pthread_mutex_unlock(&ctx->mutex_programas);
+    }
+
+    pthread_mutex_lock(&ctx->mutex_programas);
+    for (int i = 0; i < list_size(ctx->programas); i++) {
+        if (list_get(ctx->programas, i) == prog) {
+            list_remove(ctx->programas, i);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&ctx->mutex_programas);
+
+    if (prog->instrucciones != NULL) {
+        for (int i = 0; i < prog->cantidad_instrucciones; i++) {
+            free(prog->instrucciones[i]);
+        }
+        free(prog->instrucciones);
+    }
+
+    if (prog->contexto != NULL) {
+        if (prog->contexto->tabla_segmentos != NULL) {
+            list_destroy(prog->contexto->tabla_segmentos);
+        }
+        free(prog->contexto);
+    }
+
+    free(prog);
+}
+
 char* obtener_instruccion(t_memory_context* ctx, int pid, int pc) {
     t_programa* prog = buscar_programa(ctx, pid);
 

@@ -218,7 +218,6 @@ t_proceso_planificable* planificador_admitir_a_ready(t_estratega_planificacion* 
                 planificador_enviar_interrupcion(estratega, opcode_interrupcion);
             }
         }
-        //============================
     }
 
     pthread_mutex_unlock(&estratega->mutex_colas);

@@ -518,3 +518,28 @@ bool hay_espacio_para_suspender_proceso(t_memory_context* ctx, t_contexto_ejecuc
 
     return true;
 }
+
+bool solicitar_compactacion_al_scheduler(int cliente_fd, t_memory_context* ctx) {
+    int op_sol = SOLICITUD_COMPACTACION;
+    send(cliente_fd, &op_sol, sizeof(int), 0);
+    
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+    int res = recibir_operacion(cliente_fd);
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    
+    if (res == RESPUESTA_COMPACTACION) {
+        compactar_memoria(ctx);
+        return true;
+    }
+    return false;
+}
+
+uint32_t calcular_memoria_necesaria(t_contexto_ejecucion* proc) {
+    uint32_t memoria_necesaria = 0;
+    for (int k = 0; k < list_size(proc->tabla_segmentos); k++) {
+        t_segmento* seg = list_get(proc->tabla_segmentos, k);
+        if (seg->tamanio == 0) continue;
+        memoria_necesaria += seg->tamanio;
+    }
+    return memoria_necesaria;
+}

@@ -21,6 +21,8 @@ void eliminar_segmento(t_memory_context* ctx, uint32_t pid, t_segmento* segmento
 
 bool ordenar_segmentos_por_base(void* a, void* b);
 void compactar_memoria(t_memory_context* ctx);
+bool solicitar_compactacion_al_scheduler(int cliente_fd, t_memory_context* ctx);
+uint32_t calcular_memoria_necesaria(t_contexto_ejecucion* proc);
 
 void* leer_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio);
 void escribir_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer);

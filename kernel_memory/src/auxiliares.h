@@ -15,6 +15,7 @@
 t_programa* buscar_programa(t_memory_context* ctx, int pid);
 char** leer_lineas(FILE* f, int* cantidad);
 void crear_proceso(t_memory_context* ctx, int pid, char* path);
+void destruir_programa(t_memory_context* ctx, t_programa* prog);
 char* obtener_instruccion(t_memory_context* ctx, int pid, int pc);
 
 bool procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx);
