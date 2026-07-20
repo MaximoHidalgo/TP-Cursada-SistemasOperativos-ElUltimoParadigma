@@ -139,3 +139,15 @@ void funcionMutex(t_funcion funcion, void *arg, pthread_mutex_t* mutex)
     pthread_mutex_unlock(mutex);
 }
 
+void conectar_kernel_memory(t_scheduler_context* ctx) {
+    ctx->socket_memoria = crear_conexion(ctx->ip_memory, ctx->puerto_memory);
+    if(ctx->socket_memoria != -1) {
+        log_info(ctx->logger, "## Conectado a Kernel Memory");
+        enviar_mensaje(HANDSHAKE_SCHEDULER, ctx->socket_memoria);
+        ctx->estratega->socket_memoria = ctx->socket_memoria;
+    } else {
+        log_error(ctx->logger, "Error al conectar con Kernel Memory en %s:%s", ctx->ip_memory, ctx->puerto_memory);
+        limpiar_contexto(ctx);
+        exit(EXIT_FAILURE);
+    }
+}

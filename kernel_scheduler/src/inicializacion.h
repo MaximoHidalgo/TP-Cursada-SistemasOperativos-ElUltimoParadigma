@@ -5,6 +5,7 @@
 #include "./commons/config.h"
 #include "planificador.h"
 #include "pcb.h"
+#include "atender_cliente_scheduler.h"
 #include <utils/dominio/opcodes.h>
 #include <utils/dominio/estructuras.h>
 #include <utils/sockets/sockets.h>
@@ -38,7 +39,7 @@ t_scheduler_context* iniciar_contexto(int, char**);
 t_scheduler_context* iniciar_contexto_scheduler(char*, char*, char*, char*, int, int, t_log*, t_config*, t_estratega_planificacion*);
 
 
-
+void conectar_kernel_memory(t_scheduler_context* );
 void solicitar_creacion_proceso(void *);
 t_proceso_planificable* crear_pcb_inicial();
 
