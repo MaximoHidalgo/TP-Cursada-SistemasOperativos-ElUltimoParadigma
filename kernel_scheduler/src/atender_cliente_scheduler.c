@@ -717,13 +717,3 @@ void atender_cliente_scheduler(void* arg) {
     }
 }
 
-void limpiar_contexto(t_scheduler_context* ctx) {
-    if (ctx->socket_escucha != -1) close(ctx->socket_escucha);
-    if (ctx->socket_memoria != -1) close(ctx->socket_memoria);
-
-    if (ctx->estratega != NULL) destruir_estratega_planificacion(ctx->estratega);
-    if (ctx->config != NULL) config_destroy(ctx->config);
-    if (ctx->logger != NULL) log_destroy(ctx->logger);
-
-    free(ctx);
-}

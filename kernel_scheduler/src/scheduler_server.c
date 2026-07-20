@@ -1,23 +1,6 @@
 #include "scheduler_server.h"
 
 
-int preparar_socket_servidor(char*puerto,t_log*logger,t_scheduler_context* ctx){
-    int socket_escucha = iniciar_servidor(puerto,logger);
-    log_info(logger, "Kernel Scheduler listo para recibir clientes en el puerto %s", ctx->puerto_escucha);
-    return socket_escucha;
-}
-
-void atender_socket_invalido(char* puerto,t_log* logger, t_scheduler_context* ctx){
-    log_error(logger, "No se pudo iniciar el servidor en el puerto %s", puerto);
-    limpiar_contexto(ctx);
-    exit(EXIT_FAILURE);
-}
-
-int preparar_servidor(char* puerto, t_log* logger, t_scheduler_context* ctx){
-    int socket_servidor = preparar_socket_servidor(puerto,logger,ctx);
-    if(socket_servidor==-1) atender_socket_invalido(puerto,logger,ctx);
-    return socket_servidor;
-}
 
 t_args_hilo_scheduler* crear_argumento_planificador(int socket_cliente,t_scheduler_context* contexto_planificacion){
     t_args_hilo_scheduler* argumento_cliente = malloc(sizeof(t_args_hilo_scheduler));

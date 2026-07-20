@@ -22,40 +22,8 @@ t_scheduler_context* iniciar_contexto(int argc, char* argv[]) {
 
     return contexto_scheduler;
 }
-//bloques para utils scheduler
-//====================================================================
-t_config* crear_configuracion(char* path_configuracion){
-    t_config* configuracion = config_create(path_configuracion);
-    if (configuracion == NULL) {
-        printf("Error: No se pudo leer la configuración en %s\n", path_configuracion);
-        exit(EXIT_FAILURE);
-    }
-    return configuracion;
-}
 
-t_log* crear_logger_configurado(t_config* configuracion){
-    char* log_level_str = config_get_string_value(configuracion,"LOG_LEVEL");
-    t_log_level level = log_level_from_string(log_level_str);
-    t_log* logger = log_create("Scheduler.log","Scheduler",true,level);
-    return logger;
-}
-//====================================================================
 
-/**
- *FUNCION iniciar_contexto_scheduler()
- * inicializa la estructura del contexto del scheduler
- * parametros:
- * @param   ruta_script_inicial: ruta al script inicial que ejecutará el scheduler
- * @param   ip_servicio_memoria: IP del servicio de memoria/KM
- * @param   puerto_servicio_memoria: puerto del servicio de memoria/KM
- * @param   puerto_escucha_scheduler: puerto en el que el scheduler escucha conexiones entrantes
- * @param   socket_memoria_fd: descriptor de socket conectado al servicio de memoria/KM
- * @param   socket_escucha_fd: descriptor de socket de escucha del scheduler
- * @param   logger_preconfigurado: logger ya creado para el scheduler
- * @param   config_preconfigurada: configuración ya cargada en memoria
- * @param   estratega_planificacion: unidad de planificación ya creada
-
-*/
 t_scheduler_context* iniciar_contexto_scheduler
     (char* ruta_script_inicial,
     char* ip_servicio_memoria,
@@ -130,14 +98,7 @@ t_proceso_planificable* crear_pcb_inicial() {
 
 
 
-void funcionMutex(t_funcion funcion, void *arg, pthread_mutex_t* mutex)
-{
-    pthread_mutex_lock(mutex);
 
-    funcion(arg);
-
-    pthread_mutex_unlock(mutex);
-}
 
 void conectar_kernel_memory(t_scheduler_context* ctx) {
     ctx->socket_memoria = crear_conexion(ctx->ip_memory, ctx->puerto_memory);

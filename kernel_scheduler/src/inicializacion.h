@@ -11,6 +11,7 @@
 #include <utils/sockets/sockets.h>
 #include <pthread.h>
 #include <string.h>
+#include "utils_scheduler.h"
 
 typedef struct {
     int pid;
@@ -38,17 +39,12 @@ t_scheduler_context* iniciar_contexto(int, char**);
 */
 t_scheduler_context* iniciar_contexto_scheduler(char*, char*, char*, char*, int, int, t_log*, t_config*, t_estratega_planificacion*);
 
+void iniciar_planificacion(t_scheduler_context* ctx); 
 
-void conectar_kernel_memory(t_scheduler_context* );
+
 void solicitar_creacion_proceso(void *);
 t_proceso_planificable* crear_pcb_inicial();
 
-//bloques utils scheduler
-//================================================================
-typedef void (*t_funcion)(void *);
-t_config* crear_configuracion(char* path_configuracion);
-t_log* crear_logger_configurado(t_config* configuracion);
-void funcionMutex(t_funcion, void *, pthread_mutex_t*);
-//================================================================
+void conectar_kernel_memory(t_scheduler_context* );
 
 #endif
