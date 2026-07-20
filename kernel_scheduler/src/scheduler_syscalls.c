@@ -3,8 +3,6 @@
 #include "planificador_recursos.h"
 #include "planificador_memoria.h"
 
-
-
 void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
     t_proceso_planificable* proceso_a_ejecutar = planificador_despachar_siguiente(ctx->estratega);
     
