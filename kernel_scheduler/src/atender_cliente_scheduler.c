@@ -351,7 +351,7 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
                 log_info(ctx->logger, "## Out of Memory para proceso %d. Reencolando en NEW para reintento.", pid);
 
                 t_paquete* paq_pc = crear_paquete();
-                paq_pc->codigo_operacion = AJUSTAR_PC_OOM;
+                paq_pc->codigo_operacion = RETROCEDER_PC_OUT_OF_MEMORY;
                 agregar_a_paquete(paq_pc, &pid, sizeof(uint32_t));
                 enviar_paquete(paq_pc, ctx->socket_memoria);
                 eliminar_paquete(paq_pc);
