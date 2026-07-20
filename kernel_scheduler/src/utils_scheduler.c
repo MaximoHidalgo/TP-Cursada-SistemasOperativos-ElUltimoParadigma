@@ -56,3 +56,17 @@ void limpiar_contexto(t_scheduler_context* ctx) {
 
     free(ctx);
 }
+
+const char* obtener_nombre_syscall(int tipo_syscall) {
+    switch (tipo_syscall) {
+        case SYSCALL_SLEEP: return "SLEEP";
+        case SYSCALL_STDOUT: return "STDOUT";
+        case SYSCALL_STDIN: return "STDIN";
+        case SYSCALL_MUTEX_CREATE: return "MUTEX_CREATE";
+        case SYSCALL_MUTEX_LOCK: return "MUTEX_LOCK";
+        case SYSCALL_MUTEX_UNLOCK: return "MUTEX_UNLOCK";
+        case SYSCALL_MEM_ALLOC: return "MEM_ALLOC";
+        case SYSCALL_MEM_FREE: return "MEM_FREE";
+        default: return "UNKNOWN";
+    }
+} 

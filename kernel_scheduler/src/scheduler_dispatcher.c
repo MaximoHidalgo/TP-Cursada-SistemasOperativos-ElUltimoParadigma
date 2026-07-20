@@ -1,7 +1,5 @@
 #include "scheduler_dispatcher.h"
 
-//int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) ;
-
 int handler_desalojo_compactacion(int fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(fd);
     

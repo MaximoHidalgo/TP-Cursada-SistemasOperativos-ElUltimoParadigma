@@ -1,6 +1,8 @@
 #ifndef SCHEDULER_DISPATCHER_H
 #define SCHEDULER_DISPATCHER_H
+#include "scheduler_syscalls.h"
 #include "atender_cliente_scheduler.h"
+
 // Typedef para punteros a funciones manejadoras
 typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);
 // Creamos un array estático de tamaño 256 (suficiente para cubrir todos los opcodes).

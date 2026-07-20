@@ -8,10 +8,15 @@
 #include <stdlib.h>
 #include "estructuras_scheduler.h"
 #include <utils/sockets/sockets.h>
+#include <utils/dominio/opcodes.h>
 
 //bloques utils scheduler
 //================================================================
 typedef void (*t_funcion)(void *);
+
+const char* obtener_nombre_syscall(int tipo_syscall);
+
+
 t_config* crear_configuracion(char* path_configuracion);
 t_log* crear_logger_configurado(t_config* configuracion);
 void funcionMutex(t_funcion, void *, pthread_mutex_t*);
