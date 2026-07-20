@@ -1,6 +1,4 @@
 #include "auxiliares_memoria.h"
-#include <commons/string.h>
-#include <unistd.h>
 
 bool comparar_por_base(void* a, void* b)
 {
@@ -542,4 +540,79 @@ uint32_t calcular_memoria_necesaria(t_contexto_ejecucion* proc) {
         memoria_necesaria += seg->tamanio;
     }
     return memoria_necesaria;
+}
+
+bool gestionar_suspension(t_memory_context* ctx, t_contexto_ejecucion* proc) {
+    pthread_mutex_lock(&ctx->mutex_memoria);
+
+    int cant_bloques_swap = ctx->swap_file_size / ctx->swap_block_size;
+    bool hay_espacio_swap = hay_espacio_para_suspender_proceso(ctx, proc);
+
+    if (hay_espacio_swap) {
+        suspender_proceso(ctx, proc, cant_bloques_swap);
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        return true;
+    } else {
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        return false;
+    }
+}
+
+bool gestionar_desuspension(t_memory_context* ctx, t_contexto_ejecucion* proc, int cliente_fd) {
+    uint32_t memoria_necesaria = calcular_memoria_necesaria(proc);
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    bool hay_espacio = hay_espacio_para_restaurar_segmentos(ctx, proc);
+    
+    if (!hay_espacio) {
+        if (requiere_compactacion(ctx, memoria_necesaria)) {
+            if (solicitar_compactacion_al_scheduler(cliente_fd, ctx)) {
+                if (!hay_espacio_para_restaurar_segmentos(ctx, proc)) {
+                    pthread_mutex_unlock(&ctx->mutex_memoria);
+                    return false;
+                }
+            } else {
+                pthread_mutex_unlock(&ctx->mutex_memoria);
+                return false;
+            }
+        } else {
+            pthread_mutex_unlock(&ctx->mutex_memoria);
+            return false;
+        }
+    }
+
+    if (!restaurar_segmentos(proc, ctx, cliente_fd)) {
+        pthread_mutex_unlock(&ctx->mutex_memoria);
+        return false;
+    }
+    
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+    return true;
+}
+
+void serializar_tabla_sticks_en_paquete(t_paquete* paq, t_list* memory_sticks) {
+    int cant = list_size(memory_sticks);
+    agregar_a_paquete(paq, &cant, sizeof(int));
+    for (int i = 0; i < cant; i++) {
+        t_memory_stick_info* stick = list_get(memory_sticks, i);
+        agregar_a_paquete(paq, &(stick->id), sizeof(int));
+        agregar_a_paquete(paq, &(stick->tamanio), sizeof(uint32_t));
+        agregar_a_paquete(paq, &(stick->base_address), sizeof(uint32_t));
+        agregar_a_paquete(paq, &(stick->puerto), sizeof(int));
+        int ip_len = strlen(stick->ip) + 1;
+        agregar_a_paquete(paq, &ip_len, sizeof(int));
+        agregar_a_paquete(paq, stick->ip, ip_len);
+    }
+}
+
+t_segmento* buscar_y_remover_segmento(t_list* tabla_segmentos, uint32_t id_seg) {
+    if (tabla_segmentos == NULL) return NULL;
+    
+    for (int i = 0; i < list_size(tabla_segmentos); i++) {
+        t_segmento* seg = list_get(tabla_segmentos, i);
+        if (seg->id == id_seg) {
+            return list_remove(tabla_segmentos, i);
+        }
+    }
+    return NULL;
 }

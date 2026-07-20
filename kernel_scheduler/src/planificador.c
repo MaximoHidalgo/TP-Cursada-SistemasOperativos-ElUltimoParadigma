@@ -387,8 +387,7 @@ void* suspension_timer_thread(void* arg) {
         uint64_t segundos_actuales = tiempo_actual.tv_sec;
         uint64_t microsegundos_actuales = tiempo_actual.tv_usec;
         
-        uint64_t milisegundos_por_segundo = segundos_actuales * 1000;
-        uint64_t milisegundos_por_microsegundo = microsegundos_actuales / 1000;
+        a->pcb->instante_suspension = (segundos_actuales * 1000) + (microsegundos_actuales / 1000);
         
         pthread_mutex_lock(&a->estratega->mutex_socket_memoria);
         enviar_int(a->estratega->socket_memoria, SUSPENDER_PROCESO);

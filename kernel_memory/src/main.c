@@ -1,5 +1,4 @@
 #include "main.h"
-#include "auxiliares.h"
 
 int main(int argc, char *argv[]) {
     t_memory_context* ctx = iniciar_contexto(argc, argv);

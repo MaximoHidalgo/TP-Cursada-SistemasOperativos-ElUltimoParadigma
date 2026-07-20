@@ -1,6 +1,4 @@
 #include "auxiliares.h"
-#include "procesador_mensajes.h"
-#include "auxiliares_memoria.h"
 
 static void conectar_memory_stick(int cliente_fd, t_memory_context* ctx, char* mensaje) {
     char **partes = string_split(mensaje, "|");
@@ -298,7 +296,7 @@ void iniciar_escucha_servidor(t_memory_context* ctx) {
         args->ctx = ctx;
 
         pthread_t hilo_cliente;
-        pthread_create(&hilo_cliente, NULL, (void*)atender_cliente, args);
+        pthread_create(&hilo_cliente, NULL, (void*)atender_cliente_kernel_memory, args);
         pthread_detach(hilo_cliente); 
     }
 }

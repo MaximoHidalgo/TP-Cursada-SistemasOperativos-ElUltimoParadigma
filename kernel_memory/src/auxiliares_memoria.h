@@ -3,6 +3,8 @@
 
 #include "estructuras_memory.h"
 #include <utils/dominio/estructuras.h>
+#include <commons/string.h>
+#include <unistd.h>
 
 bool comparar_por_base(void* a, void* b);
 void fusionar_huecos_libres(t_list* huecos_libres);
@@ -31,5 +33,10 @@ void liberar_segmento_de_memoria(t_memory_context* ctx, t_segmento* seg);
 void escribir_segmento_en_swap(t_memory_context* ctx, t_segmento* seg, int bloque_inicio, void* buffer_seg, int cant_bloques_necesarios);
 void suspender_proceso(t_memory_context* ctx, t_contexto_ejecucion* proc, int cant_bloques_swap);
 bool hay_espacio_para_suspender_proceso(t_memory_context* ctx, t_contexto_ejecucion* proc);
+
+bool gestionar_suspension(t_memory_context* ctx, t_contexto_ejecucion* proc);
+bool gestionar_desuspension(t_memory_context* ctx, t_contexto_ejecucion* proc, int cliente_fd);
+void serializar_tabla_sticks_en_paquete(t_paquete* paq, t_list* memory_sticks);
+t_segmento* buscar_y_remover_segmento(t_list* tabla_segmentos, uint32_t id_seg);
 
 #endif
