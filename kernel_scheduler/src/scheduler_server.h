@@ -4,6 +4,7 @@
 #include "estructuras_scheduler.h"
 #include <pthread.h>
 #include "atender_cliente_scheduler.h"
+#include "scheduler_dispatcher.h"
 //cabezera temporal:
 #include "atender_cliente_Y_scheduler_server.h"
 #include "utils_scheduler.h"

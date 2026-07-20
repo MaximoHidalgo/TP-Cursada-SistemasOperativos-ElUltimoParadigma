@@ -37,36 +37,53 @@ void iniciar_servidor_clientes(t_scheduler_context* ctx) {
     while (1) manejar_conexion_cliente_scheduler(ctx->socket_escucha, ctx->logger,ctx);
 }
 
-
-
-/*  bloque real
-void iniciar_servidor_clientes(t_scheduler_context* ctx) {
-    ctx->socket_escucha = iniciar_servidor(ctx->puerto_escucha, ctx->logger);
-    if (ctx->socket_escucha == -1) {
-        log_error(ctx->logger, "No se pudo iniciar el servidor en el puerto %s", ctx->puerto_escucha);
-        limpiar_contexto(ctx);
-        exit(EXIT_FAILURE);
-    }
-
-    log_info(ctx->logger, "Kernel Scheduler listo para recibir clientes en el puerto %s", ctx->puerto_escucha);
-
-    while (1) {
-        int cliente_fd = esperar_cliente(ctx->socket_escucha, ctx->logger);
-        if (cliente_fd == -1) continue;
-        
-        t_args_hilo_scheduler* args = malloc(sizeof(t_args_hilo_scheduler));
-        args->cliente_fd = cliente_fd;
-        args->ctx = ctx;
-
-        pthread_t hilo_cliente;
-        if (pthread_create(&hilo_cliente, NULL, (void*)atender_cliente_scheduler, args) != 0) {
-            log_error(ctx->logger, "Fallo al crear hilo cliente");
-            free(args);
-            close(cliente_fd);
-        } else {
-            pthread_detach(hilo_cliente);
+void remover_cpu_de_lista(t_estratega_planificacion* estratega, int fd) {
+    if (estratega->sockets_cpu == NULL) return;
+    for (int i = 0; i < list_size(estratega->sockets_cpu); i++) {
+        int* fd_ptr = list_get(estratega->sockets_cpu, i);
+        if (fd_ptr != NULL && *fd_ptr == fd) {
+            list_remove_and_destroy_element(estratega->sockets_cpu, i, free);
+            break;
         }
     }
 }
 
- */
+
+
+int atenderRespuesta(int cliente_fd, t_scheduler_context* ctx, int mensaje_cliente) {
+    // 1. Manejo de desconexión
+    if (mensaje_cliente == -1) {
+        log_warning(ctx->logger, "El cliente se desconectó.");
+        return -1; // -1 indica que se debe cortar la conexión
+    }
+
+    // 2. Validación de seguridad (Bounds Checking) y función no mapeada
+    if (mensaje_cliente < 0 || mensaje_cliente >= 256 || tabla_despacho[mensaje_cliente] == NULL) {
+        log_warning(ctx->logger, "No entiendo el mensaje o código de operación: %d", mensaje_cliente);
+        return -1; // -1 indica error / cortar conexión
+    }
+
+    // 3. ¡Magia! Ejecuta el handler correspondiente en O(1)
+    return tabla_despacho[mensaje_cliente](cliente_fd, ctx);
+}
+
+void atender_cliente_scheduler(void* arg) {
+    t_args_hilo_scheduler* args = (t_args_hilo_scheduler*)arg;
+    int cliente_fd = args->cliente_fd;
+    t_scheduler_context* ctx = args->ctx;
+    free(args);
+
+    while (1) {
+        int mensaje_cliente = recibir_operacion(cliente_fd);
+        
+        // Ejecutamos la respuesta
+        int status = atenderRespuesta(cliente_fd, ctx, mensaje_cliente);
+        
+        // Si la tabla o la validación retornan -1, rompemos el ciclo y cerramos.
+        if (status == -1) {
+            remover_cpu_de_lista(ctx->estratega, cliente_fd);
+            close(cliente_fd);
+            break;
+        }
+    }
+}
