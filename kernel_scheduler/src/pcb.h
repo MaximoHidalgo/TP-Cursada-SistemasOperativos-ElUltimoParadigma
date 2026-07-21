@@ -25,6 +25,7 @@ typedef struct {
     int bloqueo_id;
 } t_proceso_planificable;
 
+t_proceso_planificable* pcb_crear(int pid, int prioridad);
 const char* planificador_nombre_estado(t_estado_proceso estado);
 
 #endif

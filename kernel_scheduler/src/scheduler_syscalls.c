@@ -343,11 +343,7 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     }
     pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
 
-    t_proceso_planificable* pcb_nuevo = malloc(sizeof(t_proceso_planificable));
-    pcb_nuevo->pid = nuevo_pid;
-    pcb_nuevo->cola_prioridad = prioridad;
-    pcb_nuevo->prioridad_original = prioridad;  // inicializar la prioridad original
-    pcb_nuevo->bloqueo_id = 0;
+    t_proceso_planificable* pcb_nuevo = pcb_crear(nuevo_pid, prioridad);
 
     planificador_encolar_new(ctx->estratega, pcb_nuevo);
     planificador_admitir_a_ready(ctx->estratega);

@@ -1,4 +1,17 @@
 #include "pcb.h"
+#include <stdlib.h>
+
+t_proceso_planificable* pcb_crear(int pid, int prioridad) {
+    t_proceso_planificable* pcb = malloc(sizeof(t_proceso_planificable));
+    if (pcb != NULL) {
+        pcb->pid = pid;
+        pcb->cola_prioridad = prioridad;
+        pcb->prioridad_original = prioridad;
+        pcb->bloqueo_id = 0;
+        // The other fields like instante_ready, instante_suspension, io_dir_fisica, io_tamanio, estado are usually set later when entering ready, etc.
+    }
+    return pcb;
+}
 
 const char* planificador_nombre_estado(t_estado_proceso estado) {
     switch (estado) {

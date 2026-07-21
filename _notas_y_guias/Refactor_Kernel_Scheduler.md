@@ -40,3 +40,19 @@ La lógica monolítica del planificador fue segregada en tres dominios auxiliare
 - **Testeabilidad Mejorada**: Como resultado, las pruebas de integración unitaria pasaron del 100% de manera directa ya que ahora es posible *mockear* interfaces I/O o de memoria sin comprometer el despachador.
 - **Rendimiento**: Se redujeron líneas de importación ineficientes que producían redundancia en el tiempo de compilación por pre-procesador (ahora el módulo compila significativamente más rápido sin circularidad).
 - **Legibilidad**: El `planificador.c` quedó exclusivamente para el core del TP (crear, admitir, finalizar y loguear el estado del Planificador Largo y Corto plazo).
+
+### 2.5. Centralización de Creación de Procesos (Factory PCB)
+- **Eliminación de redundancia en inicialización**:
+  Se abstrajo la lógica de creación de la estructura `t_proceso_planificable` que estaba duplicada en `inicializacion.c` (para el proceso 0) y `scheduler_syscalls.c` (para procesos creados por script).
+- **Implementación**: Se introdujo el constructor genérico `pcb_crear(int pid, int prioridad)` en `pcb.c`. 
+- **Justificación**: Aplica estrictamente el principio DRY (*Don't Repeat Yourself*), asegurando que los atributos por defecto (como `bloqueo_id` o `prioridad_original`) se inicialicen sistemáticamente en un único lugar, facilitando futuras extensiones del PCB.
+
+### 2.6. Erradicación de *Long Parameter List* y Boilerplate
+- **Limpieza en `inicializacion.c`**:
+  Se eliminó la función `iniciar_contexto_scheduler` (que recibía 9 parámetros, lo cual es un claro *code smell*). Su lógica (que era un simple *builder* del struct) fue movida directamente dentro de `iniciar_contexto`.
+- **Simplificación del Flujo de Arranque**: Se erradicó el wrapper `t_args_creacion_proceso` que solo existía para poder pasar múltiples parámetros a través de `funcionMutex`. Ahora, la inicialización del proceso 0 se ejecuta de forma lineal y bloqueante mediante uso explícito de `pthread_mutex_lock/unlock`.
+- **Justificación**: Menos abstracciones innecesarias y firmas de funciones mucho más concisas.
+
+### 2.7. Eliminación de Archivos Fantasma (Dead Code)
+- **Archivos Eliminados**: Se eliminaron `operaciones_scheduler.c`, `operaciones_scheduler.h` y `test_operaciones.c`.
+- **Justificación**: Tras revisarlos, ambos se encontraban completamente vacíos (solo contenían *include guards* o comentarios básicos). Al utilizar comodines en el `Makefile` (`find src -iname "*.c"`), estos archivos estaban siendo inyectados en la canalización del compilador `gcc` sin tener utilidad alguna, generando objetos `.o` fantasmas. Su remoción inmediata agiliza la compilación y despeja el árbol del proyecto.
