@@ -16,16 +16,17 @@ typedef enum {
 typedef struct {
     int pid;
     int cola_prioridad;
-    int prioridad_original; // <--- NUEVO CAMPO AGREGADO
+    int prioridad_original;
     t_estado_proceso estado;
     uint64_t instante_ready;
-    uint64_t instante_suspension; //atributo nuevo agregado 
+    uint64_t instante_suspension;
     uint32_t io_dir_fisica;
     uint32_t io_tamanio;
     int bloqueo_id;
 } t_proceso_planificable;
 
 t_proceso_planificable* pcb_crear(int pid, int prioridad);
+void pcb_destruir(t_proceso_planificable* pcb);
 const char* planificador_nombre_estado(t_estado_proceso estado);
 
 #endif

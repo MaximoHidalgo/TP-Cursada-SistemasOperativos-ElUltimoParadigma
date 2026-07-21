@@ -8,7 +8,6 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include "colas.h"
-//#include "estructuras_scheduler.h" //agregado para implemencion de ciertas funciones
 #include <stdlib.h>
 #include <string.h>
 #include <commons/string.h>

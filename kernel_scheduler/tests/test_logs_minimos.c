@@ -174,7 +174,6 @@ void test_log_creacion_proceso()
         ctx->path,
         "## (42) Pasa del estado NEW al estado READY");
 
-    free(proceso);
     destruir_contexto_logs_test(ctx);
 
     printf("✅ test_log_creacion_proceso: PASO\n");

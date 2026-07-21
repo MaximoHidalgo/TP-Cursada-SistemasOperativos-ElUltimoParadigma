@@ -1,7 +1,5 @@
 #include "scheduler_server.h"
 
-
-
 t_args_hilo_scheduler* crear_argumento_planificador(int socket_cliente,t_scheduler_context* contexto_planificacion){
     t_args_hilo_scheduler* argumento_cliente = malloc(sizeof(t_args_hilo_scheduler));
     if (!argumento_cliente) {
@@ -29,8 +27,6 @@ void manejar_conexion_cliente_scheduler(int socket_servidor,t_log* logger, t_sch
     pthread_t hilo_atencion_cliente;
     crear_hilo_atencion_cliente(&hilo_atencion_cliente,argumento_cliente,logger,socket_cliente);
 }
-
-
 
 void iniciar_servidor_clientes(t_scheduler_context* ctx) {
     ctx->socket_escucha = preparar_servidor(ctx->puerto_escucha,ctx->logger,ctx);

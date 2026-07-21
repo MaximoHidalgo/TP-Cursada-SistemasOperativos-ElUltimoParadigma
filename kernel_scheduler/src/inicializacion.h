@@ -12,6 +12,7 @@
 #include <utils/sockets/sockets.h>
 #include <pthread.h>
 #include <string.h>
+#include <stdlib.h>
 #include "utils_scheduler.h"
 #include "planificador_memoria.h"
 

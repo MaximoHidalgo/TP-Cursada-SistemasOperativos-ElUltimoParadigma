@@ -1,19 +1,45 @@
 #include "colas.h"
+#include <sys/time.h>
+
+static uint64_t _obtener_tiempo_ms(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)(tv.tv_sec) * 1000 + (uint64_t)(tv.tv_usec) / 1000;
+}
 
 t_algoritmo_cola algoritmo_cola_desde_string(char* algoritmo) {
     if (algoritmo == NULL) {
         return ALGORITMO_COLA_INVALIDO;
     }
-
     if (string_equals_ignore_case(algoritmo, "FIFO")) {
         return ALGORITMO_COLA_FIFO;
     }
-
     if (string_equals_ignore_case(algoritmo, "RR")) {
         return ALGORITMO_COLA_RR;
     }
-
     return ALGORITMO_COLA_INVALIDO;
+}
+
+const char* planificador_nombre_algoritmo_cola(t_algoritmo_cola algoritmo) {
+    switch (algoritmo) {
+    case ALGORITMO_COLA_FIFO:
+        return "FIFO";
+    case ALGORITMO_COLA_RR:
+        return "RR";
+    default:
+        return "INVALIDO";
+    }
+}
+
+static t_cola_planificacion* crear_cola_planificacion(int nivel, t_algoritmo_cola algoritmo, int quantum_rr) {
+    t_cola_planificacion* cola = calloc(1, sizeof(t_cola_planificacion));
+    if (cola != NULL) {
+        cola->nivel = nivel;
+        cola->algoritmo = algoritmo;
+        cola->quantum = (algoritmo == ALGORITMO_COLA_RR) ? quantum_rr : 0;
+        cola->procesos = queue_create();
+    }
+    return cola;
 }
 
 t_list* crear_colas_ready_desde_config(t_config* config, int quantum_rr, t_log* logger) {
@@ -30,12 +56,7 @@ t_list* crear_colas_ready_desde_config(t_config* config, int quantum_rr, t_log* 
             return NULL;
         }
 
-        t_cola_planificacion* cola = calloc(1, sizeof(t_cola_planificacion));
-        cola->nivel = i;
-        cola->algoritmo = algoritmo;
-        cola->quantum = algoritmo == ALGORITMO_COLA_RR ? quantum_rr : 0;
-        cola->procesos = queue_create();
-        list_add(colas, cola);
+        list_add(colas, crear_cola_planificacion(i, algoritmo, quantum_rr));
     }
 
     if (algoritmos_colas != NULL) {
@@ -52,7 +73,7 @@ void destruir_cola_planificacion(void* elemento) {
         return;
     }
 
-    queue_destroy(cola->procesos);
+    queue_destroy_and_destroy_elements(cola->procesos, (void*)pcb_destruir);
     free(cola);
 }
 
@@ -65,13 +86,18 @@ t_cola_planificacion* obtener_cola_planificacion(t_list* colas, int cola_priorid
 }
 
 bool encolar_en_cola_ready(t_list* colas, t_proceso_planificable* proceso) {
-    t_cola_planificacion* cola = obtener_cola_planificacion(colas, proceso != NULL ? proceso->cola_prioridad : -1);
+    if (proceso == NULL) {
+        return false;
+    }
+
+    t_cola_planificacion* cola = obtener_cola_planificacion(colas, proceso->cola_prioridad);
 
     if (cola == NULL) {
         return false;
     }
 
     proceso->estado = ESTADO_PROCESO_READY;
+    proceso->instante_ready = _obtener_tiempo_ms();
     queue_push(cola->procesos, proceso);
     return true;
 }
@@ -100,15 +126,4 @@ int quantum_para_cola(t_list* colas, int cola_prioridad) {
     }
 
     return cola->quantum;
-}
-
-const char* planificador_nombre_algoritmo_cola(t_algoritmo_cola algoritmo) {
-    switch (algoritmo) {
-    case ALGORITMO_COLA_FIFO:
-        return "FIFO";
-    case ALGORITMO_COLA_RR:
-        return "RR";
-    default:
-        return "INVALIDO";
-    }
 }

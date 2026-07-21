@@ -1,4 +1,6 @@
-#include "main.h"
+#include "inicializacion.h"
+#include "scheduler_server.h"
+#include "utils_scheduler.h"
 
 int main(int argc, char* argv[]) {
     t_scheduler_context* ctx = iniciar_contexto(argc, argv);

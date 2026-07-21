@@ -1,4 +1,5 @@
 #include "utils_scheduler.h"
+
 //bloques para utils scheduler
 //====================================================================
 t_config* crear_configuracion(char* path_configuracion){

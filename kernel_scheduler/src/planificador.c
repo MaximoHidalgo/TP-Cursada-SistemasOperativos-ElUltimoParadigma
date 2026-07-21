@@ -27,6 +27,19 @@ static t_algoritmo_planificacion algoritmo_planificacion_desde_string(char* algo
     return ALGORITMO_PLANIFICACION_INVALIDO;
 }
 
+const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo) {
+    switch (algoritmo) {
+        case ALGORITMO_PLANIFICACION_CMN:
+            return "CMN";
+        case ALGORITMO_PLANIFICACION_FIFO:
+            return "FIFO";
+        case ALGORITMO_PLANIFICACION_RR:
+            return "RR";
+        default:
+            return "INVALIDO";
+    }
+}
+
 static bool config_get_bool_compatible(t_config* config, char* key) {
     char* valor = config_get_string_value(config, key);
     return valor != NULL && string_equals_ignore_case(valor, "TRUE");
@@ -311,17 +324,3 @@ int planificador_quantum_para(t_estratega_planificacion* estratega, int cola_pri
 bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estratega, t_proceso_planificable* proceso, int socket_cpu) {
     return rr_iniciar_quantum(estratega, proceso, socket_cpu);
 }
-
-const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo) {
-    switch (algoritmo) {
-        case ALGORITMO_PLANIFICACION_CMN:
-            return "CMN";
-        case ALGORITMO_PLANIFICACION_FIFO:
-            return "FIFO";
-        case ALGORITMO_PLANIFICACION_RR:
-            return "RR";
-        default:
-            return "INVALIDO";
-    }
-}
-
