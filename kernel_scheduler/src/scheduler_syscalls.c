@@ -1,4 +1,7 @@
-#include "atender_cliente_scheduler.h"
+#include "scheduler_syscalls.h"
+#include "planificador_io.h"
+#include "planificador_recursos.h"
+#include "planificador_memoria.h"
 
 
 
@@ -353,9 +356,3 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
 
     list_destroy_and_destroy_elements(paquete, free);
 }
-
-
- 
-
-
-

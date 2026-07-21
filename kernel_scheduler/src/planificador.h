@@ -64,23 +64,13 @@ typedef struct {
     pthread_mutex_t mutex_interfaz;
 } t_interfaz_io;
 
-bool comparador_procesos_suspendidos(void* a, void* b); //funcion agregada para evaluar cual desuspender
+
 
 t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log* logger);
 void destruir_estratega_planificacion(t_estratega_planificacion* estratega);
-void destruir_mutex(void* element);
 
-// void despachar_proceso_a_cpu(t_estratega_planificacion* estratega, int socket_cpu);
-void planificador_registrar_io(t_estratega_planificacion* estratega, char* nombre_interfaz, int socket_fd);
-bool planificador_es_io_registrado(t_estratega_planificacion* estratega, int socket_fd);
-t_interfaz_io* buscar_interfaz_por_socket(t_estratega_planificacion* estratega, int socket_fd);
-t_interfaz_io* buscar_interfaz_por_nombre(t_estratega_planificacion* estratega, char* nombre);
-void planificador_atender_peticion_io(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* interfaz);
-void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_fd);
 
-void planificador_mutex_create(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
-int planificador_mutex_lock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
-int planificador_mutex_unlock(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* recurso);
+
 
 bool planificador_encolar(t_estratega_planificacion* estratega, t_proceso_planificable* proceso);
 t_proceso_planificable* planificador_obtener_siguiente(t_estratega_planificacion* estratega);
@@ -95,9 +85,6 @@ void planificador_liberar_exec(t_estratega_planificacion* estratega, int pid);
 bool planificador_iniciar_quantum_si_corresponde(t_estratega_planificacion* estratega, t_proceso_planificable* proceso, int socket_cpu);
 
 const char* planificador_nombre_algoritmo(t_algoritmo_planificacion algoritmo);
-void planificador_finalizar_todo_por_bsod(t_estratega_planificacion*);
-void planificador_intentar_desuspender(t_estratega_planificacion* estratega);
 void planificador_enviar_interrupcion(t_estratega_planificacion* estratega, int opcode_interrupcion);
-int esperar_respuesta_memoria(int socket_memoria, t_estratega_planificacion* estratega);
-int planificador_orquestar_compactacion_sincronica(t_estratega_planificacion* estratega);
+
 #endif

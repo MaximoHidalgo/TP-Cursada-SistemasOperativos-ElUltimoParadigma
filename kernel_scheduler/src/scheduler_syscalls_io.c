@@ -1,4 +1,6 @@
 #include "scheduler_syscalls_io.h"
+#include "planificador_memoria.h"
+#include "planificador_io.h"
 
 void manejar_io_sleep(t_scheduler_context* ctx, t_list* paquete, uint32_t pid) {
     uint32_t* tiempo_ptr = list_get(paquete, 1);

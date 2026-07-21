@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <commons/collections/dictionary.h>
 #include "../src/planificador.h"
+#include "../src/colas.h"
+#include "../src/planificador_recursos.h"
 #include "../src/pcb.h"
 
 void test_extremo_logica_desalojo() {

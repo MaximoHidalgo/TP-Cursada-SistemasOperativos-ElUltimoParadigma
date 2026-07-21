@@ -2,7 +2,7 @@
 #define SCHEDULER_SYSCALLS_IO_H
 
 #include <commons/collections/list.h>
-#include "atender_cliente_scheduler.h"
+#include "scheduler_syscalls.h"
 #include "planificador.h"
 #include "utils_scheduler.h"
 #include "utils/dominio/opcodes.h"

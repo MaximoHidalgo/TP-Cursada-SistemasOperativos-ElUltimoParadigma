@@ -1,4 +1,5 @@
 #include "scheduler_dispatcher.h"
+#include "planificador_memoria.h"
 
 int handler_desalojo_compactacion(int fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(fd);
@@ -147,5 +148,67 @@ int handler_mem_free(int fd, t_scheduler_context* ctx) {
     return 1; 
 }
 
+static const handler_t tabla_despacho[256] = {
+    [MENSAJE]                    = handler_mensaje,
+    [SYSCALL_EXIT]               = handler_exit,
+    [SYSCALL_SLEEP]              = handler_sleep,
+    [SYSCALL_STDOUT]             = handler_stdout,
+    [SYSCALL_STDIN]              = handler_stdin,
+    [SYSCALL_MUTEX_CREATE]       = handler_mutex_create,
+    [SYSCALL_MUTEX_LOCK]         = handler_mutex_lock,
+    [SYSCALL_MUTEX_UNLOCK]       = handler_mutex_unlock,
+    [SYSCALL_SEG_FAULT]          = handler_seg_fault,
+    [SYSCALL_MEM_ALLOC]          = handler_mem_alloc,
+    [SYSCALL_MEM_FREE]           = handler_mem_free,
+    [SYSCALL_INIT_PROC]          = handler_init_proc,
+    [INTERRUPCION_QUANTUM]       = handler_fin_quantum,
+    [MEMORIA_EXPANDIDA]          = handler_mem_expandida, 
+	[CORRUPCION_MEMORIA]         = handler_mem_corrupta,
+    [RESPUESTA_COMPACTACION]     = handler_respuesta_compactacion,
+    [INTERRUPCION_DESALOJO]      = handler_interrupcion_desalojo,
+    [DESALOJO_COMPACTACION]      = handler_desalojo_compactacion
+};
 
+void remover_cpu_de_lista(t_estratega_planificacion* estratega, int fd) {
+    if (estratega->sockets_cpu == NULL) return;
+    for (int i = 0; i < list_size(estratega->sockets_cpu); i++) {
+        int* fd_ptr = list_get(estratega->sockets_cpu, i);
+        if (fd_ptr != NULL && *fd_ptr == fd) {
+            list_remove_and_destroy_element(estratega->sockets_cpu, i, free);
+            break;
+        }
+    }
+}
 
+int atenderRespuesta(int cliente_fd, t_scheduler_context* ctx, int mensaje_cliente) {
+    if (mensaje_cliente == -1) {
+        log_warning(ctx->logger, "El cliente se desconectó.");
+        return -1;
+    }
+
+    if (mensaje_cliente < 0 || mensaje_cliente >= 256 || tabla_despacho[mensaje_cliente] == NULL) {
+        log_warning(ctx->logger, "No entiendo el mensaje o código de operación: %d", mensaje_cliente);
+        return -1;
+    }
+
+    return tabla_despacho[mensaje_cliente](cliente_fd, ctx);
+}
+
+void atender_cliente_scheduler(void* arg) {
+    t_args_hilo_scheduler* args = (t_args_hilo_scheduler*)arg;
+    int cliente_fd = args->cliente_fd;
+    t_scheduler_context* ctx = args->ctx;
+    free(args);
+
+    while (1) {
+        int mensaje_cliente = recibir_operacion(cliente_fd);
+        
+        int status = atenderRespuesta(cliente_fd, ctx, mensaje_cliente);
+        
+        if (status == -1) {
+            remover_cpu_de_lista(ctx->estratega, cliente_fd);
+            close(cliente_fd);
+            break;
+        }
+    }
+}

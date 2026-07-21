@@ -9,6 +9,3 @@ int main(int argc, char* argv[]) {
     limpiar_contexto(ctx);
     return EXIT_SUCCESS;
 }
-
-
-

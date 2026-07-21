@@ -5,7 +5,7 @@
 #include "./commons/config.h"
 #include "planificador.h"
 #include "pcb.h"
-#include "atender_cliente_scheduler.h"
+#include "scheduler_syscalls.h"
 #include <utils/dominio/opcodes.h>
 #include <utils/dominio/estructuras.h>
 #include <utils/sockets/sockets.h>

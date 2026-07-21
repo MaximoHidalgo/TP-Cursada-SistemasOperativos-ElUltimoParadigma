@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include "../src/colas.h"
 #include "../src/pcb.h"
-#include "../src/atender_cliente_scheduler.h"
+#include "../src/scheduler_syscalls.h"
 #include "../src/main.h"
 
 #define main kernel_scheduler_main

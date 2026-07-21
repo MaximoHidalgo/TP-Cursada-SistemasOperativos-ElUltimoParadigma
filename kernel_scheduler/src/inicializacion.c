@@ -1,4 +1,6 @@
 #include "inicializacion.h"
+#include "planificador.h"
+#include "planificador_memoria.h"
 
 t_scheduler_context* iniciar_contexto(int argc, char* argv[]) {
     char* path_config = argv[1];
