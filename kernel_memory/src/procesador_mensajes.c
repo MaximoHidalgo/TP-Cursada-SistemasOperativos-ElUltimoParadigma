@@ -1,4 +1,97 @@
 #include "procesador_mensajes.h"
+#include "gestion_programas.h"
+#include <commons/string.h>
+
+static void conectar_memory_stick(int cliente_fd, t_memory_context* ctx, char* mensaje) {
+    char **partes = string_split(mensaje, "|");
+    uint32_t stick_size = atoi(partes[1]);
+    char* stick_ip = strdup(partes[2]);
+    int stick_puerto = atoi(partes[3]);
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    
+    t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
+    stick->socket_fd = cliente_fd;
+    stick->tamanio = stick_size;
+    stick->base_address = ctx->memoria_total;
+    stick->id = list_size(ctx->memory_sticks) + 1;
+    stick->ip = stick_ip;
+    stick->puerto = stick_puerto;
+    
+    list_add(ctx->memory_sticks, stick);
+    
+    t_hueco_libre* nuevo_hueco = malloc(sizeof(t_hueco_libre));
+    nuevo_hueco->base = ctx->memoria_total;
+    nuevo_hueco->limite = ctx->memoria_total + stick_size;
+    list_add(ctx->huecos_libres, nuevo_hueco);
+    fusionar_huecos_libres(ctx->huecos_libres);
+    
+    ctx->memoria_total += stick_size;
+    log_info(ctx->logger, "## Memory Stick de %d bytes Conectada", stick_size);
+    log_info(ctx->logger, "Memory Stick registrada en %s:%d. Memoria total actual: %d bytes", stick_ip, stick_puerto, ctx->memoria_total);
+    
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+
+    pthread_mutex_lock(&ctx->mutex_scheduler_socket);
+    notificar_memoria_expandida(ctx->scheduler_socket);
+    pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
+    
+    string_array_destroy(partes);
+}
+
+static void conectar_cpu(int cliente_fd, t_memory_context* ctx, char* mensaje) {
+    log_info(ctx->logger, "## CPU %s Conectada", mensaje);
+    
+    pthread_mutex_lock(&ctx->mutex_memoria);
+    t_paquete* paq = crear_paquete();
+    paq->codigo_operacion = ENVIO_TABLA_STICKS;
+    serializar_tabla_sticks_en_paquete(paq, ctx->memory_sticks);
+    enviar_paquete(paq, cliente_fd);
+    eliminar_paquete(paq);
+    pthread_mutex_unlock(&ctx->mutex_memoria);
+}
+
+static void conectar_swap(int cliente_fd, t_memory_context* ctx, char* mensaje) {
+    char **partes = string_split(mensaje, "|");
+    ctx->swap_file_size = atoi(partes[1]);
+    ctx->swap_block_size = atoi(partes[2]);
+    ctx->swap_socket = cliente_fd;
+    
+    int cant_bloques = ctx->swap_file_size / ctx->swap_block_size;
+    int bits_bytes = (cant_bloques + 7) / 8;
+    ctx->bitarray_data = malloc(bits_bytes);
+    memset(ctx->bitarray_data, 0, bits_bytes);
+    ctx->swap_bitmap = bitarray_create_with_mode(ctx->bitarray_data, bits_bytes, LSB_FIRST);
+    
+    log_info(ctx->logger, "## SWAP Conectado. Tamaño: %d, Tamaño Bloque: %d, Total Bloques: %d", ctx->swap_file_size, ctx->swap_block_size, cant_bloques);
+    string_array_destroy(partes);
+}
+
+bool procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx) {
+    char *mensaje = recibir_handshake(cliente_fd);
+    bool should_continue = true;
+    
+    if (string_starts_with(mensaje, "STICK|")) {
+        conectar_memory_stick(cliente_fd, ctx, mensaje);
+        should_continue = false;
+    }
+    else if (string_equals_ignore_case(mensaje, HANDSHAKE_SCHEDULER)) {
+        ctx->scheduler_socket = cliente_fd;
+        log_info(ctx->logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
+    }
+    else if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
+        conectar_cpu(cliente_fd, ctx, mensaje);
+    }
+    else if (string_starts_with(mensaje, "SWAP|")) {
+        conectar_swap(cliente_fd, ctx, mensaje);
+        should_continue = false;
+    }
+    else { 
+        log_info(ctx->logger, "## Módulo Conectado: %s", mensaje);
+    }
+    free(mensaje);
+    return should_continue;
+}
 
 static uint32_t recibir_pid(int cliente_fd) {
     uint32_t pid;

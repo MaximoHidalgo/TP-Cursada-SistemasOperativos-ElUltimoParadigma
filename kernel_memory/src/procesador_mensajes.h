@@ -6,7 +6,6 @@
 #include "memoria_distribuida.h"
 #include "swap_y_suspension.h"
 #include "comunicacion_scheduler.h"
-#include "auxiliares.h"
 #include <unistd.h>
 #include <stdlib.h>
 
@@ -15,7 +14,6 @@ typedef struct {
     t_memory_context* ctx;
 } t_args_hilo_cliente;
 
-void notificar_memoria_expandida(int scheduler_socket);
 bool procesar_mensaje_handshake(int cliente_fd, t_memory_context* ctx);
 void procesar_crear_proceso_handler(int cliente_fd, t_memory_context* ctx);
 void procesar_solicitud_contexto_handler(int cliente_fd, t_memory_context* ctx);
