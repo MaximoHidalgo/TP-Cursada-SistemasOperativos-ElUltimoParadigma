@@ -1,18 +1,9 @@
 #include "swap_y_suspension.h"
-#include "gestion_huecos_y_compactacion.h"
-#include "gestion_segmentos.h"
-#include "memoria_distribuida.h"
-#include "comunicacion_scheduler.h"
-#include <utils/sockets/sockets.h>
-#include <utils/protocolo/protocolo.h>
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
 
-/**
- * Busca un rango contiguo de bloques libres en un bitmap de SWAP.
- * Retorna el índice del primer bloque libre, o -1 si no hay espacio.
- */
+/*
+ Busca un rango contiguo de bloques libres en un bitmap de SWAP.
+ Retorna el índice del primer bloque libre, o -1 si no hay espacio.
+*/
 static int buscar_bloques_libres_en_swap(t_bitarray* bitmap, int total_bloques, int cant_bloques_necesarios) {
     for (int b = 0; b <= total_bloques - cant_bloques_necesarios; b++) {
         bool libre = true;

@@ -1,7 +1,7 @@
 #ifndef KERNEL_MEMORY_INIT_H
 #define KERNEL_MEMORY_INIT_H
 
-#include "estructuras_memory.h"
+#include "atender_cliente_kernel_memory.h"
 
 t_memory_context* iniciar_contexto(int argc, char* argv[]);
 void inicializar_entorno(t_memory_context* ctx, int argc, char* argv[]);

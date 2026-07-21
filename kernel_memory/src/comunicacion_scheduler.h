@@ -2,7 +2,7 @@
 #define COMUNICACION_SCHEDULER_H
 
 #include "estructuras_memory.h"
-#include <utils/dominio/estructuras.h>
+#include "gestion_huecos_y_compactacion.h"
 
 void notificar_memoria_corrupta(int scheduler_socket);
 void notificar_memoria_expandida(int scheduler_socket);

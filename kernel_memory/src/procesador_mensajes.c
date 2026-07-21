@@ -1,6 +1,4 @@
 #include "procesador_mensajes.h"
-#include "gestion_programas.h"
-#include <commons/string.h>
 
 static void conectar_memory_stick(int cliente_fd, t_memory_context* ctx, char* mensaje) {
     char **partes = string_split(mensaje, "|");

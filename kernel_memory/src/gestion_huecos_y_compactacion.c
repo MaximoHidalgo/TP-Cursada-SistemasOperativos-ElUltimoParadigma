@@ -1,8 +1,4 @@
 #include "gestion_huecos_y_compactacion.h"
-#include "memoria_distribuida.h"
-#include <commons/string.h>
-#include <unistd.h>
-#include <pthread.h>
 
 bool comparar_por_base(void* a, void* b)
 {

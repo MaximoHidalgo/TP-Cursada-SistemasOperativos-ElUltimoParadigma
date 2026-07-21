@@ -2,7 +2,8 @@
 #define GESTION_SEGMENTOS_H
 
 #include "estructuras_memory.h"
-#include <utils/dominio/estructuras.h>
+#include "gestion_huecos_y_compactacion.h"
+#include "swap_y_suspension.h"
 
 t_segmento* crear_segmento(t_memory_context* ctx, uint32_t pid, uint32_t id, uint32_t tamanio, int* needs_compaction);
 void eliminar_segmento(t_memory_context* ctx, uint32_t pid, t_segmento* segmento);

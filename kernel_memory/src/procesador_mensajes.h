@@ -3,11 +3,10 @@
 
 #include "gestion_huecos_y_compactacion.h"
 #include "gestion_segmentos.h"
+#include "gestion_programas.h"
 #include "memoria_distribuida.h"
 #include "swap_y_suspension.h"
 #include "comunicacion_scheduler.h"
-#include <unistd.h>
-#include <stdlib.h>
 
 typedef struct {
     int cliente_fd;

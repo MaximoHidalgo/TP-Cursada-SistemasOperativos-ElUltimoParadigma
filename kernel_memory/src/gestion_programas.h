@@ -2,7 +2,7 @@
 #define GESTION_PROGRAMAS_H
 
 #include "estructuras_memory.h"
-#include <utils/dominio/estructuras.h>
+#include "gestion_segmentos.h"
 
 t_programa* buscar_programa(t_memory_context* ctx, int pid);
 char** leer_lineas(FILE* f, int* cantidad);

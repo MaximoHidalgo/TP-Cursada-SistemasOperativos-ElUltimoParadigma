@@ -2,7 +2,10 @@
 #define SWAP_Y_SUSPENSION_H
 
 #include "estructuras_memory.h"
-#include <utils/dominio/estructuras.h>
+#include "gestion_huecos_y_compactacion.h"
+#include "gestion_segmentos.h"
+#include "memoria_distribuida.h"
+#include "comunicacion_scheduler.h"
 
 bool requiere_compactacion(t_memory_context* ctx, uint32_t tamanio);
 uint32_t calcular_memoria_necesaria(t_contexto_ejecucion* proc);

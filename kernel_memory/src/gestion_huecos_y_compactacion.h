@@ -2,7 +2,7 @@
 #define GESTION_HUECOS_Y_COMPACTACION_H
 
 #include "estructuras_memory.h"
-#include <utils/dominio/estructuras.h>
+#include "memoria_distribuida.h"
 
 bool comparar_por_base(void* a, void* b);
 void fusionar_huecos_libres(t_list* huecos_libres);

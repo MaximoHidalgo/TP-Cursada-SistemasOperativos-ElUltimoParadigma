@@ -1,10 +1,4 @@
 #include "kernel_memory_init.h"
-#include "atender_cliente_kernel_memory.h"
-#include <utils/sockets/sockets.h>
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
-#include <unistd.h>
 
 void inicializar_entorno(t_memory_context* ctx, int argc, char* argv[]) {
     ctx->config = config_create(argv[1]);

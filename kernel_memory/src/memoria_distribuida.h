@@ -2,7 +2,6 @@
 #define MEMORIA_DISTRIBUIDA_H
 
 #include "estructuras_memory.h"
-#include <utils/dominio/estructuras.h>
 
 void* leer_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio);
 void escribir_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer);

@@ -1,11 +1,4 @@
 #include "gestion_programas.h"
-#include "gestion_segmentos.h"
-#include <commons/string.h>
-#include <commons/log.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <pthread.h>
 
 t_programa* buscar_programa(t_memory_context* ctx, int pid) {
     pthread_mutex_lock(&ctx->mutex_programas);

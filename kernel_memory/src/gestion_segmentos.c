@@ -1,7 +1,4 @@
 #include "gestion_segmentos.h"
-#include "gestion_huecos_y_compactacion.h"
-#include "swap_y_suspension.h"
-#include <stdlib.h>
 
 t_segmento* crear_segmento(t_memory_context* ctx, uint32_t pid, uint32_t id, uint32_t tamanio, int* needs_compaction) {
     if (tamanio > ctx->segment_max_size) {

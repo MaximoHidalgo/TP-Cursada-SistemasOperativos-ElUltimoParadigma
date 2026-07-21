@@ -1,9 +1,4 @@
 #include "memoria_distribuida.h"
-#include <utils/sockets/sockets.h>
-#include <utils/protocolo/protocolo.h>
-#include <commons/log.h>
-#include <stdlib.h>
-#include <string.h>
 
 void* leer_memoria_distribuida(t_memory_context* ctx, uint32_t dir_fisica, uint32_t tamanio) {
     void* buffer = malloc(tamanio);

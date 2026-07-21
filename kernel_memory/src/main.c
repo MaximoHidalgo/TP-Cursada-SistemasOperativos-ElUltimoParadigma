@@ -1,5 +1,4 @@
 #include "kernel_memory_init.h"
-#include <stdlib.h>
 
 int main(int argc, char *argv[]) {
     t_memory_context* ctx = iniciar_contexto(argc, argv);
