@@ -3,13 +3,10 @@
 #include "planificador.h" //agregado por si necesita la biblioteca plani que tenia estructuras sheduler
 #include "estructuras_scheduler.h"
 #include "atender_cliente_scheduler.h"
+#include "inicializacion.h"
+#include "scheduler_server.h"
+#include "utils_scheduler.h"
 
-// Inicialización y Orquestación
-t_scheduler_context* iniciar_contexto(int argc, char* argv[]);
-void* atender_mensajes_memoria(void* arg);
-void conectar_kernel_memory(t_scheduler_context* ctx);
-void iniciar_planificacion(t_scheduler_context* ctx);
-void iniciar_servidor_clientes(t_scheduler_context* ctx);
-//void limpiar_contexto(t_scheduler_context* ctx);
+//void* atender_mensajes_memoria(void* arg);
 
 #endif /* MAIN_H_ */
