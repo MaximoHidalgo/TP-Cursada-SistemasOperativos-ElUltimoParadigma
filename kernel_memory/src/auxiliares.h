@@ -11,7 +11,11 @@
 #include <commons/log.h>
 #include "estructuras_memory.h"
 #include "procesador_mensajes.h"
-#include "auxiliares_memoria.h"
+#include "gestion_huecos_y_compactacion.h"
+#include "gestion_segmentos.h"
+#include "memoria_distribuida.h"
+#include "swap_y_suspension.h"
+#include "comunicacion_scheduler.h"
 #include "atender_cliente_kernel_memory.h"
 
 t_programa* buscar_programa(t_memory_context* ctx, int pid);

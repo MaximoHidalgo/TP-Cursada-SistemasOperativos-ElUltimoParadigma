@@ -1,7 +1,11 @@
 #ifndef PROCESADOR_MENSAJES_H
 #define PROCESADOR_MENSAJES_H
 
-#include "auxiliares_memoria.h"
+#include "gestion_huecos_y_compactacion.h"
+#include "gestion_segmentos.h"
+#include "memoria_distribuida.h"
+#include "swap_y_suspension.h"
+#include "comunicacion_scheduler.h"
 #include "auxiliares.h"
 #include <unistd.h>
 #include <stdlib.h>
