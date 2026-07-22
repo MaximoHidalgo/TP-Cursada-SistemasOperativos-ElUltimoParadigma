@@ -1,10 +1,6 @@
 #ifndef PLANIFICADOR_IO_H
 #define PLANIFICADOR_IO_H
 
-#include "planificador_io.h"
-#include "planificador.h"
-#include <unistd.h>
-#include <sys/time.h>
 #include "estructuras_scheduler.h"
 
 t_interfaz_io* buscar_interfaz_por_socket(t_estratega_planificacion* estratega, int socket_fd);
