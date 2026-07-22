@@ -66,3 +66,14 @@ La lógica monolítica del planificador fue segregada en tres dominios auxiliare
 - **Registro del `instante_ready`**: El campo `instante_ready` de los procesos (crucial para algoritmos con envejecimiento como Colas Multinivel) estaba declarado pero nunca se le asignaba valor. Ahora se popula automáticamente usando `gettimeofday()` al ingresar a la cola en `encolar_en_cola_ready`.
 - **Cláusulas de Guarda**: Se eliminó un operador ternario confuso que manejaba punteros nulos y se reemplazó por un *early return* (`if (proceso == NULL) return false;`), haciendo el código más predecible. También se purgaron llamadas manuales a `free()` en los tests que generaban *double frees* tras nuestra mejora en la destrucción de colas.
 - **Extracción de *Factory Method***: La función `crear_colas_ready_desde_config` estaba volviéndose muy grande (violando el Principio de Responsabilidad Única). Se extrajo la instanciación e inicialización del nodo en una función estática interna (`crear_cola_planificacion`), logrando que el ciclo *for* quede mucho más limpio y enfocado exclusivamente en la iteración.
+
+### 2.10. Reorganización de `opcodes.h` (Librería Compartida `utils`)
+- **Cambio realizado**: Se agrupó el `enum op_code` por dominios lógicos (General, Ciclo de Vida de Procesos, Memoria, Interrupciones, Syscalls, I/O y Errores) utilizando comentarios espaciados. Se requirió recompilar todos los módulos (`make clean all`).
+- **Justificación**: Con casi 50 códigos de operación mezclados a lo largo del desarrollo, era difícil ubicar opcodes específicos o detectar duplicados. Agruparlos lógicamente facilita el mantenimiento y la legibilidad sin alterar el comportamiento de red (ya que todos los clientes y servidores del TP comparten el mismo `.h`).
+
+### 2.11. Refactorización de `planificador_io.c` (I/O y Temporizadores)
+- **Eliminación de *Arrow Code* y Extracción de Responsabilidades**:
+  La función `planificador_io_terminada` tenía excesiva anidación. Se implementaron retornos tempranos (*Early Returns*) y se extrajeron las lógicas de desalojo (`evaluar_desalojo_por_io`) y readmisión (`reintegrar_proceso_post_io`) a funciones auxiliares estáticas. Se aplicó lo mismo a la creación del timer en `planificador_atender_peticion_io` derivándolo a `lanzar_hilo_suspension`.
+- **Eliminación de Operaciones Crudas de Red**:
+  El hilo `suspension_timer_thread` gestionaba la red enviando el PID directamente a través de un simple `send()` casteando el puntero. Se encapsuló esta comunicación en la función `notificar_suspension_memoria` y se reemplazó el uso de `send` y `enviar_int` por la utilidad estandarizada compartida `enviar_operacion_con_pid` de `utils/protocolo.h`.
+- **Justificación**: Se aplican estrictamente los lineamientos de *Clean Code* (responsabilidad única, funciones reducidas, legibilidad) y de las normativas de módulos de C establecidas para el TP (evitar manejos de punteros o buffers de red no abstraídos).
