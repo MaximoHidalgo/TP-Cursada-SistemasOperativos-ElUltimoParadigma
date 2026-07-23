@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "../src/auxiliares.h"
+#include "../src/kernel_memory_init.h"
 
 void test_principal_km() {
     

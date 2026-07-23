@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "../src/auxiliares_memoria.h"
+#include "../src/gestion_huecos_y_compactacion.h"
+#include "../src/gestion_segmentos.h"
+#include "../src/memoria_distribuida.h"
+#include "../src/swap_y_suspension.h"
+#include "../src/comunicacion_scheduler.h"
 
 void test_auxiliares_memoria() {
     // Caso Feliz

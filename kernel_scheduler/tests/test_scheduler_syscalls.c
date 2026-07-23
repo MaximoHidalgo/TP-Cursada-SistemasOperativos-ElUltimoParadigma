@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
-#include "../src/atender_cliente_scheduler.h"
+#include "../src/scheduler_syscalls.h"
+#include "../src/scheduler_dispatcher.h"
 
 static t_scheduler_context* crear_contexto_test(void)
 {

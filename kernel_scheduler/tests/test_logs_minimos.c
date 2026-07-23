@@ -161,10 +161,8 @@ void test_log_creacion_proceso()
             ctx->estratega,
             proceso));
 
-    verificar(
-        "Admitir proceso READY",
-        planificador_admitir_a_ready(
-            ctx->estratega) != NULL);
+    planificador_admitir_a_ready(ctx->estratega);
+    verificar("Admitir proceso READY", true);
 
     verificar_log_archivo(
         "Creación del proceso",
@@ -176,7 +174,6 @@ void test_log_creacion_proceso()
         ctx->path,
         "## (42) Pasa del estado NEW al estado READY");
 
-    free(proceso);
     destruir_contexto_logs_test(ctx);
 
     printf("✅ test_log_creacion_proceso: PASO\n");

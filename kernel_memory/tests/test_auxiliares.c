@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "../src/auxiliares.h"
+#include "../src/gestion_programas.h"
 
 void test_auxiliares() {
     // Caso Feliz

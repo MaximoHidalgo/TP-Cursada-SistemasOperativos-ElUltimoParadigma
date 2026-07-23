@@ -1,13 +1,10 @@
 #ifndef ESTRUCTURAS_MEMORY_H
 #define ESTRUCTURAS_MEMORY_H
 
-#include <stdint.h>
-#include <commons/log.h>
-#include <commons/config.h>
-#include <commons/collections/list.h>
-#include <commons/bitarray.h>
-#include <pthread.h>
 #include "utils/dominio/estructuras.h"
+#include <commons/bitarray.h>
+#include <commons/string.h>
+#include <pthread.h>
 
 typedef struct {
     uint32_t base;

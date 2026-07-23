@@ -1,4 +1,22 @@
 #include "pcb.h"
+#include <stdlib.h>
+
+t_proceso_planificable* pcb_crear(int pid, int prioridad) {
+    t_proceso_planificable* pcb = malloc(sizeof(t_proceso_planificable));
+    if (pcb != NULL) {
+        pcb->pid = pid;
+        pcb->cola_prioridad = prioridad;
+        pcb->prioridad_original = prioridad;
+        pcb->bloqueo_id = 0;
+    }
+    return pcb;
+}
+
+void pcb_destruir(t_proceso_planificable* pcb) {
+    if (pcb != NULL) {
+        free(pcb);
+    }
+}
 
 const char* planificador_nombre_estado(t_estado_proceso estado) {
     switch (estado) {

@@ -5,8 +5,7 @@
 #include <unistd.h>
 #include "../src/colas.h"
 #include "../src/pcb.h"
-#include "../src/atender_cliente_scheduler.h"
-#include "../src/main.h"
+#include "../src/scheduler_syscalls.h"
 
 #define main kernel_scheduler_main
 #include "../src/main.c"
@@ -27,9 +26,12 @@ static t_scheduler_context* crear_contexto_test(void) {
 
     ctx->estratega->logger = ctx->logger;
     ctx->estratega->cola_new = queue_create();
+    ctx->estratega->cola_susp_ready = list_create();
+    ctx->estratega->colas_io = dictionary_create();
+    ctx->estratega->mutex_creados = dictionary_create();
     ctx->estratega->colas = list_create();
     ctx->estratega->quantum_rr = 3;
-    ctx->estratega->sockets_cpu = -1;
+    ctx->estratega->sockets_cpu = list_create();
     ctx->estratega->socket_memoria = -1;
     pthread_mutex_init(&ctx->estratega->mutex_colas, NULL);
 
@@ -89,6 +91,14 @@ void test_inicializacion_de_planificador(void) {
     ctx->path_script_inicial = "./scripts/PLANI_PRE_0.prc";
     ctx->socket_memoria = sockets[0];
     agregar_cola_ready(ctx->estratega, 0, ALGORITMO_COLA_FIFO, 0);
+
+    // Simular respuesta exitosa de memoria para evitar interbloqueo en iniciar_planificacion
+    int op = MENSAJE;
+    send(sockets[1], &op, sizeof(int), 0);
+    int size = 3;
+    char msg[] = "OK";
+    send(sockets[1], &size, sizeof(int), 0);
+    send(sockets[1], msg, size, 0);
 
     iniciar_planificacion(ctx);
 

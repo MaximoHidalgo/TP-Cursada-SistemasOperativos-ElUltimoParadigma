@@ -1,7 +1,4 @@
-#include "main.h"
-#include "auxiliares.h"
-
-// Functions moved to auxiliares.c
+#include "kernel_memory_init.h"
 
 int main(int argc, char *argv[]) {
     t_memory_context* ctx = iniciar_contexto(argc, argv);
