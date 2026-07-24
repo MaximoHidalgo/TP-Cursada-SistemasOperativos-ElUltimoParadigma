@@ -146,6 +146,10 @@ void limpiar_contexto(t_cpu_context* ctx) {
         if (ctx->logger) log_destroy(ctx->logger);
         if (ctx->config) config_destroy(ctx->config);
     }
+
+    if (ctx->memory_sticks) {
+        list_destroy_and_destroy_elements(ctx->memory_sticks, destruir_stick_info);
+    }
     
     if (ctx->id_cpu) free(ctx->id_cpu);
     free(ctx);
