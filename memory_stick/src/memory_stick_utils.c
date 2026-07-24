@@ -68,12 +68,12 @@ void conectar_kernel_memory(t_memory_stick_context* ctx) {
     enviar_mensaje(msj_handshake, ctx->socket_kernel_memory);
     free(msj_handshake);
     
-    t_args_hilo_cpu* args = malloc(sizeof(t_args_hilo_cpu));
+    t_args_hilo_cliente* args = malloc(sizeof(t_args_hilo_cliente));
     args->socket_cliente = ctx->socket_kernel_memory;
     args->ctx = ctx;
 
     pthread_t hilo_km;
-    if (pthread_create(&hilo_km, NULL, atender_cliente_cpu, args) != 0) {
+    if (pthread_create(&hilo_km, NULL, atender_cliente, args) != 0) {
         log_error(ctx->logger, "Fallo al crear el hilo para Kernel Memory");
         free(args);
     } else {
@@ -91,21 +91,21 @@ void iniciar_servidor_cpus(t_memory_stick_context* ctx) {
     log_info(ctx->logger, "Memory Stick listo para recibir CPUs en el puerto %s", ctx->puerto_escucha);
 
     while (1) {
-        int socket_cpu = esperar_cliente(ctx->socket_escucha, ctx->logger);
-        if (socket_cpu == -1) {
+        int socket_cliente = esperar_cliente(ctx->socket_escucha, ctx->logger);
+        if (socket_cliente == -1) {
             log_warning(ctx->logger, "Error al aceptar una nueva conexión de CPU");
             continue;
         }
 
-        t_args_hilo_cpu* args = malloc(sizeof(t_args_hilo_cpu));
-        args->socket_cliente = socket_cpu;
+        t_args_hilo_cliente* args = malloc(sizeof(t_args_hilo_cliente));
+        args->socket_cliente = socket_cliente;
         args->ctx = ctx;
 
         pthread_t hilo_cpu;
-        if (pthread_create(&hilo_cpu, NULL, atender_cliente_cpu, args) != 0) {
+        if (pthread_create(&hilo_cpu, NULL, atender_cliente, args) != 0) {
             log_error(ctx->logger, "Fallo al crear el hilo para la CPU");
             free(args);
-            close(socket_cpu);
+            close(socket_cliente);
         } else {
             pthread_detach(hilo_cpu); // Permite al hilo liberar sus propios recursos al terminar
         }

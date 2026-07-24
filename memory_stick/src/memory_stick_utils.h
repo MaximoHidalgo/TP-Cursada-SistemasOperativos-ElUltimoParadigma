@@ -1,7 +1,7 @@
 #ifndef MEMORY_STICK_UTILS_H_
 #define MEMORY_STICK_UTILS_H_
 
-#include "atender_cpu.h"
+#include "atender_cliente.h"
 #include "estructuras.h"
 #include <commons/string.h>
 #include <commons/log.h>

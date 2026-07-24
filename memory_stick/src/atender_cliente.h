@@ -1,5 +1,5 @@
-#ifndef ATENDER_CPU_H_
-#define ATENDER_CPU_H_
+#ifndef ATENDER_CLIENTE_H_
+#define ATENDER_CLIENTE_H_
 
 #include <utils/sockets/sockets.h>
 #include <utils/protocolo/protocolo.h>
@@ -16,11 +16,11 @@
 typedef struct {
     int socket_cliente;
     t_memory_stick_context* ctx;
-} t_args_hilo_cpu;
+} t_args_hilo_cliente;
 
-void* atender_cliente_cpu(void* arg);
-void procesar_mensaje_handshake(int socket_cpu, t_log* logger);
-void procesar_lectura(int socket_cpu, t_memory_stick_context* ctx);
-void procesar_escritura(int socket_cpu, t_memory_stick_context* ctx);
+void* atender_cliente(void* arg);
+void procesar_mensaje_handshake(int socket_cliente, t_log* logger);
+void procesar_lectura(int socket_cliente, t_memory_stick_context* ctx);
+void procesar_escritura(int socket_cliente, t_memory_stick_context* ctx);
 
-#endif // ATENDER_CPU_H_
+#endif // ATENDER_CLIENTE_H_
