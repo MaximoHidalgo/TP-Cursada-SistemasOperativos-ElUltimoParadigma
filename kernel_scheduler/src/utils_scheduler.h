@@ -29,5 +29,6 @@ void atender_socket_invalido(char*,t_log*, t_scheduler_context*);
 int preparar_servidor(char*, t_log*, t_scheduler_context*);
 void limpiar_contexto(t_scheduler_context*);
 //====================================================
+void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx);
 
 #endif //UTILS_SCHEDULER_H

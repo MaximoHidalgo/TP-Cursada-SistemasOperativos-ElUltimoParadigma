@@ -13,6 +13,8 @@
 #include <commons/string.h>
 #include <unistd.h>
 
+
+
 typedef enum {
     ALGORITMO_PLANIFICACION_CMN, //El de colas multinivel
     ALGORITMO_PLANIFICACION_FIFO, //El de first in first out

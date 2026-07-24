@@ -3,7 +3,7 @@
 #include "planificador_recursos.h"
 #include "planificador_memoria.h"
 
-void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
+/* void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
     t_proceso_planificable* proceso_a_ejecutar = planificador_despachar_siguiente(ctx->estratega);
     
     if (proceso_a_ejecutar != NULL) {
@@ -19,17 +19,17 @@ void despachar_proceso_a_cpu(t_scheduler_context* ctx, int socket_cpu) {
     } else {
         log_info(ctx->logger, "No hay procesos en la cola READY para despachar a la CPU.");
     }
-}
+} */
 
-static void devolver_ejecucion_a_cpu(t_scheduler_context* ctx, int cliente_fd) {
+/* static void devolver_ejecucion_a_cpu(t_scheduler_context* ctx, int cliente_fd) {
     t_paquete* paquete_pid = crear_paquete();
     paquete_pid->codigo_operacion = PID_A_EJECUTAR;
     agregar_a_paquete(paquete_pid, &(ctx->estratega->proceso_exec->pid), sizeof(int));
     enviar_paquete(paquete_pid, cliente_fd);
     eliminar_paquete(paquete_pid);
-}
+} */
 
-void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
+/* void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
     int size;
     char* mensaje = recibir_buffer(&size, cliente_fd);
 
@@ -104,10 +104,10 @@ void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
         }
     }
     free(mensaje);
-}
+} */
 
 
-void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
+/* void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     if (ctx->estratega->proceso_exec != NULL) {
         // Log obligatorio del TP
@@ -131,9 +131,9 @@ void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
     }
     despachar_proceso_a_cpu(ctx, cliente_fd);
     list_destroy_and_destroy_elements(paquete, free);
-}
+} */
 
-void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_syscall) {
+/* void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_syscall) {
     t_list* paquete = recibir_paquete(cliente_fd);
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
@@ -179,9 +179,9 @@ void procesar_syscall_mutex(int cliente_fd, t_scheduler_context* ctx, int tipo_s
     }
     
     list_destroy_and_destroy_elements(paquete, free);
-}
+} */
 
-void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo_syscall) {
+/* void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo_syscall) {
     t_list* paquete = recibir_paquete(cliente_fd);
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
@@ -296,8 +296,8 @@ void procesar_syscall_memoria(int cliente_fd, t_scheduler_context* ctx, int tipo
     
     list_destroy_and_destroy_elements(paquete, free);
 }
-
-void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
+ */
+/* void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     if (ctx->estratega->proceso_exec != NULL) {
         log_info(ctx->logger, "## Fin de Quantum para proceso %d - Desalojado", ctx->estratega->proceso_exec->pid);
@@ -307,9 +307,9 @@ void procesar_fin_quantum(int cliente_fd, t_scheduler_context* ctx) {
     }
     despachar_proceso_a_cpu(ctx, cliente_fd);
     list_destroy_and_destroy_elements(paquete, free);
-}
+} */
 
-void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
+/* void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     t_list* paquete = recibir_paquete(cliente_fd);
     uint32_t* pid_ptr = list_get(paquete, 0);
     uint32_t pid = *pid_ptr;
@@ -349,4 +349,4 @@ void procesar_syscall_init_proc(int cliente_fd, t_scheduler_context* ctx) {
     devolver_ejecucion_a_cpu(ctx, cliente_fd); // Sigue en EXEC
 
     list_destroy_and_destroy_elements(paquete, free);
-}
+} */

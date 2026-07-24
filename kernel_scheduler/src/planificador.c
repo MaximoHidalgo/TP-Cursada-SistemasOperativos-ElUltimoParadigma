@@ -6,7 +6,7 @@
 #include "rr.h"
 #include "planificador_memoria.h"
 #include "planificador_recursos.h"
-
+ 
 static t_algoritmo_planificacion algoritmo_planificacion_desde_string(char* algoritmo) {
     if (algoritmo == NULL) {
         return ALGORITMO_PLANIFICACION_INVALIDO;

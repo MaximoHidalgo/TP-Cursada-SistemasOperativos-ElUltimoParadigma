@@ -1,7 +1,7 @@
 #ifndef SCHEDULER_DISPATCHER_H
 #define SCHEDULER_DISPATCHER_H
 #include "scheduler_syscalls.h"
-#include "scheduler_syscalls.h"
+#include "utils_scheduler.h"
 
 // Typedef para punteros a funciones manejadoras
 typedef int (*handler_t)(int cliente_fd, t_scheduler_context* ctx);

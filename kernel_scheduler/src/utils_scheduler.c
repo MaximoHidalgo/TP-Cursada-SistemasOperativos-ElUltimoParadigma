@@ -71,3 +71,80 @@ const char* obtener_nombre_syscall(int tipo_syscall) {
         default: return "UNKNOWN";
     }
 } 
+/* 
+void procesar_mensaje_handshake(int cliente_fd, t_scheduler_context* ctx) {
+    int size;
+    char* mensaje = recibir_buffer(&size, cliente_fd);
+
+    if (string_starts_with(mensaje, HANDSHAKE_CPU)) {
+        log_info(ctx->logger, "## CPU %s Conectada", mensaje);
+        //ctx->estratega->socket_cpu = cliente_fd;
+        //despachar_proceso_a_cpu(ctx, cliente_fd);
+
+        // 1. Agregamos el socket a la lista de CPUs
+        int* nuevo_socket_cpu = malloc(sizeof(int));
+        *nuevo_socket_cpu = cliente_fd;
+        list_add(ctx->estratega->sockets_cpu, nuevo_socket_cpu);
+        
+        // Despachamos a esta CPU que se acaba de conectar
+        despachar_proceso_a_cpu(ctx, cliente_fd);
+    } else {
+        t_interfaz_io* interfaz = buscar_interfaz_por_socket(ctx->estratega, cliente_fd);
+        if (interfaz != NULL) {
+            // Mensaje de una IO ya registrada
+            if (string_equals_ignore_case(mensaje, "OK")) {
+                planificador_io_terminada(ctx->estratega, cliente_fd);
+
+                // 2 y 3. Verificamos la lista e intentamos despachar
+                if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
+                    for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+                        int* fd_cpu = list_get(ctx->estratega->sockets_cpu, i);
+                        if (ctx->estratega->proceso_exec == NULL) {
+                            despachar_proceso_a_cpu(ctx, *fd_cpu);
+                        }
+                    }
+                }
+            } else {
+                // Es el texto leido por STDIN
+                t_proceso_planificable* proceso = NULL;
+                if (interfaz->solicitud_actual != NULL) {
+                    proceso = interfaz->solicitud_actual->proceso;
+                }
+                
+                if (proceso != NULL) {
+                    t_paquete* paq_write = crear_paquete();
+                    paq_write->codigo_operacion = ESCRIBIR_MEMORIA;
+                    agregar_a_paquete(paq_write, &(proceso->pid), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, &(proceso->io_dir_fisica), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, &(proceso->io_tamanio), sizeof(uint32_t));
+                    agregar_a_paquete(paq_write, mensaje, proceso->io_tamanio);
+                    
+                    pthread_mutex_lock(&ctx->estratega->mutex_socket_memoria);
+                    enviar_paquete(paq_write, ctx->socket_memoria);
+                    eliminar_paquete(paq_write);
+                    
+                    int r_mem = esperar_respuesta_memoria(ctx->socket_memoria, ctx->estratega);
+                    if (r_mem == MENSAJE) {
+                        int s_m; char* msj_m = recibir_buffer(&s_m, ctx->socket_memoria); free(msj_m);
+                    }
+                    pthread_mutex_unlock(&ctx->estratega->mutex_socket_memoria);
+                }
+                
+                planificador_io_terminada(ctx->estratega, cliente_fd);
+
+                if (ctx->estratega->proceso_exec == NULL && !list_is_empty(ctx->estratega->sockets_cpu)) {
+                    for(int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+                        int* fd_cpu = list_get(ctx->estratega->sockets_cpu, i);
+                        if (ctx->estratega->proceso_exec == NULL) {
+                            despachar_proceso_a_cpu(ctx, *fd_cpu);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Es el nombre de una nueva interfaz registrandose
+            planificador_registrar_io(ctx->estratega, mensaje, cliente_fd);
+        }
+    }
+    free(mensaje);
+} */
