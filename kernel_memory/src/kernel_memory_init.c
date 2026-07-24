@@ -82,10 +82,20 @@ void iniciar_escucha_servidor(t_memory_context* ctx) {
     }
 }
 
+static void destruir_memory_stick(void* element) {
+    t_memory_stick_info* stick = (t_memory_stick_info*)element;
+    if (stick->ip) free(stick->ip);
+    free(stick);
+}
+
 void limpiar_contexto(t_memory_context* ctx) {
     if (ctx == NULL) return;
     
     if (ctx->programas) {
+        while (!list_is_empty(ctx->programas)) {
+            t_programa* p = list_get(ctx->programas, 0);
+            destruir_programa(ctx, p);
+        }
         list_destroy(ctx->programas);
     }
     
@@ -95,6 +105,8 @@ void limpiar_contexto(t_memory_context* ctx) {
     if (ctx->allocation_strategy) free(ctx->allocation_strategy);
     if (ctx->huecos_libres) list_destroy_and_destroy_elements(ctx->huecos_libres, free);
     if (ctx->segmentos_globales) list_destroy_and_destroy_elements(ctx->segmentos_globales, free);
+    if (ctx->memory_sticks) list_destroy_and_destroy_elements(ctx->memory_sticks, destruir_memory_stick);
+    
     pthread_mutex_destroy(&ctx->mutex_memoria);
     pthread_mutex_destroy(&ctx->mutex_scheduler_socket);
     
