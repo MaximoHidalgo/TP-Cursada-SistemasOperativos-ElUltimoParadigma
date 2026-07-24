@@ -77,7 +77,9 @@ int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
         enviar_paquete(paq_liberar, ctx->socket_memoria);
         eliminar_paquete(paq_liberar);
 
+        t_proceso_planificable* pcb_a_destruir = ctx->estratega->proceso_exec;
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+        pcb_destruir(pcb_a_destruir);
     }
     
     despachar_proceso_a_cpu(ctx, cliente_fd);

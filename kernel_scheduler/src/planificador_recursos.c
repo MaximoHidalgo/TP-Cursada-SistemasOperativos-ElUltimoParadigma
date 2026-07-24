@@ -4,7 +4,7 @@ void destruir_mutex(void* element) {
     t_mutex* m = (t_mutex*)element;
     if (m) {
         free(m->nombre);
-        queue_destroy(m->cola_bloqueados);
+        queue_destroy_and_destroy_elements(m->cola_bloqueados, (void*)pcb_destruir);
         pthread_mutex_destroy(&m->mutex_semaforo);
         free(m);
     }
