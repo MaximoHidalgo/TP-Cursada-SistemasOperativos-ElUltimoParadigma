@@ -2,6 +2,55 @@
 #include <utils/sockets/sockets.h>
 #include <utils/protocolo/protocolo.h>
 
+static void validar_y_cargar_configuracion(t_memory_stick_context* ctx) {
+    if (config_has_property(ctx->config, "PUERTO_STICK")) {
+        ctx->puerto_escucha = config_get_string_value(ctx->config, "PUERTO_STICK");
+    } else {
+        log_error(ctx->logger, "Error: PUERTO_STICK no definido en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+
+    if (config_has_property(ctx->config, "IP_STICK")) {
+        ctx->ip_escucha = config_get_string_value(ctx->config, "IP_STICK");
+    } else {
+        ctx->ip_escucha = "127.0.0.1";
+        log_warning(ctx->logger, "IP_STICK no encontrada en config, usando 127.0.0.1 por defecto");
+    }
+    
+    if (config_has_property(ctx->config, "IP_MEMORY")) {
+        ctx->ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
+    } else {
+        log_error(ctx->logger, "Error: IP_MEMORY no definido en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+    
+    if (config_has_property(ctx->config, "PUERTO_MEMORY")) {
+        ctx->puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
+    } else {
+        log_error(ctx->logger, "Error: PUERTO_MEMORY no definido en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+
+    if (config_has_property(ctx->config, "MEMORY_DELAY")) {
+        ctx->memory_delay = config_get_int_value(ctx->config, "MEMORY_DELAY");
+    } else {
+        ctx->memory_delay = 0;
+        log_warning(ctx->logger, "MEMORY_DELAY no definido. Usando 0 ms por defecto.");
+    }
+}
+
 t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
     t_memory_stick_context* ctx = malloc(sizeof(t_memory_stick_context));
     
@@ -44,10 +93,7 @@ t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
 
     pthread_mutex_init(&ctx->mutex_memoria, NULL);
 
-    ctx->puerto_escucha = config_get_string_value(ctx->config, "PUERTO_STICK");
-    ctx->ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
-    ctx->puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
-    ctx->memory_delay = config_get_int_value(ctx->config, "MEMORY_DELAY");
+    validar_y_cargar_configuracion(ctx);
     ctx->socket_kernel_memory = -1;
     ctx->socket_escucha = -1;
 
@@ -64,7 +110,7 @@ void conectar_kernel_memory(t_memory_stick_context* ctx) {
     log_info(ctx->logger, "## Conectado a Kernel Memory");
 
     // Mandar Handshake indicando el tamaño, IP y puerto de escucha
-    char *msj_handshake = string_from_format("%s|%u|%s|%s", HANDSHAKE_STICK, ctx->tamanio_total, "127.0.0.1", ctx->puerto_escucha);
+    char *msj_handshake = string_from_format("%s|%u|%s|%s", HANDSHAKE_STICK, ctx->tamanio_total, ctx->ip_escucha, ctx->puerto_escucha);
     enviar_mensaje(msj_handshake, ctx->socket_kernel_memory);
     free(msj_handshake);
     
