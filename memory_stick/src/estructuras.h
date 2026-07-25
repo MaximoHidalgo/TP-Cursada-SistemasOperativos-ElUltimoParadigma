@@ -10,6 +10,7 @@ typedef struct {
     void* espacio_memoria;
     uint32_t tamanio_total;
     char* puerto_escucha;
+    char* ip_escucha;
     char* ip_memory;
     char* puerto_memory;
     t_log* logger;

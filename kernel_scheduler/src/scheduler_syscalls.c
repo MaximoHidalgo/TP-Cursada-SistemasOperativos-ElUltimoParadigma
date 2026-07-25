@@ -126,7 +126,9 @@ void procesar_syscall_exit(int cliente_fd, t_scheduler_context* ctx) {
         
         eliminar_paquete(paq_liberar);
         
+        t_proceso_planificable* pcb_a_destruir = ctx->estratega->proceso_exec;
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+        pcb_destruir(pcb_a_destruir);
         planificador_admitir_a_ready(ctx->estratega);
     }
     despachar_proceso_a_cpu(ctx, cliente_fd);

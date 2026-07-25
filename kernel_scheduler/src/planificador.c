@@ -6,6 +6,7 @@
 #include "rr.h"
 #include "planificador_memoria.h"
 #include "planificador_recursos.h"
+#include "planificador_io.h"
 
 static t_algoritmo_planificacion algoritmo_planificacion_desde_string(char* algoritmo) {
     if (algoritmo == NULL) {
@@ -105,14 +106,25 @@ t_estratega_planificacion* crear_estratega_planificacion(t_config* config, t_log
 void destruir_estratega_planificacion(t_estratega_planificacion* estratega) {
     if (estratega == NULL) return;
 
-    queue_destroy(estratega->cola_new);
-    list_destroy(estratega->cola_susp_ready); //elimina atributo creado para los suspendidos
+    queue_destroy_and_destroy_elements(estratega->cola_new, (void*)pcb_destruir);
+    list_destroy_and_destroy_elements(estratega->cola_susp_ready, (void*)pcb_destruir); //elimina atributo creado para los suspendidos
+    if (estratega->cola_susp_blocked != NULL) {
+        list_destroy(estratega->cola_susp_blocked);
+    }
+
+    if (estratega->proceso_exec != NULL) {
+        pcb_destruir(estratega->proceso_exec);
+    }
+
+    if (estratega->sockets_cpu != NULL) {
+        list_destroy_and_destroy_elements(estratega->sockets_cpu, free);
+    }
 
     if (estratega->colas != NULL) {
         list_destroy_and_destroy_elements(estratega->colas, destruir_cola_planificacion);
     }
     if (estratega->colas_io != NULL) {
-        dictionary_destroy_and_destroy_elements(estratega->colas_io, (void*)queue_destroy);
+        dictionary_destroy_and_destroy_elements(estratega->colas_io, (void*)destruir_interfaz_io);
     }
     if (estratega->mutex_creados != NULL) {
         dictionary_destroy_and_destroy_elements(estratega->mutex_creados, (void*)destruir_mutex); 
@@ -247,26 +259,24 @@ bool planificador_encolar(t_estratega_planificacion* estratega, t_proceso_planif
     return true;
 }
 
-t_proceso_planificable* planificador_obtener_siguiente(t_estratega_planificacion* estratega) {
-    if (estratega == NULL) {
+t_proceso_planificable* planificador_despachar_siguiente(t_estratega_planificacion* estratega) {
+    if (estratega == NULL) return NULL;
+    
+    pthread_mutex_lock(&estratega->mutex_colas);
+    
+    // Si ya hay un proceso ejecutando, no hacemos nada
+    if (estratega->proceso_exec != NULL) {
+        pthread_mutex_unlock(&estratega->mutex_colas);
         return NULL;
     }
-
-    pthread_mutex_lock(&estratega->mutex_colas);
-
+    
     t_proceso_planificable* proceso = desencolar_siguiente_ready(estratega->colas);
-    pthread_mutex_unlock(&estratega->mutex_colas);
-    return proceso;
-}
-
-t_proceso_planificable* planificador_despachar_siguiente(t_estratega_planificacion* estratega) {
-    t_proceso_planificable* proceso = planificador_obtener_siguiente(estratega);
 
     if (proceso == NULL) {
+        pthread_mutex_unlock(&estratega->mutex_colas);
         return NULL;
     }
 
-    pthread_mutex_lock(&estratega->mutex_colas);
     t_estado_proceso estado_anterior = proceso->estado;
     proceso->estado = ESTADO_PROCESO_EXEC;
     estratega->proceso_exec = proceso;

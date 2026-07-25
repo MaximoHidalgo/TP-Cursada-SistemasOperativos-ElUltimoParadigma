@@ -7,13 +7,29 @@ void inicializar_entorno(t_memory_context* ctx, int argc, char* argv[]) {
         return;
     }
 
-    t_log_level nivel_log = LOG_LEVEL_DEBUG;
-    if (config_has_property(ctx->config, "LOG_LEVEL")) {
+    t_log_level nivel_log = LOG_LEVEL_INFO;
+    bool has_log_level = config_has_property(ctx->config, "LOG_LEVEL");
+    if (has_log_level) {
         char* nivel_str = config_get_string_value(ctx->config, "LOG_LEVEL");
         nivel_log = log_level_from_string(nivel_str);
     }
     
     ctx->logger = log_create("KernelMemory.log", "KernelMemory", true, nivel_log);
+    
+    if (!has_log_level) {
+        log_warning(ctx->logger, "Falta LOG_LEVEL en la configuracion, se asume INFO");
+    }
+}
+
+static void validar_y_cargar_configuracion(t_memory_context* ctx) {
+    if (!config_has_property(ctx->config, "PUERTO_MEMORY") ||
+        !config_has_property(ctx->config, "SEGMENT_MAX_SIZE") ||
+        !config_has_property(ctx->config, "ALLOCATION_STRATEGY") ||
+        !config_has_property(ctx->config, "SCRIPTS_BASEPATH")) {
+        log_error(ctx->logger, "Faltan claves obligatorias en el archivo de configuracion (PUERTO_MEMORY, SEGMENT_MAX_SIZE, ALLOCATION_STRATEGY, SCRIPTS_BASEPATH)");
+        limpiar_contexto(ctx);
+        exit(EXIT_FAILURE);
+    }
 }
 
 t_memory_context* iniciar_contexto(int argc, char* argv[]) {
@@ -22,8 +38,11 @@ t_memory_context* iniciar_contexto(int argc, char* argv[]) {
         return NULL;
     }
 
-    t_memory_context* ctx = malloc(sizeof(t_memory_context));
+    t_memory_context* ctx = calloc(1, sizeof(t_memory_context));
     if (ctx == NULL) return NULL;
+    ctx->socket_servidor = -1;
+    ctx->scheduler_socket = -1;
+    ctx->swap_socket = -1;
 
     inicializar_entorno(ctx, argc, argv);
     
@@ -32,9 +51,24 @@ t_memory_context* iniciar_contexto(int argc, char* argv[]) {
         return NULL;
     }
     
+    validar_y_cargar_configuracion(ctx);
+    
     ctx->programas = list_create();
-    ctx->instruction_delay = config_get_int_value(ctx->config, "INSTRUCTION_DELAY");
-    ctx->compaction_delay = config_get_int_value(ctx->config, "COMPACTION_DELAY");
+    
+    if (config_has_property(ctx->config, "INSTRUCTION_DELAY")) {
+        ctx->instruction_delay = config_get_int_value(ctx->config, "INSTRUCTION_DELAY");
+    } else {
+        log_warning(ctx->logger, "Falta INSTRUCTION_DELAY, asumiendo 0");
+        ctx->instruction_delay = 0;
+    }
+
+    if (config_has_property(ctx->config, "COMPACTION_DELAY")) {
+        ctx->compaction_delay = config_get_int_value(ctx->config, "COMPACTION_DELAY");
+    } else {
+        log_warning(ctx->logger, "Falta COMPACTION_DELAY, asumiendo 0");
+        ctx->compaction_delay = 0;
+    }
+    
     ctx->base_path = strdup(config_get_string_value(ctx->config, "SCRIPTS_BASEPATH"));
     pthread_mutex_init(&ctx->mutex_programas, NULL);
     
@@ -82,10 +116,20 @@ void iniciar_escucha_servidor(t_memory_context* ctx) {
     }
 }
 
+static void destruir_memory_stick(void* element) {
+    t_memory_stick_info* stick = (t_memory_stick_info*)element;
+    if (stick->ip) free(stick->ip);
+    free(stick);
+}
+
 void limpiar_contexto(t_memory_context* ctx) {
     if (ctx == NULL) return;
     
     if (ctx->programas) {
+        while (!list_is_empty(ctx->programas)) {
+            t_programa* p = list_get(ctx->programas, 0);
+            destruir_programa(ctx, p);
+        }
         list_destroy(ctx->programas);
     }
     
@@ -95,6 +139,8 @@ void limpiar_contexto(t_memory_context* ctx) {
     if (ctx->allocation_strategy) free(ctx->allocation_strategy);
     if (ctx->huecos_libres) list_destroy_and_destroy_elements(ctx->huecos_libres, free);
     if (ctx->segmentos_globales) list_destroy_and_destroy_elements(ctx->segmentos_globales, free);
+    if (ctx->memory_sticks) list_destroy_and_destroy_elements(ctx->memory_sticks, destruir_memory_stick);
+    
     pthread_mutex_destroy(&ctx->mutex_memoria);
     pthread_mutex_destroy(&ctx->mutex_scheduler_socket);
     

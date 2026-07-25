@@ -12,9 +12,16 @@ t_config* crear_configuracion(char* path_configuracion){
 }
  
 t_log* crear_logger_configurado(t_config* configuracion){
-    char* log_level_str = config_get_string_value(configuracion,"LOG_LEVEL");
-    t_log_level level = log_level_from_string(log_level_str);
+    t_log_level level = LOG_LEVEL_INFO;
+    bool has_log = config_has_property(configuracion, "LOG_LEVEL");
+    if(has_log){
+        char* log_level_str = config_get_string_value(configuracion,"LOG_LEVEL");
+        level = log_level_from_string(log_level_str);
+    }
     t_log* logger = log_create("Scheduler.log","Scheduler",true,level);
+    if(!has_log){
+        log_warning(logger, "Falta LOG_LEVEL, asumiendo INFO");
+    }
     return logger;
 }
 
