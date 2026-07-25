@@ -1,14 +1,33 @@
 #include "inicializacion.h"
 
+static void validar_configuracion(t_config* configuracion, t_log* logger) {
+    if (!config_has_property(configuracion, "PUERTO_SCHEDULER") ||
+        !config_has_property(configuracion, "IP_MEMORY") ||
+        !config_has_property(configuracion, "PUERTO_MEMORY") ||
+        !config_has_property(configuracion, "PLANIFICATION_ALGORITHM") ||
+        !config_has_property(configuracion, "QUEUES_ALGORITHMS") ||
+        !config_has_property(configuracion, "RR_QUANTUM") ||
+        !config_has_property(configuracion, "QUEUE_PREEMPTION") ||
+        !config_has_property(configuracion, "SUSPENSION_TIMEOUT")) {
+        log_error(logger, "Faltan claves obligatorias en el archivo de configuracion (PUERTO_SCHEDULER, IP_MEMORY, PUERTO_MEMORY, PLANIFICATION_ALGORITHM, QUEUES_ALGORITHMS, RR_QUANTUM, QUEUE_PREEMPTION, SUSPENSION_TIMEOUT)");
+        config_destroy(configuracion);
+        log_destroy(logger);
+        exit(EXIT_FAILURE);
+    }
+}
+
 t_scheduler_context* iniciar_contexto(int argc, char* argv[]) {
     char* path_config = argv[1];
     char* ruta_script_inicial = argv[2];
 
     t_config* configuracion = crear_configuracion(path_config);
     t_log* logger = crear_logger_configurado(configuracion);
+    
+    validar_configuracion(configuracion, logger);
+
     t_estratega_planificacion* estratega = crear_estratega_planificacion(configuracion, logger);
 
-    t_scheduler_context* ctx = malloc(sizeof(t_scheduler_context));
+    t_scheduler_context* ctx = calloc(1, sizeof(t_scheduler_context));
     if (ctx != NULL) {
         ctx->path_script_inicial = ruta_script_inicial;
         ctx->ip_memory = config_get_string_value(configuracion, "IP_MEMORY");

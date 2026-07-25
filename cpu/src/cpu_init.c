@@ -15,19 +15,33 @@ static bool inicializar_entorno(t_cpu_context* ctx, char* path_config) {
         return false;
     }
 
-    char* nivel_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level nivel;
-    if (nivel_str != NULL) {
+    t_log_level nivel = LOG_LEVEL_INFO;
+    bool has_log_level = config_has_property(ctx->config, "LOG_LEVEL");
+    if (has_log_level) {
+        char* nivel_str = config_get_string_value(ctx->config, "LOG_LEVEL");
         nivel = log_level_from_string(nivel_str);
-    } else {
-        nivel = LOG_LEVEL_INFO;
     }
 
     char* nombre_log = string_from_format("%s.log", ctx->id_cpu);
     ctx->logger = log_create(nombre_log, ctx->id_cpu, true, nivel);
     free(nombre_log);
 
+    if (!has_log_level) {
+        log_warning(ctx->logger, "Falta LOG_LEVEL en la configuracion, se asume INFO");
+    }
+
     return true;
+}
+
+static void validar_y_cargar_configuracion(t_cpu_context* ctx) {
+    if (!config_has_property(ctx->config, "IP_MEMORY") ||
+        !config_has_property(ctx->config, "PUERTO_MEMORY") ||
+        !config_has_property(ctx->config, "IP_SCHEDULER") ||
+        !config_has_property(ctx->config, "PUERTO_SCHEDULER")) {
+        log_error(ctx->logger, "Faltan claves obligatorias en el archivo de configuracion (IP/PUERTO MEMORY o SCHEDULER)");
+        limpiar_contexto(ctx);
+        exit(EXIT_FAILURE);
+    }
 }
 
 static void conectar_con_memoria(t_cpu_context* ctx, char* ip, char* puerto) {
@@ -109,6 +123,8 @@ t_cpu_context* iniciar_contexto(int argc, char* argv[]) {
 
     t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
     if (!ctx) return NULL;
+    ctx->conexiones = NULL;
+    ctx->memory_sticks = NULL;
 
     ctx->id_cpu = strdup(argv[2]);
     char* path_config = argv[1];
@@ -120,6 +136,8 @@ t_cpu_context* iniciar_contexto(int argc, char* argv[]) {
         free(ctx);
         return NULL;
     }
+
+    validar_y_cargar_configuracion(ctx);
 
     ctx->conexiones = malloc(sizeof(t_conexiones_cpu));
     ctx->conexiones->sticks = -1;

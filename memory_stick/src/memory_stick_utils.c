@@ -17,8 +17,12 @@ static void validar_y_cargar_configuracion(t_memory_stick_context* ctx) {
     if (config_has_property(ctx->config, "IP_STICK")) {
         ctx->ip_escucha = config_get_string_value(ctx->config, "IP_STICK");
     } else {
-        ctx->ip_escucha = "127.0.0.1";
-        log_warning(ctx->logger, "IP_STICK no encontrada en config, usando 127.0.0.1 por defecto");
+        log_error(ctx->logger, "Error: IP_STICK no encontrado en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
     }
     
     if (config_has_property(ctx->config, "IP_MEMORY")) {
@@ -52,7 +56,11 @@ static void validar_y_cargar_configuracion(t_memory_stick_context* ctx) {
 }
 
 t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
-    t_memory_stick_context* ctx = malloc(sizeof(t_memory_stick_context));
+    t_memory_stick_context* ctx = calloc(1, sizeof(t_memory_stick_context));
+    
+    if (ctx == NULL) {
+        exit(EXIT_FAILURE);
+    }
     
     if (argc != 3) {
         printf("Uso: ./bin/memory_stick [Config] [Tamaño]\n");
@@ -76,9 +84,16 @@ t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     
-    char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level level = log_level_str ? log_level_from_string(log_level_str) : LOG_LEVEL_INFO;
+    t_log_level level = LOG_LEVEL_INFO;
+    bool has_log = config_has_property(ctx->config, "LOG_LEVEL");
+    if (has_log) {
+        char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
+        level = log_level_from_string(log_level_str);
+    }
     ctx->logger = log_create("memory_stick.log", "MEMORY_STICK", true, level);
+    if (!has_log) {
+        log_warning(ctx->logger, "LOG_LEVEL no encontrado en config, asumiendo INFO");
+    }
 
     ctx->tamanio_total = tamanio_stick;
     ctx->espacio_memoria = malloc(tamanio_stick);
