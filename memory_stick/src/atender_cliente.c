@@ -20,10 +20,10 @@ void* atender_cliente(void* arg) {
                 procesar_escritura(socket_cliente, ctx);
                 break;
             case -1:
-                if (socket_cliente == ctx->socket_kernel_memory) {
-                    log_info(ctx->logger, "Cliente Kernel Memory desconectado");
-                } else {
-                    log_info(ctx->logger, "Cliente CPU desconectado");
+                if(socket_cliente == ctx->socket_kernel_memory){
+                    log_error(ctx->logger, "Cliente Kernel Memory desconectado");
+                }else{
+                    log_error(ctx->logger, "Cliente CPU desconectado");
                 }
                 close(socket_cliente);
                 return NULL;

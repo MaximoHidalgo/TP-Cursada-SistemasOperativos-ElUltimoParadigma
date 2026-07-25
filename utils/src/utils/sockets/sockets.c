@@ -96,7 +96,7 @@ int esperar_cliente(int socket_servidor, t_log* logger) {
 		return -1;
 	}
 
-	log_info(logger, "Se conectó un cliente!");
+	log_trace(logger, "Nueva conexión entrante aceptada (FD: %d) - Pendiente de handshake", socket_cliente);
 	return socket_cliente;
 }
 
