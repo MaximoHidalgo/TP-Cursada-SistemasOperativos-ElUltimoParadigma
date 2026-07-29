@@ -9,7 +9,7 @@ void test_auxiliares_memoria();
 
 int main() {
     printf("=================================================\n");
-    printf(":O Iniciando Tests Unitarios del Kernel Scheduler\n");
+    printf(":O Iniciando Tests Unitarios del Kernel Memory\n");
     printf("=================================================\n\n");
     
     // Llamadas a test_procesador_mensaje.c

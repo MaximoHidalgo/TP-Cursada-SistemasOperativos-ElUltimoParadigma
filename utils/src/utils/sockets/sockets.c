@@ -54,6 +54,7 @@ int iniciar_servidor(char* puerto, t_log* logger) {
 
 	if (socket_servidor == -1) {
 		log_error(logger, "Error al crear el socket");
+		freeaddrinfo(servinfo);
 		return -1;
 	}
 
@@ -61,6 +62,7 @@ int iniciar_servidor(char* puerto, t_log* logger) {
 	if (err == -1) {
 		log_error(logger, "Error al configurar el socket (setsockopt)");
 		close(socket_servidor);
+		freeaddrinfo(servinfo);
 		return -1;
 	}
 
@@ -68,6 +70,7 @@ int iniciar_servidor(char* puerto, t_log* logger) {
 	if (err == -1) {
 		log_error(logger, "Error al hacer bind");
 		close(socket_servidor);
+		freeaddrinfo(servinfo);
 		return -1;
 	}
 
@@ -75,6 +78,7 @@ int iniciar_servidor(char* puerto, t_log* logger) {
 	if (err == -1) {
 		log_error(logger, "Error al escuchar");
 		close(socket_servidor);
+		freeaddrinfo(servinfo);
 		return -1;
 	}
 
@@ -92,7 +96,7 @@ int esperar_cliente(int socket_servidor, t_log* logger) {
 		return -1;
 	}
 
-	log_info(logger, "Se conectó un cliente!");
+	log_trace(logger, "Nueva conexión entrante aceptada (FD: %d) - Pendiente de handshake", socket_cliente);
 	return socket_cliente;
 }
 

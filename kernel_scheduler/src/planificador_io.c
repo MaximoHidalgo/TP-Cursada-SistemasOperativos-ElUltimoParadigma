@@ -185,3 +185,25 @@ void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_
     }
     pthread_mutex_unlock(&estratega->mutex_colas);
 }
+void destruir_solicitud_io(void* element) {
+    t_solicitud_io* sol = (t_solicitud_io*)element;
+    if(sol) {
+        if(sol->proceso) pcb_destruir(sol->proceso);
+        if(sol->param1) free(sol->param1);
+        if(sol->param2) free(sol->param2);
+        free(sol);
+    }
+}
+
+void destruir_interfaz_io(void* element) {
+    t_interfaz_io* inter = (t_interfaz_io*)element;
+    if (inter) {
+        free(inter->nombre);
+        if (inter->solicitud_actual != NULL) {
+            destruir_solicitud_io(inter->solicitud_actual);
+        }
+        queue_destroy_and_destroy_elements(inter->cola_bloqueados, destruir_solicitud_io);
+        pthread_mutex_destroy(&inter->mutex_interfaz);
+        free(inter);
+    }
+}

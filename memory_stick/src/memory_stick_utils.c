@@ -2,8 +2,65 @@
 #include <utils/sockets/sockets.h>
 #include <utils/protocolo/protocolo.h>
 
+static void validar_y_cargar_configuracion(t_memory_stick_context* ctx) {
+    if (config_has_property(ctx->config, "PUERTO_STICK")) {
+        ctx->puerto_escucha = config_get_string_value(ctx->config, "PUERTO_STICK");
+    } else {
+        log_error(ctx->logger, "Error: PUERTO_STICK no definido en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+
+    if (config_has_property(ctx->config, "IP_STICK")) {
+        ctx->ip_escucha = config_get_string_value(ctx->config, "IP_STICK");
+    } else {
+        log_error(ctx->logger, "Error: IP_STICK no encontrado en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+    
+    if (config_has_property(ctx->config, "IP_MEMORY")) {
+        ctx->ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
+    } else {
+        log_error(ctx->logger, "Error: IP_MEMORY no definido en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+    
+    if (config_has_property(ctx->config, "PUERTO_MEMORY")) {
+        ctx->puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
+    } else {
+        log_error(ctx->logger, "Error: PUERTO_MEMORY no definido en config. Abortando.");
+        config_destroy(ctx->config);
+        log_destroy(ctx->logger);
+        free(ctx->espacio_memoria);
+        free(ctx);
+        exit(EXIT_FAILURE);
+    }
+
+    if (config_has_property(ctx->config, "MEMORY_DELAY")) {
+        ctx->memory_delay = config_get_int_value(ctx->config, "MEMORY_DELAY");
+    } else {
+        ctx->memory_delay = 0;
+        log_warning(ctx->logger, "MEMORY_DELAY no definido. Usando 0 ms por defecto.");
+    }
+}
+
 t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
-    t_memory_stick_context* ctx = malloc(sizeof(t_memory_stick_context));
+    t_memory_stick_context* ctx = calloc(1, sizeof(t_memory_stick_context));
+    
+    if (ctx == NULL) {
+        exit(EXIT_FAILURE);
+    }
     
     if (argc != 3) {
         printf("Uso: ./bin/memory_stick [Config] [Tamaño]\n");
@@ -27,9 +84,16 @@ t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     
-    char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level level = log_level_str ? log_level_from_string(log_level_str) : LOG_LEVEL_INFO;
+    t_log_level level = LOG_LEVEL_INFO;
+    bool has_log = config_has_property(ctx->config, "LOG_LEVEL");
+    if (has_log) {
+        char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
+        level = log_level_from_string(log_level_str);
+    }
     ctx->logger = log_create("memory_stick.log", "MEMORY_STICK", true, level);
+    if (!has_log) {
+        log_warning(ctx->logger, "LOG_LEVEL no encontrado en config, asumiendo INFO");
+    }
 
     ctx->tamanio_total = tamanio_stick;
     ctx->espacio_memoria = malloc(tamanio_stick);
@@ -44,10 +108,7 @@ t_memory_stick_context* inicializar_entorno(int argc, char* argv[]) {
 
     pthread_mutex_init(&ctx->mutex_memoria, NULL);
 
-    ctx->puerto_escucha = config_get_string_value(ctx->config, "PUERTO_STICK");
-    ctx->ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
-    ctx->puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
-    ctx->memory_delay = config_get_int_value(ctx->config, "MEMORY_DELAY");
+    validar_y_cargar_configuracion(ctx);
     ctx->socket_kernel_memory = -1;
     ctx->socket_escucha = -1;
 
@@ -64,16 +125,16 @@ void conectar_kernel_memory(t_memory_stick_context* ctx) {
     log_info(ctx->logger, "## Conectado a Kernel Memory");
 
     // Mandar Handshake indicando el tamaño, IP y puerto de escucha
-    char *msj_handshake = string_from_format("%s|%u|%s|%s", HANDSHAKE_STICK, ctx->tamanio_total, "127.0.0.1", ctx->puerto_escucha);
+    char *msj_handshake = string_from_format("%s|%u|%s|%s", HANDSHAKE_STICK, ctx->tamanio_total, ctx->ip_escucha, ctx->puerto_escucha);
     enviar_mensaje(msj_handshake, ctx->socket_kernel_memory);
     free(msj_handshake);
     
-    t_args_hilo_cpu* args = malloc(sizeof(t_args_hilo_cpu));
+    t_args_hilo_cliente* args = malloc(sizeof(t_args_hilo_cliente));
     args->socket_cliente = ctx->socket_kernel_memory;
     args->ctx = ctx;
 
     pthread_t hilo_km;
-    if (pthread_create(&hilo_km, NULL, atender_cliente_cpu, args) != 0) {
+    if (pthread_create(&hilo_km, NULL, atender_cliente, args) != 0) {
         log_error(ctx->logger, "Fallo al crear el hilo para Kernel Memory");
         free(args);
     } else {
@@ -91,21 +152,21 @@ void iniciar_servidor_cpus(t_memory_stick_context* ctx) {
     log_info(ctx->logger, "Memory Stick listo para recibir CPUs en el puerto %s", ctx->puerto_escucha);
 
     while (1) {
-        int socket_cpu = esperar_cliente(ctx->socket_escucha, ctx->logger);
-        if (socket_cpu == -1) {
+        int socket_cliente = esperar_cliente(ctx->socket_escucha, ctx->logger);
+        if (socket_cliente == -1) {
             log_warning(ctx->logger, "Error al aceptar una nueva conexión de CPU");
             continue;
         }
 
-        t_args_hilo_cpu* args = malloc(sizeof(t_args_hilo_cpu));
-        args->socket_cliente = socket_cpu;
+        t_args_hilo_cliente* args = malloc(sizeof(t_args_hilo_cliente));
+        args->socket_cliente = socket_cliente;
         args->ctx = ctx;
 
         pthread_t hilo_cpu;
-        if (pthread_create(&hilo_cpu, NULL, atender_cliente_cpu, args) != 0) {
+        if (pthread_create(&hilo_cpu, NULL, atender_cliente, args) != 0) {
             log_error(ctx->logger, "Fallo al crear el hilo para la CPU");
             free(args);
-            close(socket_cpu);
+            close(socket_cliente);
         } else {
             pthread_detach(hilo_cpu); // Permite al hilo liberar sus propios recursos al terminar
         }

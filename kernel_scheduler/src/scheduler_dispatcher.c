@@ -77,7 +77,9 @@ int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
         enviar_paquete(paq_liberar, ctx->socket_memoria);
         eliminar_paquete(paq_liberar);
 
+        t_proceso_planificable* pcb_a_destruir = ctx->estratega->proceso_exec;
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
+        pcb_destruir(pcb_a_destruir);
     }
     
     despachar_proceso_a_cpu(ctx, cliente_fd);
@@ -180,9 +182,31 @@ void remover_cpu_de_lista(t_estratega_planificacion* estratega, int fd) {
     }
 }
 
+static const char* obtener_nombre_cliente(int fd, t_scheduler_context* ctx) {
+    if (ctx->estratega->sockets_cpu != NULL) {
+        for (int i = 0; i < list_size(ctx->estratega->sockets_cpu); i++) {
+            int* cpu_fd = list_get(ctx->estratega->sockets_cpu, i);
+            if (cpu_fd != NULL && *cpu_fd == fd) return "CPU";
+        }
+    }
+    if (ctx->estratega->colas_io != NULL) {
+        t_list* keys = dictionary_keys(ctx->estratega->colas_io);
+        for (int i = 0; i < list_size(keys); i++) {
+            char* nombre_io = list_get(keys, i);
+            t_interfaz_io* io = dictionary_get(ctx->estratega->colas_io, nombre_io);
+            if (io != NULL && io->socket_fd == fd) {
+                list_destroy(keys);
+                return "IO";
+            }
+        }
+        list_destroy(keys);
+    }
+    return "Desconocido (¿Pendiente de Handshake?)";
+}
+
 int atenderRespuesta(int cliente_fd, t_scheduler_context* ctx, int mensaje_cliente) {
     if (mensaje_cliente == -1) {
-        log_warning(ctx->logger, "El cliente se desconectó.");
+        log_error(ctx->logger, "El módulo %s se desconectó (FD: %d).", obtener_nombre_cliente(cliente_fd, ctx), cliente_fd);
         return -1;
     }
 

@@ -19,8 +19,13 @@ static bool inicializar_entorno(t_io_context* ctx, char* path_config) {
         return false;
     }
 
-    char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
-    t_log_level nivelLog = log_level_from_string(log_level_str);
+    t_log_level nivelLog = LOG_LEVEL_INFO;
+    bool has_log_level = config_has_property(ctx->config, "LOG_LEVEL");
+    if (has_log_level) {
+        char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
+        nivelLog = log_level_from_string(log_level_str);
+    }
+
     ctx->logger = log_create("io.log", ctx->io_name, true, nivelLog);
 
     if (ctx->logger == NULL){
@@ -28,7 +33,20 @@ static bool inicializar_entorno(t_io_context* ctx, char* path_config) {
         return false;
     }
     
+    if (!has_log_level) {
+        log_warning(ctx->logger, "Falta LOG_LEVEL en la configuracion, se asume INFO");
+    }
+    
     return true;
+}
+
+static void validar_y_cargar_configuracion(t_io_context* ctx) {
+    if (!config_has_property(ctx->config, "IP_SCHEDULER") ||
+        !config_has_property(ctx->config, "PUERTO_SCHEDULER")) {
+        log_error(ctx->logger, "Faltan claves obligatorias en el archivo de configuracion (IP/PUERTO_SCHEDULER)");
+        limpiar_contexto(ctx);
+        exit(EXIT_FAILURE);
+    }
 }
 
 static bool conectar_kernel_scheduler(t_io_context* ctx) {
@@ -67,6 +85,8 @@ t_io_context* iniciar_contexto(int argc, char* argv[]) {
         limpiar_contexto(ctx);
         return NULL;
     }
+
+    validar_y_cargar_configuracion(ctx);
 
     if (!conectar_kernel_scheduler(ctx)) {
         limpiar_contexto(ctx);
