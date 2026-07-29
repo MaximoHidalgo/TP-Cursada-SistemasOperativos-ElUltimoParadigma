@@ -74,7 +74,6 @@ void destruir_estratega_planificacion(t_estratega_planificacion* estratega);
 
 
 bool planificador_encolar(t_estratega_planificacion* estratega, t_proceso_planificable* proceso);
-t_proceso_planificable* planificador_obtener_siguiente(t_estratega_planificacion* estratega);
 bool planificador_reencolar_por_quantum(t_estratega_planificacion* estratega, t_proceso_planificable* proceso);
 bool planificador_debe_desalojar(t_estratega_planificacion* estratega, int cola_en_ejecucion, int cola_nuevo_proceso);
 int planificador_quantum_para(t_estratega_planificacion* estratega, int cola_prioridad);

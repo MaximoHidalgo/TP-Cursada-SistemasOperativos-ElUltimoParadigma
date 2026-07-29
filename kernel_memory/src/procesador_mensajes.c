@@ -373,18 +373,27 @@ void procesar_consultar_espacio_libre_handler(int cliente_fd, t_memory_context* 
 }
 
 void procesar_desconexion_cliente(int cliente_fd, t_memory_context* ctx) {
-    log_warning(ctx->logger, "Cliente desconectado");
-    for (int i = 0; i < list_size(ctx->memory_sticks); i++)
-    {
-        t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+    char* nombre_modulo = "Desconocido (¿CPU / Petición sin handshake?)";
 
-        if (cliente_fd == stick->socket_fd)
-        {
-            pthread_mutex_lock(&ctx->mutex_scheduler_socket);
-            notificar_memoria_corrupta(ctx->scheduler_socket);
-            pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
+    if (cliente_fd == ctx->scheduler_socket) {
+        nombre_modulo = "Kernel Scheduler";
+    } else if (cliente_fd == ctx->swap_socket) {
+        nombre_modulo = "Swap";
+    } else {
+        for (int i = 0; i < list_size(ctx->memory_sticks); i++) {
+            t_memory_stick_info* stick = list_get(ctx->memory_sticks, i);
+            if (cliente_fd == stick->socket_fd) {
+                nombre_modulo = "Memory Stick";
+                pthread_mutex_lock(&ctx->mutex_scheduler_socket);
+                notificar_memoria_corrupta(ctx->scheduler_socket);
+                pthread_mutex_unlock(&ctx->mutex_scheduler_socket);
+                break;
+            }
         }
     }
+    
+    log_error(ctx->logger, "Módulo desconectado: %s (FD: %d)", nombre_modulo, cliente_fd);
+
     
     close(cliente_fd);
 }

@@ -93,7 +93,7 @@ context(test_cpu_init) {
         } end
 
         it("inicializar_entorno configura logger y config correctamente") {
-            t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
+            t_cpu_context* ctx = calloc(1, sizeof(t_cpu_context));
             ctx->id_cpu = strdup("TEST_ENTORNO");
             ctx->conexiones = NULL; // para limpieza
             
@@ -111,7 +111,7 @@ context(test_cpu_init) {
         } end
 
         it("Fallo al crear logger por falta de archivo config") {
-            t_cpu_context* ctx = malloc(sizeof(t_cpu_context));
+            t_cpu_context* ctx = calloc(1, sizeof(t_cpu_context));
             ctx->id_cpu = strdup("TEST_ENTORNO_ERR");
             ctx->conexiones = NULL; // para limpieza
             

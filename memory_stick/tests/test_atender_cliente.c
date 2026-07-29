@@ -1,4 +1,4 @@
-#include "../src/atender_cpu.h"
+#include "../src/atender_cliente.h"
 #include "../src/memory_stick_utils.h"
 #include <utils/sockets/sockets.h>
 #include <utils/protocolo/protocolo.h>
@@ -11,7 +11,7 @@ static void recibir_mensaje_test(int socket, int *op, int *size, char **buffer) 
     recv(socket, *buffer, *size, MSG_WAITALL);
 }
 
-context(test_atender_cpu) {
+context(test_atender_cliente) {
     describe("Prueba de operaciones de red del Memory Stick (Lectura/Escritura)") {
         
         t_memory_stick_context* ctx;

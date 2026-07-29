@@ -42,7 +42,11 @@ static bool stick_ya_existe(t_list* sticks, int stick_id) {
     return false;
 }
 
-static void liberar_stick_info(t_memory_stick_info* stick) {
+void destruir_stick_info(void* stick_ptr) {
+    t_memory_stick_info* stick = (t_memory_stick_info*)stick_ptr;
+    if (stick->socket_fd != -1) {
+        liberar_conexion(stick->socket_fd);
+    }
     if (stick->ip != NULL) {
         free(stick->ip);
     }
@@ -75,6 +79,9 @@ void manejar_ejecucion_proceso(int pid_recibido, t_cpu_context* ctx) {
 
     if (contexto != NULL) {
         ejecutar_ciclo_de_instruccion(contexto, ctx);
+        if (contexto->tabla_segmentos != NULL) {
+            list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
+        }
         free(contexto);
     } else {
         log_error(ctx->logger, "Memoria devolvió un contexto nulo para el PID %d", pid_recibido);
@@ -97,14 +104,14 @@ void procesar_tabla_de_sticks(t_cpu_context* ctx, void* buffer, int size) {
         t_memory_stick_info* stick = deserializar_stick_info(reader);
 
         if (stick_ya_existe(ctx->memory_sticks, stick->id)) {
-            liberar_stick_info(stick);
+            destruir_stick_info(stick);
             continue;
         }
 
         if (conectar_stick(stick, ctx)) {
             list_add(ctx->memory_sticks, stick);
         } else {
-            liberar_stick_info(stick);
+            destruir_stick_info(stick);
         }
     }
     

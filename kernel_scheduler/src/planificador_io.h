@@ -9,5 +9,6 @@ void planificador_registrar_io(t_estratega_planificacion* estratega, char* nombr
 bool planificador_es_io_registrado(t_estratega_planificacion* estratega, int socket_fd);
 void planificador_atender_peticion_io(t_estratega_planificacion* estratega, t_proceso_planificable* pcb, char* interfaz_nombre);
 void planificador_io_terminada(t_estratega_planificacion* estratega, int socket_fd);
+void destruir_interfaz_io(void* element);
 
 #endif
