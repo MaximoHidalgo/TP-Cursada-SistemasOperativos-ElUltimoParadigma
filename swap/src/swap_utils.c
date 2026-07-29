@@ -7,14 +7,19 @@ static bool inicializar_entorno(t_swap_context* ctx, char* path_config) {
         return false;
     }
     
-    char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
     t_log_level level = LOG_LEVEL_INFO;
-    if (log_level_str != NULL) {
+    bool has_log = config_has_property(ctx->config, "LOG_LEVEL");
+    if (has_log) {
+        char* log_level_str = config_get_string_value(ctx->config, "LOG_LEVEL");
         level = log_level_from_string(log_level_str);
     }
     
     ctx->logger = log_create("swap.log", "SWAP", true, level);
     
+    if (!has_log) {
+        log_warning(ctx->logger, "Falta LOG_LEVEL, asumiendo INFO");
+    }
+
     ctx->ip_memory = config_get_string_value(ctx->config, "IP_MEMORY");
     ctx->puerto_memory = config_get_string_value(ctx->config, "PUERTO_MEMORY");
     ctx->swap_file_path = config_get_string_value(ctx->config, "SWAP_FILE_PATH");
@@ -24,8 +29,20 @@ static bool inicializar_entorno(t_swap_context* ctx, char* path_config) {
     return true;
 }
 
+static void validar_y_cargar_configuracion(t_swap_context* ctx) {
+    if (!config_has_property(ctx->config, "IP_MEMORY") ||
+        !config_has_property(ctx->config, "PUERTO_MEMORY") ||
+        !config_has_property(ctx->config, "SWAP_FILE_PATH") ||
+        !config_has_property(ctx->config, "SWAP_FILE_SIZE") ||
+        !config_has_property(ctx->config, "BLOCK_SIZE")) {
+        log_error(ctx->logger, "Faltan claves obligatorias en el archivo de configuracion (IP/PUERTO_MEMORY, SWAP_FILE_PATH, SWAP_FILE_SIZE, BLOCK_SIZE)");
+        limpiar_contexto(ctx);
+        exit(EXIT_FAILURE);
+    }
+}
+
 t_swap_context* iniciar_contexto(int argc, char* argv[]) {
-    t_swap_context* ctx = malloc(sizeof(t_swap_context));
+    t_swap_context* ctx = calloc(1, sizeof(t_swap_context));
     if (!ctx) return NULL;
     
     char* config_path = "swap.config";
@@ -40,6 +57,8 @@ t_swap_context* iniciar_contexto(int argc, char* argv[]) {
         free(ctx);
         exit(EXIT_FAILURE);
     }
+
+    validar_y_cargar_configuracion(ctx);
 
     return ctx;
 }
