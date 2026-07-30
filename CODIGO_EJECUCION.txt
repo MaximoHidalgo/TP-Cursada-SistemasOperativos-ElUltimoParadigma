@@ -1,0 +1,5 @@
+en todas las pruebas:
+=========================CPU=========================
+./bin/cpu ./configs/cpu.config CPU_1
+=========================SWAP=========================
+./bin/swap ./configs/swap.config
