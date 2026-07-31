@@ -3,5 +3,14 @@ en todas las pruebas:
 ./bin/cpu ./configs/cpu.config CPU_1
 =========================SWAP=========================
 ./bin/swap ./configs/swap.config
+=================================================================
+========================= PRUEBA MEMORIA=========================
+=========================KERNEL SCHEDULER=========================
+./bin/kernel_scheduler ./configs/prueba_mem.config PLANI_MEM.prc
+========================= IO ===========================
+./bin/io ./configs/io.config STDIN" &
+./bin/io ./configs/io.config STDOUT" &
+./bin/io ./configs/io.config SLEEP" &
 
+================================================
 valgrind --leak-check=full --track-origins=yes
