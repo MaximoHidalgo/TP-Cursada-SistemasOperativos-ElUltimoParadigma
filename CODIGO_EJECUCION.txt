@@ -3,3 +3,5 @@ en todas las pruebas:
 ./bin/cpu ./configs/cpu.config CPU_1
 =========================SWAP=========================
 ./bin/swap ./configs/swap.config
+
+valgrind --leak-check=full --track-origins=yes
