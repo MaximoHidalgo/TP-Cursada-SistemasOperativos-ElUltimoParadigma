@@ -282,3 +282,10 @@ run-es3_4:
 	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDIN" &
 	$(TERMINAL) "cd io && ./bin/io ./configs/io.config STDOUT" &
 	$(TERMINAL) "cd io && ./bin/io ./configs/io.config SLEEP" &
+
+reset:
+	@echo "Ejecutando limpieza completa y recompilación..."
+	$(MAKE) fueraLogs
+	$(MAKE) clean
+	$(MAKE) all
+	@echo "¡Proceso finalizado!"
