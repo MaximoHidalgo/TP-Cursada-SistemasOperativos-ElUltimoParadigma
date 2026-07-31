@@ -122,7 +122,7 @@ int recibir_operacion(int socket_cliente) {
 		close(socket_cliente);
 		return -1;
 	}
-	printf("================")
+	printf("================");
 	
 	
 }
