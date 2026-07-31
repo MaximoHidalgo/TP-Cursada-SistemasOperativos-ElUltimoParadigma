@@ -104,6 +104,16 @@ int esperar_cliente(int socket_servidor, t_log* logger) {
 
 int recibir_operacion(int socket_cliente) {
 	int cod_op;
+	if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
+		return cod_op;
+	else {
+		close(socket_cliente);
+		return -1;
+	}
+}
+/*
+int recibir_operacion(int socket_cliente) {
+	int cod_op;
 	// if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
 	// 	return cod_op;
 	// else {
@@ -122,11 +132,9 @@ int recibir_operacion(int socket_cliente) {
 		close(socket_cliente);
 		return -1;
 	}
-	printf("================");
-	
-	
+	printf("================");	
 }
-
+*/
 void* recibir_buffer(int* size, int socket_cliente) {
 	void* buffer;
 	recv(socket_cliente, size, sizeof(int), MSG_WAITALL);
