@@ -81,7 +81,7 @@ int handler_seg_fault(int cliente_fd, t_scheduler_context* ctx) {
         planificador_liberar_exec(ctx->estratega, ctx->estratega->proceso_exec->pid);
         pcb_destruir(pcb_a_destruir);
     }
-    log_info(ctx->logger, "## David estuvo aqui");
+    
     despachar_proceso_a_cpu(ctx, cliente_fd);
     list_destroy_and_destroy_elements(paquete, free);
     
