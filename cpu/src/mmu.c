@@ -80,7 +80,7 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
         if (r_op == LECTURA) {
             int size_buf;
             void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
-            bufferLeido = buffer + leido;
+            bufferLeido = ((char*)buffer) + leido;
             memcpy(bufferLeido, res, bytes_a_leer);
             free(res);
         } else {
