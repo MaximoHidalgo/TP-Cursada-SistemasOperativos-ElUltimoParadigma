@@ -79,7 +79,8 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
         if (r_op == LECTURA) {
             int size_buf;
             void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
-            memcpy(buffer + leido, res, bytes_a_leer);
+            void* bufferLeido = buffer + leido;
+            memcpy(bufferLeido, res, bytes_a_leer);
             free(res);
         } else {
             log_error(ctx->logger, "Error al leer del memory stick en CPU");
@@ -89,7 +90,7 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
         leido += bytes_a_leer;
     }
     
-    return buffer;
+    return bufferLeido;
 }
 
 void escribir_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio, void* buffer) {
