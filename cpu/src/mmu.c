@@ -81,7 +81,7 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
             void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
             buffer = ((char*)buffer) + leido;
             memcpy(buffer, res, bytes_a_leer);
-            log_info(ctx->logger, "valor del buffer: %s ", *buffer);
+            log_info(ctx->logger, "valor del buffer: %s ", (char*) *buffer);
             free(res);
         } else {
             log_error(ctx->logger, "Error al leer del memory stick en CPU");
