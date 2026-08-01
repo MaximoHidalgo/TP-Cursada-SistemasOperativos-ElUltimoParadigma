@@ -3,14 +3,59 @@ en todas las pruebas:
 ./bin/cpu ./configs/cpu.config CPU_1
 =========================SWAP=========================
 ./bin/swap ./configs/swap.config
-=================================================================
-========================= PRUEBA MEMORIA=========================
-=========================KERNEL SCHEDULER=========================
-./bin/kernel_scheduler ./configs/prueba_mem.config PLANI_MEM.prc
 ========================= IO ===========================
 ./bin/io ./configs/io.config STDIN" &
 ./bin/io ./configs/io.config STDOUT" &
 ./bin/io ./configs/io.config SLEEP" &
+=================================================================
 
-================================================
+========================= PRUEBA BASE=============================
+
+=========================KERNEL MEMORY============================
+./bin/kernel_memory ./configs/prueba_base.config
+=========================MEMORY STICKS============================
+./bin/kernel_memory ./configs/prueba_base.config 256
+=================================================================
+
+========================= PRUEBA PCP=============================
+
+=========================KERNEL MEMORY============================
+./bin/kernel_memory ./configs/prueba_pcp.config
+=========================MEMORY STICKS============================
+./bin/kernel_memory ./configs/prueba_pcp.config 256
+=================================================================
+
+========================= PRUEBA MEMORIA=========================
+
+=========================KERNEL MEMORY============================
+./bin/kernel_memory ./configs/prueba_mem.config
+=========================MEMORY STICKS============================
+./bin/kernel_memory ./configs/prueba_mem_1.config 16
+./bin/kernel_memory ./configs/prueba_mem_2.config 32
+./bin/kernel_memory ./configs/prueba_mem_3.config 64
+./bin/kernel_memory ./configs/prueba_mem_4.config 128
+=========================KERNEL SCHEDULER=========================
+./bin/kernel_scheduler ./configs/prueba_mem.config PLANI_MEM.prc
+=================================================================
+
+========================= PRUEBA PMP=========================
+
+=========================KERNEL MEMORY============================
+./bin/kernel_memory ./configs/prueba_pmp.config
+=========================MEMORY STICKS============================
+./bin/kernel_memory ./configs/prueba_pmp_1.config 16
+./bin/kernel_memory ./configs/prueba_pmp_2.config 16
+./bin/kernel_memory ./configs/prueba_pmp_3.config 32
+./bin/kernel_memory ./configs/prueba_pmp_4.config 64
+=================================================================
+
+========================= PRUEBA PHP=========================
+
+=========================KERNEL MEMORY============================
+./bin/kernel_memory ./configs/prueba_php.config
+=========================MEMORY STICKS============================
+./bin/kernel_memory ./configs/prueba_php_1.config 16
+./bin/kernel_memory ./configs/prueba_php_2.config 16
+=================================================================
+
 valgrind --leak-check=full --track-origins=yes
