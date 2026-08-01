@@ -1,4 +1,16 @@
 en todas las pruebas:
+(3ro en ejecutar)
+PC 1: CPU ^ SWAP
+IP:
+
+(2do en ejecutar)
+PC2: KS ^ IOs
+IP:
+
+(1ro en ejecutar)
+PC3: KM ^ STICKs
+IP:
+
 =========================CPU=========================
 ./bin/cpu ./configs/cpu.config CPU_1
 =========================SWAP=========================
