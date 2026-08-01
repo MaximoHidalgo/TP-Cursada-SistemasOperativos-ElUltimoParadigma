@@ -11,6 +11,9 @@ en todas las pruebas:
 
 ========================= PRUEBA BASE=============================
 
+=======================KERNEL SCHEDULER============================
+./bin/kernel_scheduler ./configs/prueba_base.config PLANI_PRE_0.prc
+./bin/kernel_scheduler ./configs/prueba_base.config MEMORIA_PRE_0.prc
 =========================KERNEL MEMORY============================
 ./bin/kernel_memory ./configs/prueba_base.config
 =========================MEMORY STICKS============================
@@ -19,6 +22,8 @@ en todas las pruebas:
 
 ========================= PRUEBA PCP=============================
 
+=======================KERNEL SCHEDULER============================
+./bin/kernel_scheduler ./configs/prueba_pcp.config PCP.prc
 =========================KERNEL MEMORY============================
 ./bin/kernel_memory ./configs/prueba_pcp.config
 =========================MEMORY STICKS============================
@@ -27,6 +32,8 @@ en todas las pruebas:
 
 ========================= PRUEBA MEMORIA=========================
 
+=======================KERNEL SCHEDULER============================
+./bin/kernel_scheduler ./configs/prueba_mem.config PLANI_MEM.prc
 =========================KERNEL MEMORY============================
 ./bin/kernel_memory ./configs/prueba_mem.config
 =========================MEMORY STICKS============================
@@ -40,6 +47,8 @@ en todas las pruebas:
 
 ========================= PRUEBA PMP=========================
 
+=======================KERNEL SCHEDULER============================
+./bin/kernel_scheduler ./configs/prueba_pmp.config PMP.prc
 =========================KERNEL MEMORY============================
 ./bin/kernel_memory ./configs/prueba_pmp.config
 =========================MEMORY STICKS============================
@@ -51,6 +60,8 @@ en todas las pruebas:
 
 ========================= PRUEBA PHP=========================
 
+=======================KERNEL SCHEDULER============================
+./bin/kernel_scheduler ./configs/prueba_php.config PHP.prc
 =========================KERNEL MEMORY============================
 ./bin/kernel_memory ./configs/prueba_php.config
 =========================MEMORY STICKS============================
