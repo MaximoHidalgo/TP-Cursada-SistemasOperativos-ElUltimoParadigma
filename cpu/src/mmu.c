@@ -91,7 +91,6 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
         leido += bytes_a_leer;
     }
     
-    free(bufferLeido);
     return buffer;
 }
 
