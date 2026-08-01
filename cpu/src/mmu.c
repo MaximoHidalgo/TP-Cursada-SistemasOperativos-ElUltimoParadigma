@@ -87,7 +87,6 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
             log_error(ctx->logger, "Error al leer del memory stick en CPU");
             break;
         }
-        buffer = bufferLeido;
         leido += bytes_a_leer;
     }
     
