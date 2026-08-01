@@ -60,6 +60,7 @@ int mmu_traducir(t_cpu_context* ctx, t_contexto_ejecucion* contexto, int dir_log
 void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint32_t tamanio) {
     void* buffer = malloc(tamanio);
     uint32_t leido = 0;
+    void* bufferLeido = NULL;
     
     while (leido < tamanio) {
         uint32_t dir_actual = dir_fisica + leido;
@@ -79,17 +80,18 @@ void* leer_memoria_distribuida_cpu(t_cpu_context* ctx, uint32_t dir_fisica, uint
         if (r_op == LECTURA) {
             int size_buf;
             void* res = recibir_buffer(&size_buf, stick_target->socket_fd);
-            void* bufferLeido = buffer + leido;
+            bufferLeido = buffer + leido;
             memcpy(bufferLeido, res, bytes_a_leer);
             free(res);
         } else {
             log_error(ctx->logger, "Error al leer del memory stick en CPU");
             break;
         }
-        buffer += bufferLeido;
+        buffer = bufferLeido;
         leido += bytes_a_leer;
     }
     
+    free(bufferLeido);
     return buffer;
 }
 
